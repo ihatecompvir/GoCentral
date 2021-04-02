@@ -5,15 +5,23 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"fmt"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
 )
 
 func main() {
-	mainAuth()
-	//mainSecure()
+	go mainAuth()
+	go mainSecure()
+
+	sig := make(chan os.Signal)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	s := <-sig
+	fmt.Printf("Signal (%s) received, stopping\n", s)
 }
 
 func mainAuth() {
