@@ -3,12 +3,13 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/md5"
-	"crypto/rand"
+	"crypto/rc4"
 	"fmt"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -142,56 +143,152 @@ func mainSecure() {
 	nexServer.SetSignatureVersion(1)
 	nexServer.SetKerberosKeySize(16)
 	nexServer.SetChecksumVersion(1)
-	nexServer.UsePacketCompression(false)
+	nexServer.UsePacketCompression(true)
 	nexServer.SetFlagsVersion(0)
 	nexServer.SetAccessKey("bfa620c57c2d3bcdf4362a6fa6418e58")
+
+	secureServer := nexproto.NewSecureProtocol(nexServer)
+	jsonServer := nexproto.NewJsonProtocol(nexServer)
 
 	// Handle PRUDP CONNECT packet (not an RMC method)
 	nexServer.On("Connect", func(packet *nex.PacketV0) {
 		packet.Sender().SetClientConnectionSignature(packet.Sender().ClientConnectionSignature())
 
-		stream := nex.NewStream()
+		// Decrypt payload
+		decryptedPayload := make([]byte, 0x100)
+		packet.Sender().Decipher().XORKeyStream(decryptedPayload, packet.Payload())
+		stream := nex.NewStreamIn(decryptedPayload, packet.Sender().Server())
+		stream.Grow(0x48)
 
-		ticketData := stream.ReadBytesNext(0x28)
-		requestData := stream.ReadBytesNext(0x20)
+		// get the ticket data and such
+		// skip past the kerberos ticket
+		stream.ReadBytesNext(4)
+		stream.ReadBytesNext(0x20)
+		stream.ReadBytesNext(9)
+		requestData := stream.ReadBytesNext(0x1c)
+		fmt.Printf("Request data: %v\n", requestData)
 
 		// TODO: use random key from auth server
-		ticketDataEncryption := nex.NewKerberosEncryption([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
-		decryptedTicketData := ticketDataEncryption.Decrypt(ticketData)
-		ticketDataStream := nex.NewStreamIn(decryptedTicketData, nexServer)
+		sessionKey := []byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10}
 
-		_ = ticketDataStream.ReadU64LENext(1)[0] // expiration time
-		_ = ticketDataStream.ReadU32LENext(1)[0] // User PID
-		sessionKey := ticketDataStream.ReadBytesNext(16)
-
-		requestDataEncryption := nex.NewKerberosEncryption(sessionKey)
-		decryptedRequestData := requestDataEncryption.Decrypt(requestData)
+		requestDataEncryption, error := rc4.NewCipher(sessionKey)
+		fmt.Println(error)
+		decryptedRequestData := make([]byte, 0x1C)
+		requestDataEncryption.XORKeyStream(decryptedRequestData, requestData)
 		requestDataStream := nex.NewStreamIn(decryptedRequestData, nexServer)
 
-		_ = requestDataStream.ReadU32LENext(1)[0] // User PID
+		pid := requestDataStream.ReadU32LENext(1)[0] // User PID
+		fmt.Printf("User PID: %v\n", pid)
 		_ = requestDataStream.ReadU32LENext(1)[0] //CID of secure server station url
 		responseCheck := requestDataStream.ReadU32LENext(1)[0]
+		fmt.Printf("Response check: %v\n", responseCheck)
 
-		responseValueStream := nex.NewStreamIn(make([]byte, 4), nexServer)
+		responseValueStream := nex.NewStreamIn(make([]byte, 20), nexServer)
 		responseValueBufferStream := nex.NewStream()
-		responseValueBufferStream.Grow(8)
+		responseValueBufferStream.Grow(20)
 
 		responseValueStream.WriteU32LENext([]uint32{responseCheck + 1})
 		responseValueBufferStream.WriteBuffer(responseValueStream.Bytes())
 
 		packet.Sender().UpdateRC4Key(sessionKey)
 
-		nexServer.AcknowledgePacket(packet, responseValueBufferStream.Bytes())
+		responsePacket, _ := nex.NewPacketV0(packet.Sender(), nil)
+
+		responsePacket.SetVersion(0)
+		responsePacket.SetSource(0x31)
+		responsePacket.SetDestination(0x3F)
+		responsePacket.SetType(nex.ConnectPacket)
+
+		tmpBuffer := make([]byte, responseValueBufferStream.ByteCapacity()+1)
+		copy(tmpBuffer[1:len(tmpBuffer)-1], responseValueBufferStream.Bytes()[0:responseValueBufferStream.ByteCapacity()])
+		bytes := make([]byte, len(tmpBuffer))
+		packet.Sender().Cipher().XORKeyStream(bytes, tmpBuffer)
+		responsePacket.SetPayload(bytes)
+		responsePacket.AddFlag(nex.FlagAck)
+
+		nexServer.Send(responsePacket)
+	})
+
+	secureServer.RegisterEx(func(err error, client *nex.Client, callID uint32, stationUrls []*nex.StationURL, className string, ticketData []byte) {
+
+		// Build the response body
+		rmcResponseStream := nex.NewStream()
+		rmcResponseStream.Grow(200)
+
+		rmcResponseStream.WriteU16LENext([]uint16{0x01})
+		rmcResponseStream.WriteU16LENext([]uint16{0x01})
+		rmcResponseStream.WriteU32LENext([]uint32{12345}) // pid
+
+		// The game doesn't appear to do anything with this at first glance, but return something proper anyway
+		rmcResponseStream.WriteBufferString("prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";sid=15;type=3")
+
+		rmcResponseBody := rmcResponseStream.Bytes()
+
+		// Build response packet
+		rmcResponse := nex.NewRMCResponse(nexproto.AuthenticationProtocolID, callID)
+		rmcResponse.SetSuccess(nexproto.AuthenticationMethodRequestTicket, rmcResponseBody)
+
+		rmcResponseBytes := rmcResponse.Bytes()
+
+		responsePacket, _ := nex.NewPacketV0(client, nil)
+
+		responsePacket.SetVersion(0)
+		responsePacket.SetSource(0x31)
+		responsePacket.SetDestination(0x3F)
+		responsePacket.SetType(nex.DataPacket)
+
+		// add one empty byte to each decrypted payload
+		// nintendos rendez-vous doesn't require this so its not implemented by default
+		newArray := make([]byte, len(rmcResponseBytes)+1)
+		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes[0:len(rmcResponseBytes)])
+		responsePacket.SetPayload(newArray)
+
+		responsePacket.AddFlag(nex.FlagNeedsAck)
+
+		nexServer.Send(responsePacket)
+	})
+
+	jsonServer.JSONRequest(func(err error, client *nex.Client, callID uint32, rawJson string) {
+		fmt.Println(rawJson)
+
+		rmcResponseStream := nex.NewStream()
+
+		dta := "[ [\"config/get\", \"ss\", [\"out_dta\", \"version\"], [ [\"{do {main_hub_panel set_motd \\\"Connected to GoCentral servers. The current date is " + time.Now().Format("01-02-2006") + ".\\\"} {main_hub_panel set_dlcmotd \\\"Hello.\\\"} }\", \"3\"]] ] ]"
+
+		rmcResponseStream.WriteBufferString(dta)
+
+		rmcResponseBody := rmcResponseStream.Bytes()
+
+		// Build response packet
+		rmcResponse := nex.NewRMCResponse(nexproto.JsonProtocolID, callID)
+		rmcResponse.SetSuccess(nexproto.JsonRequest, rmcResponseBody)
+
+		rmcResponseBytes := rmcResponse.Bytes()
+
+		responsePacket, _ := nex.NewPacketV0(client, nil)
+
+		responsePacket.SetVersion(0)
+		responsePacket.SetSource(0x31)
+		responsePacket.SetDestination(0x3F)
+		responsePacket.SetType(nex.DataPacket)
+
+		// add one empty byte to each decrypted payload
+		// nintendos rendez-vous doesn't require this so its not implemented by default
+		newArray := make([]byte, len(rmcResponseBytes)+1)
+		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes[0:len(rmcResponseBytes)])
+		responsePacket.SetPayload(newArray)
+
+		responsePacket.AddFlag(nex.FlagNeedsAck)
+
+		nexServer.Send(responsePacket)
 	})
 
 	nexServer.Listen("0.0.0.0:16016")
 }
 
 func generateKerberosTicket(userPID uint32, serverPID uint32, keySize int) ([]byte, []byte) {
-	nexPassword := "PS3NPDummyPwd" // TODO: Get this from database
 
-	sessionKey := make([]byte, 16)
-	rand.Read(sessionKey)
+	sessionKey := []byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10}
 
 	// Create ticket body info
 	kerberosTicketInfoKey := make([]byte, 16)
@@ -203,10 +300,7 @@ func generateKerberosTicket(userPID uint32, serverPID uint32, keySize int) ([]by
 	encryptedTicketInfo := ticketInfoEncryption.Encrypt(ticketInfoStream.Bytes())
 
 	// Create ticket
-	kerberosTicketKey := []byte(nexPassword)
-	for i := 0; i < 65000+(int(userPID)%1024); i++ {
-		kerberosTicketKey = nex.MD5Hash(kerberosTicketKey)
-	}
+	kerberosTicketKey := deriveKerberosKey(userPID)
 
 	ticketEncryption := nex.NewKerberosEncryption(kerberosTicketKey)
 	ticketStream := nex.NewStream()
@@ -217,4 +311,15 @@ func generateKerberosTicket(userPID uint32, serverPID uint32, keySize int) ([]by
 	ticketStream.WriteU32LENext([]uint32{0x24})
 	ticketStream.WriteBuffer(encryptedTicketInfo)
 	return ticketEncryption.Encrypt(ticketStream.Bytes()), kerberosTicketKey
+}
+
+func deriveKerberosKey(userPID uint32) []byte {
+	// hardcoded dummy pwd, only guest doesn't use this password
+	kerberosTicketKey := []byte("PS3NPDummyPwd")
+
+	for i := 0; i < 65000+(int(userPID)%1024); i++ {
+		kerberosTicketKey = nex.MD5Hash(kerberosTicketKey)
+	}
+
+	return kerberosTicketKey
 }
