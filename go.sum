@@ -1,11 +1,8 @@
-github.com/PretendoNetwork/nex-go v0.0.0-20200501151509-8c59df405c89 h1:DEF9jjdIKTt+txTgoQbjEv4fVgfzTcp42XQ6pm8yX2I=
-github.com/PretendoNetwork/nex-go v0.0.0-20200501151509-8c59df405c89/go.mod h1:T7NSb8t+ALS6dWJfuxGXowP7p5rUumZkBeUkQiS1ThQ=
-github.com/PretendoNetwork/nex-protocols-go v0.0.0-20200424175321-616e87b6f4fc h1:BCy52y4wM3QVhBe0Pce26YErqcyGlDSE3p+LuWsqHY8=
-github.com/PretendoNetwork/nex-protocols-go v0.0.0-20200424175321-616e87b6f4fc/go.mod h1:WBF5I1p3VDCR1/FMo1DT2Zr0AM8SwNxd85pBGwSr6YI=
+github.com/google/go-cmp v0.2.0 h1:+dTQ8DZQJz0Mb/HjFlkptS1FeQ4cWSnN941F8aEG4SQ=
 github.com/google/go-cmp v0.2.0/go.mod h1:oXzfMopK8JAjlY9xF4vHSVASa0yLyX7SntLO5aqRK0M=
-github.com/ihatecompvir/nex-go v0.0.0-20210401020738-bd62385d20ec h1:io5HlKrQItTrb5VycWHDvHafz6TewK1i+1G7xXRDghA=
-github.com/ihatecompvir/nex-go v0.0.0-20210401020738-bd62385d20ec/go.mod h1:93meCkk5UPXTRcA/gl65MAdInHbFgyI0X8/UEXQh+NI=
-github.com/ihatecompvir/nex-protocols-go v0.0.0-20200424175321-616e87b6f4fc h1:oDJi3h861JVav2L/Pzt3QgcD5b5ibDnBf6QIDt/uDjA=
-github.com/ihatecompvir/nex-protocols-go v0.0.0-20200424175321-616e87b6f4fc/go.mod h1:CWANWIo6DkyT+pb/AGD/vNzjMMYTTlv4QYF2Mxd5LsI=
+github.com/ihatecompvir/nex-go v0.0.0-20210401113444-1fb7f14339ff h1:gwbxkQgOWRUcLOyDw2h06kJmYgQQDkvbKRTkygYH3YA=
+github.com/ihatecompvir/nex-go v0.0.0-20210401113444-1fb7f14339ff/go.mod h1:93meCkk5UPXTRcA/gl65MAdInHbFgyI0X8/UEXQh+NI=
+github.com/ihatecompvir/nex-protocols-go v0.0.0-20210401113308-85493726e54d h1:pwc14PKyxnwszIkfeI0ZCkLeru5D6jfFjdpQiw6zo0Y=
+github.com/ihatecompvir/nex-protocols-go v0.0.0-20210401113308-85493726e54d/go.mod h1:CWANWIo6DkyT+pb/AGD/vNzjMMYTTlv4QYF2Mxd5LsI=
 github.com/superwhiskers/crunch/v3 v3.5.4 h1:ZUdyg8hrAquvTyfY+MNG4Ba9CvEHLlV8BLSIU7mZ4w4=
 github.com/superwhiskers/crunch/v3 v3.5.4/go.mod h1:9UsZKJdxq/SWH7CdCaWWcUeMMzxpHaV07A2hx0j6thU=
