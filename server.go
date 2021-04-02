@@ -49,7 +49,7 @@ func mainAuth() {
 		fmt.Println(userPID)
 
 		// Build the response body
-		stationURL := "prudps:/address=75.172.164.11;port=16016;CID=1;PID=2;sid=1;stream=3;type=2"
+		stationURL := fmt.Sprintf("prudps:/address=%s;port=16016;CID=1;PID=2;sid=1;stream=3;type=2", os.Getenv("ADDRESS"))
 
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(int64(23))
