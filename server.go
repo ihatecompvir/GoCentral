@@ -9,7 +9,6 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
-	"time"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -253,7 +252,8 @@ func mainSecure() {
 
 		rmcResponseStream := nex.NewStream()
 
-		dta := "[ [\"config/get\", \"ss\", [\"out_dta\", \"version\"], [ [\"{do {main_hub_panel set_motd \\\"Connected to GoCentral servers. The current date is " + time.Now().Format("01-02-2006") + ".\\\"} {main_hub_panel set_dlcmotd \\\"Hello.\\\"} }\", \"3\"]] ] ]"
+		// the JSON server will handle the request depending on what needs to be returned
+		dta := jsonServer.RouteJSONRequest(rawJson)
 
 		rmcResponseStream.WriteBufferString(dta)
 
