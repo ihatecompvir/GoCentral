@@ -84,7 +84,7 @@ func mainAuth() {
 		// add one empty byte to each decrypted payload
 		// nintendos rendez-vous doesn't require this so its not implemented by default
 		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes[0:len(rmcResponseBytes)])
+		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
 		responsePacket.SetPayload(newArray)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
@@ -124,7 +124,7 @@ func mainAuth() {
 		// add one empty byte to each decrypted payload
 		// nintendos rendez-vous doesn't require this so its not implemented by default
 		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes[0:len(rmcResponseBytes)])
+		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
 		responsePacket.SetPayload(newArray)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
@@ -239,7 +239,7 @@ func mainSecure() {
 		// add one empty byte to each decrypted payload
 		// nintendos rendez-vous doesn't require this so its not implemented by default
 		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes[0:len(rmcResponseBytes)])
+		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
 		responsePacket.SetPayload(newArray)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
@@ -275,7 +275,7 @@ func mainSecure() {
 		// add one empty byte to each decrypted payload
 		// nintendos rendez-vous doesn't require this so its not implemented by default
 		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes[0:len(rmcResponseBytes)])
+		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
 		responsePacket.SetPayload(newArray)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
