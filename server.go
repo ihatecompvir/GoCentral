@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"rb3server/protocols/jsonproto"
 	"strconv"
 	"syscall"
 
@@ -247,15 +248,20 @@ func mainSecure() {
 		nexServer.Send(responsePacket)
 	})
 
+	jsonMgr := jsonproto.NewServicesManager()
 	jsonServer.JSONRequest(func(err error, client *nex.Client, callID uint32, rawJson string) {
-		fmt.Println(rawJson)
-
-		rmcResponseStream := nex.NewStream()
 
 		// the JSON server will handle the request depending on what needs to be returned
-		dta := jsonServer.RouteJSONRequest(rawJson)
+		res, err := jsonMgr.Handle(rawJson)
+		if err != nil {
+			panic(fmt.Errorf("failed to handle request: %+v\n", err))
+		}
 
-		rmcResponseStream.WriteBufferString(dta)
+		fmt.Printf("in:\n%s\n", rawJson)
+		fmt.Printf("out:\n%s\n", res)
+
+		rmcResponseStream := nex.NewStream()
+		rmcResponseStream.WriteBufferString(res)
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
