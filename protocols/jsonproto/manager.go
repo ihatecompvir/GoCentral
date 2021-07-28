@@ -3,8 +3,11 @@ package jsonproto
 import (
 	"fmt"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/protocols/jsonproto/services/accountlink"
 	"rb3server/protocols/jsonproto/services/config"
+	"rb3server/protocols/jsonproto/services/scores"
 	"rb3server/protocols/jsonproto/services/setlistcreation"
+	"rb3server/protocols/jsonproto/services/ticker"
 )
 
 type Service interface {
@@ -39,6 +42,12 @@ func (mgr *ServicesManager) registerAll() {
 
 	// setlist creation
 	mgr.register(setlistcreation.SetlistCreationService{})
+
+	mgr.register(accountlink.AccountLinkService{})
+
+	mgr.register(scores.ScoreRecordService{})
+
+	mgr.register(ticker.TickerInfoService{})
 
 }
 
