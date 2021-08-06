@@ -1,7 +1,9 @@
-package setlistcreation
+package setlists
 
 import (
 	"rb3server/protocols/jsonproto/marshaler"
+
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type SetlistCreationRequest struct {
@@ -24,7 +26,7 @@ func (service SetlistCreationService) Path() string {
 	return "misc/get_accounts_setlist_creation_status"
 }
 
-func (service SetlistCreationService) Handle(data string) (string, error) {
+func (service SetlistCreationService) Handle(data string, database *mongo.Database) (string, error) {
 	var req SetlistCreationRequest
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
@@ -32,7 +34,7 @@ func (service SetlistCreationService) Handle(data string) (string, error) {
 	}
 
 	res := []SetlistCreationResponse{{
-		12345,
+		req.PID,
 		0,
 	}}
 

@@ -3,11 +3,20 @@ package jsonproto
 import (
 	"fmt"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/protocols/jsonproto/services/accomplishment"
 	"rb3server/protocols/jsonproto/services/accountlink"
+	"rb3server/protocols/jsonproto/services/battles"
 	"rb3server/protocols/jsonproto/services/config"
+	"rb3server/protocols/jsonproto/services/entities"
+	leaderboard "rb3server/protocols/jsonproto/services/leaderboards"
+	"rb3server/protocols/jsonproto/services/performance"
 	"rb3server/protocols/jsonproto/services/scores"
-	"rb3server/protocols/jsonproto/services/setlistcreation"
+	"rb3server/protocols/jsonproto/services/setlists"
+	"rb3server/protocols/jsonproto/services/songlists"
+	"rb3server/protocols/jsonproto/services/stats"
 	"rb3server/protocols/jsonproto/services/ticker"
+
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type Service interface {
@@ -15,7 +24,7 @@ type Service interface {
 	Path() string
 
 	// function to process request
-	Handle(string) (string, error)
+	Handle(string, *mongo.Database) (string, error)
 }
 
 type ServicesManager struct {
@@ -41,13 +50,31 @@ func (mgr *ServicesManager) registerAll() {
 	mgr.register(config.ConfigService{})
 
 	// setlist creation
-	mgr.register(setlistcreation.SetlistCreationService{})
+	mgr.register(setlists.SetlistCreationService{})
+	mgr.register(setlists.SetlistSyncService{})
 
 	mgr.register(accountlink.AccountLinkService{})
 
 	mgr.register(scores.ScoreRecordService{})
 
 	mgr.register(ticker.TickerInfoService{})
+
+	mgr.register(entities.CharacterUpdateService{})
+	mgr.register(entities.GetLinkcodeService{})
+
+	mgr.register(performance.PerformanceRecordService{})
+
+	mgr.register(accomplishment.AccomplishmentRecordService{})
+
+	mgr.register(leaderboard.MaxrankGetService{})
+	mgr.register(leaderboard.PlayerGetService{})
+
+	mgr.register(songlists.GetSonglistsService{})
+
+	mgr.register(battles.GetBattlesService{})
+	mgr.register(battles.LimitCheckService{})
+
+	mgr.register(stats.StatsPadService{})
 
 }
 
@@ -57,7 +84,7 @@ func (mgr *ServicesManager) register(service Service) {
 }
 
 // delegates the request to the proper service
-func (mgr ServicesManager) Handle(jsonStr string) (string, error) {
+func (mgr ServicesManager) Handle(jsonStr string, database *mongo.Database) (string, error) {
 
 	methodPath, err := marshaler.GetRequestName(jsonStr)
 	if err != nil {
@@ -70,6 +97,6 @@ func (mgr ServicesManager) Handle(jsonStr string) (string, error) {
 		return "", fmt.Errorf("unimplemented service for path:%s\n", methodPath)
 	}
 
-	return service.Handle(jsonStr)
+	return service.Handle(jsonStr, database)
 
 }

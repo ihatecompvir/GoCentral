@@ -1,4 +1,4 @@
-package accountlink
+package entities
 
 import (
 	"rb3server/protocols/jsonproto/marshaler"
@@ -6,7 +6,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-type AccountLinkRequest struct {
+type GetLinkcodeRequest struct {
 	Region      string `json:"region"`
 	SystemMS    int    `json:"system_ms"`
 	MachineID   string `json:"machine_id"`
@@ -14,29 +14,27 @@ type AccountLinkRequest struct {
 	PID         int    `json:"pid"`
 }
 
-type AccountLinkResponse struct {
-	PID    int `json:"pid"`
-	Linked int `json:"linked"`
+type GetLinkcodeResponse struct {
+	Code string `json:"code"`
 }
 
-type AccountLinkService struct {
+type GetLinkcodeService struct {
 }
 
-func (service AccountLinkService) Path() string {
-	return "misc/get_accounts_web_linked_status"
+func (service GetLinkcodeService) Path() string {
+	return "entities/linkcode/get"
 }
 
-func (service AccountLinkService) Handle(data string, database *mongo.Database) (string, error) {
-	var req AccountLinkRequest
+func (service GetLinkcodeService) Handle(data string, database *mongo.Database) (string, error) {
+	var req GetLinkcodeRequest
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
 		return "", err
 	}
 
 	// Spoof account linking status, 12345 pid
-	res := []AccountLinkResponse{{
-		req.PID,
-		1,
+	res := []GetLinkcodeResponse{{
+		"Not supported",
 	}}
 
 	return marshaler.MarshalResponse(service.Path(), res)

@@ -2,6 +2,8 @@ package scores
 
 import (
 	"rb3server/protocols/jsonproto/marshaler"
+
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type ScoreRecordRequest struct {
@@ -26,7 +28,13 @@ type ScoreRecordRequest struct {
 }
 
 type ScoreRecordResponse struct {
-	Test int `json:"test"`
+	ID           int    `json:"id"`
+	IsBOI        int    `json:"is_boi"`
+	InstaRank    int    `json:"insta_rank"`
+	IsPercentile int    `json:"is_percentile"`
+	Part1        string `json:"part_1"`
+	Part2        string `json:"part_2"`
+	Slot         int    `json:"slot"`
 }
 
 type ScoreRecordService struct {
@@ -36,7 +44,7 @@ func (service ScoreRecordService) Path() string {
 	return "scores/record"
 }
 
-func (service ScoreRecordService) Handle(data string) (string, error) {
+func (service ScoreRecordService) Handle(data string, database *mongo.Database) (string, error) {
 	var req ScoreRecordRequest
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
@@ -46,7 +54,13 @@ func (service ScoreRecordService) Handle(data string) (string, error) {
 	// send back something fake - the game is just looking for an ack here
 	// this is presumably where we would take this data and enter it into a DB for leaderboards
 	res := []ScoreRecordResponse{{
+		req.SongID,
+		0,
 		1,
+		0,
+		"a",
+		"a",
+		req.Slot,
 	}}
 
 	return marshaler.MarshalResponse(service.Path(), res)

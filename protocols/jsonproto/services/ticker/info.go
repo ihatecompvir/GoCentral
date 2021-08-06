@@ -2,6 +2,8 @@ package ticker
 
 import (
 	"rb3server/protocols/jsonproto/marshaler"
+
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type TickerInfoRequest struct {
@@ -35,7 +37,7 @@ func (service TickerInfoService) Path() string {
 	return "ticker/info/get"
 }
 
-func (service TickerInfoService) Handle(data string) (string, error) {
+func (service TickerInfoService) Handle(data string, database *mongo.Database) (string, error) {
 	var req TickerInfoRequest
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
@@ -45,7 +47,7 @@ func (service TickerInfoService) Handle(data string) (string, error) {
 	// Spoof account linking status, 12345 pid
 	res := []TickerInfoResponse{{
 		12345,
-		"Hello World 2: Electric Boogaloo",
+		"Leaderboards are not currently implemented, so your scores won't track.",
 		1,
 		3,
 		1,

@@ -1,7 +1,12 @@
 package config
 
 import (
+	"fmt"
+	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type ConfigRequest struct {
@@ -24,15 +29,24 @@ func (service ConfigService) Path() string {
 	return "config/get"
 }
 
-func (service ConfigService) Handle(data string) (string, error) {
+func (service ConfigService) Handle(data string, database *mongo.Database) (string, error) {
 	var req ConfigRequest
+
+	var motdInfo models.MOTDInfo
+
+	motdCollection := database.Collection("motd")
+
+	result := motdCollection.FindOne(nil, bson.D{}).Decode(&motdInfo)
+
+	fmt.Printf("Found %v documents\n", result)
+
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
 		return "", err
 	}
 
 	res := []ConfigResponse{{
-		"{do {main_hub_panel set_motd \"Hello World\"} {main_hub_panel set_dlcmotd \"Example Text\"} }",
+		motdInfo.DTA,
 		"3",
 	}}
 
