@@ -15,7 +15,3 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/text v0.3.6 // indirect
 )
-
-//replace github.com/ihatecompvir/nex-go => "E:/GitHub Projects/nex-go"
-
-//replace github.com/ihatecompvir/nex-protocols-go => "E:/GitHub Projects/nex-protocols-go"
