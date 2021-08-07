@@ -13,7 +13,6 @@ import (
 	"rb3server/models"
 	"rb3server/protocols/jsonproto"
 	"regexp"
-	"strings"
 	"syscall"
 	"time"
 
@@ -81,25 +80,46 @@ func mainAuth(database *mongo.Database) {
 
 		var user models.User
 
-		if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
-			fmt.Printf("%s has never connected before - create DB entry\n", username)
-			_, err := users.InsertOne(nil, bson.D{
-				{Key: "username", Value: username},
-				{Key: "pid", Value: rand.Intn(250000-500) + 500},
-			})
+		// check for Wii FC inside parentheses
+		// TODO: - do this better, this feels bleh
+		var rgx = regexp.MustCompile(`\(([^()]*)\)`)
+		res := rgx.FindStringSubmatch(username)
 
+		// If there is no regex found, we are a PS3 client so get the correct stuff from the DB for the user
+		// PS3 usernames cannot contain parentheses so there is no chance of a PS3 client taking the wii path
+		if len(res) == 0 {
 			if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
+				fmt.Printf("%s has never connected before - create DB entry\n", username)
+				_, err := users.InsertOne(nil, bson.D{
+					{Key: "username", Value: username},
+					{Key: "pid", Value: rand.Intn(250000-500) + 500},
+				})
 
-				if err != nil {
-					log.Fatal(err)
+				if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
+
+					if err != nil {
+						log.Fatal(err)
+					}
 				}
 			}
+			client.Username = username
+		} else {
+			client.Username = "Master User"
+			user.PID = 12345678 // master user PID is currently 12345678 - probably should go with 0 or something since it is a special account
+			client.WiiFC = res[1]
+			fmt.Printf("Wii client detected, friend code %v\n", client.WiiFC)
 		}
 
-		client.Username = username
-
 		fmt.Printf("%s requesting log in, has PID %v\n", username, user.PID)
-		encryptedTicket, kerberosKey := generateKerberosTicket(user.PID, uint32(serverPID), 16)
+		var encryptedTicket []byte
+		var kerberosKey []byte
+
+		// generate the ticket and pass the friend code as the pwd on Wii, or use static password on PS3
+		if client.Username == "Master User" {
+			encryptedTicket, kerberosKey = generateKerberosTicket(user.PID, uint32(serverPID), 16, client.WiiFC)
+		} else {
+			encryptedTicket, kerberosKey = generateKerberosTicket(user.PID, uint32(serverPID), 16, "")
+		}
 		mac := hmac.New(md5.New, kerberosKey)
 		mac.Write(encryptedTicket)
 		calculatedHmac := mac.Sum(nil)
@@ -152,7 +172,7 @@ func mainAuth(database *mongo.Database) {
 	authenticationServer.RequestTicket(func(err error, client *nex.Client, callID uint32, userPID uint32, serverPID uint32) {
 		fmt.Printf("PID %v requesting ticket...\n", userPID)
 
-		encryptedTicket, kerberosKey := generateKerberosTicket(userPID, uint32(serverPID), 16)
+		encryptedTicket, kerberosKey := generateKerberosTicket(userPID, uint32(serverPID), 16, client.WiiFC)
 		mac := hmac.New(md5.New, kerberosKey)
 		mac.Write(encryptedTicket)
 		calculatedHmac := mac.Sum(nil)
@@ -200,7 +220,7 @@ func mainSecure(database *mongo.Database) {
 	nexServer.SetSignatureVersion(1)
 	nexServer.SetKerberosKeySize(16)
 	nexServer.SetChecksumVersion(1)
-	nexServer.UsePacketCompression(true)
+	nexServer.UsePacketCompression(false)
 	nexServer.SetFlagsVersion(0)
 	nexServer.SetAccessKey(os.Getenv("ACCESSKEY"))
 
@@ -208,6 +228,7 @@ func mainSecure(database *mongo.Database) {
 	jsonServer := nexproto.NewJsonProtocol(nexServer)
 	matchmakingServer := nexproto.NewMatchmakingProtocol(nexServer)
 	natTraversalServer := nexproto.NewNATTraversalProtocol(nexServer)
+	accountManagementServer := nexproto.NewAccountManagementProtocol(nexServer)
 
 	// Handle PRUDP CONNECT packet (not an RMC method)
 	nexServer.On("Connect", func(packet *nex.PacketV0) {
@@ -234,8 +255,17 @@ func mainSecure(database *mongo.Database) {
 		requestDataEncryption.XORKeyStream(decryptedRequestData, requestData)
 		requestDataStream := nex.NewStreamIn(decryptedRequestData, nexServer)
 
-		_ = requestDataStream.ReadU32LENext(1)[0] // User PID
-		_ = requestDataStream.ReadU32LENext(1)[0] //CID of secure server station url
+		// extract the PID
+		userPid := requestDataStream.ReadU32LENext(1)[0]
+
+		// Get username for client from PID. This avoids having to grab it from the ticket
+		// On Wii, the ticket does not contain the username so this is a platform-agnostic solution
+		var user models.User
+		users := database.Collection("users")
+		users.FindOne(nil, bson.M{"pid": userPid}).Decode(&user)
+		packet.Sender().Username = user.Username
+
+		_ = requestDataStream.ReadU32LENext(1)[0]
 		responseCheck := requestDataStream.ReadU32LENext(1)[0]
 
 		responseValueStream := nex.NewStreamIn(make([]byte, 20), nexServer)
@@ -268,13 +298,9 @@ func mainSecure(database *mongo.Database) {
 
 		users := database.Collection("users")
 
-		// get the username from the submitted NPTicket so we can lookup PID and write station URL
-		username := string(ticketData[92:108])
-		username = strings.TrimRight(username, "\x00")
-
 		var user models.User
 
-		if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
+		if err = users.FindOne(nil, bson.M{"username": client.Username}).Decode(&user); err != nil {
 			log.Fatal(err)
 		}
 
@@ -282,36 +308,41 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(200)
 
-		rmcResponseStream.WriteU16LENext([]uint16{0x01})
-		rmcResponseStream.WriteU16LENext([]uint16{0x01})
+		rmcResponseStream.WriteU16LENext([]uint16{0x01})     // likely a response code of sorts
+		rmcResponseStream.WriteU16LENext([]uint16{0x01})     // same as above
 		rmcResponseStream.WriteU32LENext([]uint32{user.PID}) // pid
 
+		// the RVCID must differ across all clients otherwise clients will reject each other
 		randomRVCID := rand.Intn(250000-500) + 500
-		var stationURL string = "prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID)
 
-		re := regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}`)
+		// check if the PID is not the master PID. if it is the master PID, do not update the station URLs
+		if user.PID != 12345678 {
 
-		submatchall := re.FindAllString(stationUrls[0], -1)
-		var internalStationURL string = "prudp:/address=" + submatchall[0] + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID)
+			var stationURL string = "prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID)
 
-		// update station URL
-		result, err := users.UpdateOne(
-			nil,
-			bson.M{"username": username},
-			bson.D{
-				{"$set", bson.D{{"station_url", stationURL}}},
-				{"$set", bson.D{{"int_station_url", internalStationURL}}},
-			},
-		)
+			re := regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}`)
 
-		if err != nil {
-			log.Fatal(err)
+			submatchall := re.FindAllString(stationUrls[0], -1)
+			var internalStationURL string = "prudp:/address=" + submatchall[0] + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID)
+
+			// update station URL
+			result, err := users.UpdateOne(
+				nil,
+				bson.M{"username": client.Username},
+				bson.D{
+					{"$set", bson.D{{"station_url", stationURL}}},
+					{"$set", bson.D{{"int_station_url", internalStationURL}}},
+				},
+			)
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			fmt.Printf("Updated %v station URL for %s \n", result.ModifiedCount, client.Username)
 		}
 
-		fmt.Printf("Updated %v station URL for %s \n", result.ModifiedCount, username)
-		client.Username = username
-
-		// The game doesn't appear to do anything with this at first glance, but return something proper anyway
+		// The game doesn't appear to do anything with this, but return something proper anyway
 		rmcResponseStream.WriteBufferString("prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID))
 
 		rmcResponseBody := rmcResponseStream.Bytes()
@@ -355,10 +386,10 @@ func mainSecure(database *mongo.Database) {
 			log.Fatal(err)
 		}
 
-		rmcResponseStream.WriteUInt8(1)
-		rmcResponseStream.WriteU32LENext([]uint32{2})
-		rmcResponseStream.WriteBufferString(user.StationURL)
-		rmcResponseStream.WriteBufferString(user.IntStationURL)
+		rmcResponseStream.WriteUInt8(1)                         // response code
+		rmcResponseStream.WriteU32LENext([]uint32{2})           // the number of station urls present
+		rmcResponseStream.WriteBufferString(user.StationURL)    // WAN station URL
+		rmcResponseStream.WriteBufferString(user.IntStationURL) // LAN station URL used for connecting to other players on the same LAN
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
@@ -437,6 +468,7 @@ func mainSecure(database *mongo.Database) {
 		rmcResponse := nex.NewRMCResponse(nexproto.JsonProtocolID, callID)
 		rmcResponse.SetSuccess(nexproto.JsonRequest2, rmcResponseBody)
 
+		// Even though this is a JSON-style method, it returns an empty body unlike JSONRequest
 		rmcResponseBytes := rmcResponse.Bytes()
 
 		responsePacket, _ := nex.NewPacketV0(client, nil)
@@ -466,6 +498,8 @@ func mainSecure(database *mongo.Database) {
 
 		gatheringID := rand.Intn(250000-500) + 500
 
+		// Attempt to clear stale gatherings that may exist
+		// If there are stale gatherings registered, other clients will try to connect to sessions that don't exist anymore
 		deleteResult, deleteError := gatherings.DeleteMany(nil, bson.D{
 			{Key: "creator", Value: client.Username},
 		})
@@ -478,6 +512,7 @@ func mainSecure(database *mongo.Database) {
 			fmt.Printf("Successfully cleared %v stale gatherings for %s...\n", deleteResult.DeletedCount, client.Username)
 		}
 
+		// Create a new gathering
 		res, err := gatherings.InsertOne(nil, bson.D{
 			{Key: "gathering_id", Value: gatheringID},
 			{Key: "contents", Value: gathering},
@@ -493,7 +528,7 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(50)
 
-		rmcResponseStream.WriteU32LENext([]uint32{uint32(gatheringID)})
+		rmcResponseStream.WriteU32LENext([]uint32{uint32(gatheringID)}) // client expects the new gathering ID in the response
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
@@ -524,8 +559,7 @@ func mainSecure(database *mongo.Database) {
 
 		gatherings := database.Collection("gatherings")
 
-		//var harmonixGathering models.Gathering
-
+		// the client sends the entire gathering again, so update it in the DB
 		result, err := gatherings.UpdateOne(
 			nil,
 			bson.M{"gathering_id": gatheringID},
@@ -544,7 +578,7 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(50)
 
-		rmcResponseStream.WriteU32LENext([]uint32{gatheringID})
+		rmcResponseStream.WriteU32LENext([]uint32{gatheringID}) // client expects the gathering ID in the response
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
@@ -575,8 +609,9 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(50)
 
+		// i am not 100% sure what this method is for exactly
 		rmcResponseStream.WriteU32LENext([]uint32{gatheringID})
-		rmcResponseStream.WriteU32LENext([]uint32{1})
+		rmcResponseStream.WriteU32LENext([]uint32{1}) // response code
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
@@ -607,8 +642,9 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(50)
 
+		// i am not 100% sure what this method is for, but it is the inverse of participate
 		rmcResponseStream.WriteU32LENext([]uint32{gatheringID})
-		rmcResponseStream.WriteU32LENext([]uint32{1})
+		rmcResponseStream.WriteU32LENext([]uint32{1}) // response code
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
@@ -671,6 +707,7 @@ func mainSecure(database *mongo.Database) {
 
 		gatherings := database.Collection("gatherings")
 
+		// remove the gathering from the DB so other players won't attempt to connect to it later
 		result, err := gatherings.DeleteOne(
 			nil,
 			bson.M{"gathering_id": gatheringID},
@@ -721,6 +758,7 @@ func mainSecure(database *mongo.Database) {
 		var gathering models.Gathering
 		var user models.User
 
+		// attempt to get a gathering and deserialize it
 		gatherings.FindOne(nil,
 			bson.D{{
 				Key:   "creator",
@@ -728,13 +766,11 @@ func mainSecure(database *mongo.Database) {
 			}},
 		).Decode(&gathering)
 
-		//if err != nil {
-		//	log.Fatal("Could not delete gathering")
-		//}
-
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(19)
 
+		// if there are no availble gatherings, tell the client to check again.
+		// otherwise, pass the available gathering to the client
 		if len(gathering.Contents) == 0 {
 			fmt.Println("There are no active gatherings. Tell client to keep checking.")
 			rmcResponseStream.WriteU32LENext([]uint32{0})
@@ -806,10 +842,66 @@ func mainSecure(database *mongo.Database) {
 		nexServer.Send(responsePacket)
 	})
 
+	accountManagementServer.NintendoCreateAccount(func(err error, client *nex.Client, callID uint32, username string, key string, groups uint32, email string) {
+
+		rmcResponseStream := nex.NewStream()
+
+		users := database.Collection("users")
+		var user models.User
+
+		// Create a new user if not currently registered, with a Wii prefix.
+		// This is to ensure that a Wii user can not just create a profile with the same name as a PS3 user and submit scores as them
+		// Presumably, in the DB we will either segregate them to a Wii leaderboard or add a [Wii] prefix or something onto their username
+		// Not sure if scoring works 100% the same on both consoles to where Wii/PS3 mixed leaderboard would be fair
+		if err = users.FindOne(nil, bson.M{"username": "wii!" + username}).Decode(&user); err != nil {
+			fmt.Printf("%s has never connected before - create DB entry\n", username)
+			_, err := users.InsertOne(nil, bson.D{
+				{Key: "username", Value: "wii!" + username},
+				{Key: "pid", Value: rand.Intn(250000-500) + 500},
+				// TODO: look into if the key that is passed here is per-profile, could use it as form of auth if so
+			})
+
+			if err = users.FindOne(nil, bson.M{"username": "wii!" + username}).Decode(&user); err != nil {
+
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+		}
+
+		client.Username = username
+
+		rmcResponseStream.Grow(19)
+		rmcResponseStream.WriteU32LENext([]uint32{user.PID})
+		rmcResponseStream.WriteBufferString("FAKE-HMAC") // not 100% sure what this is supposed to be legitimately but the game doesn't complain if its not there
+
+		rmcResponseBody := rmcResponseStream.Bytes()
+
+		rmcResponse := nex.NewRMCResponse(nexproto.AccountManagementProtocolID, callID)
+		rmcResponse.SetSuccess(nexproto.AccountManagementMethodNintendoCreateAccount, rmcResponseBody)
+
+		rmcResponseBytes := rmcResponse.Bytes()
+
+		responsePacket, _ := nex.NewPacketV0(client, nil)
+
+		responsePacket.SetVersion(0)
+		responsePacket.SetSource(0x31)
+		responsePacket.SetDestination(0x3F)
+		responsePacket.SetType(nex.DataPacket)
+
+		newArray := make([]byte, len(rmcResponseBytes)+1)
+		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
+		responsePacket.SetPayload(newArray)
+
+		responsePacket.AddFlag(nex.FlagNeedsAck)
+
+		nexServer.Send(responsePacket)
+	})
+
 	nexServer.Listen("0.0.0.0:" + os.Getenv("SECUREPORT"))
 }
 
-func generateKerberosTicket(userPID uint32, serverPID uint32, keySize int) ([]byte, []byte) {
+func generateKerberosTicket(userPID uint32, serverPID uint32, keySize int, pwd string) ([]byte, []byte) {
 
 	sessionKey := []byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10}
 
@@ -823,7 +915,7 @@ func generateKerberosTicket(userPID uint32, serverPID uint32, keySize int) ([]by
 	encryptedTicketInfo := ticketInfoEncryption.Encrypt(ticketInfoStream.Bytes())
 
 	// Create ticket
-	kerberosTicketKey := deriveKerberosKey(userPID)
+	kerberosTicketKey := deriveKerberosKey(userPID, pwd)
 
 	ticketEncryption := nex.NewKerberosEncryption(kerberosTicketKey)
 	ticketStream := nex.NewStream()
@@ -836,9 +928,15 @@ func generateKerberosTicket(userPID uint32, serverPID uint32, keySize int) ([]by
 	return ticketEncryption.Encrypt(ticketStream.Bytes()), kerberosTicketKey
 }
 
-func deriveKerberosKey(userPID uint32) []byte {
+func deriveKerberosKey(userPID uint32, pwd string) []byte {
+	var kerberosTicketKey []byte
+
 	// hardcoded dummy pwd, only guest doesn't use this password
-	kerberosTicketKey := []byte("PS3NPDummyPwd")
+	if pwd == "" {
+		kerberosTicketKey = []byte(os.Getenv("USERPASSWORD"))
+	} else {
+		kerberosTicketKey = []byte(pwd)
+	}
 
 	for i := 0; i < 65000+(int(userPID)%1024); i++ {
 		kerberosTicketKey = nex.MD5Hash(kerberosTicketKey)
