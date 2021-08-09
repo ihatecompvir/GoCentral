@@ -868,8 +868,30 @@ func mainSecure(database *mongo.Database) {
 				}
 			}
 		}
+		fmt.Printf("wii!%s requesting log in from %s, has PID %v\n", username, client.WiiFC, user.PID)
 
-		client.Username = username
+		client.Username = "wii!" + username // make sure the username used later actually works
+		
+		// since the Wii doesn't try hitting RegisterEx after logging in, we have to set station URLs here
+		// TODO: do this better / do this proper (there's gotta be a better way), find out how to set int_station_url
+		randomRVCID := rand.Intn(250000-500) + 500
+		var stationURL string = "prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID)
+
+		// update station URL
+		result, err := users.UpdateOne(
+			nil,
+			bson.M{"username": client.Username},
+			bson.D{
+				{"$set", bson.D{{"station_url", stationURL}}},
+				{"$set", bson.D{{"int_station_url", ""}}},
+			},
+		)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Printf("Updated %v station URL for %s \n", result.ModifiedCount, client.Username)
 
 		rmcResponseStream.Grow(19)
 		rmcResponseStream.WriteU32LENext([]uint32{user.PID})
