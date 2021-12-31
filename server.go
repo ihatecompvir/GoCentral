@@ -210,7 +210,7 @@ func mainAuth(database *mongo.Database) {
 		nexServer.Send(responsePacket)
 	})
 
-	nexServer.Listen("0.0.0.0:" + os.Getenv("AUTHPORT"))
+	nexServer.Listen(os.Getenv("LISTENINGIP") + ":" + os.Getenv("AUTHPORT"))
 
 }
 
@@ -229,6 +229,7 @@ func mainSecure(database *mongo.Database) {
 	matchmakingServer := nexproto.NewMatchmakingProtocol(nexServer)
 	natTraversalServer := nexproto.NewNATTraversalProtocol(nexServer)
 	accountManagementServer := nexproto.NewAccountManagementProtocol(nexServer)
+	unknownProtocolServer := nexproto.NewUnknownProtocol(nexServer)
 
 	// Handle PRUDP CONNECT packet (not an RMC method)
 	nexServer.On("Connect", func(packet *nex.PacketV0) {
@@ -316,7 +317,7 @@ func mainSecure(database *mongo.Database) {
 		randomRVCID := rand.Intn(250000-500) + 500
 
 		// check if the PID is not the master PID. if it is the master PID, do not update the station URLs
-		if user.PID != 12345678 {
+		if user.PID != 12345678 && len(stationUrls) != 0 {
 
 			var stationURL string = "prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID)
 
@@ -343,13 +344,13 @@ func mainSecure(database *mongo.Database) {
 		}
 
 		// The game doesn't appear to do anything with this, but return something proper anyway
-		rmcResponseStream.WriteBufferString("prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID))
+		rmcResponseStream.WriteBufferString("prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";sid=15;type=3")
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
 		// Build response packet
-		rmcResponse := nex.NewRMCResponse(nexproto.AuthenticationProtocolID, callID)
-		rmcResponse.SetSuccess(nexproto.AuthenticationMethodRequestTicket, rmcResponseBody)
+		rmcResponse := nex.NewRMCResponse(nexproto.SecureProtocolID, callID)
+		rmcResponse.SetSuccess(nexproto.SecureMethodRegisterEx, rmcResponseBody)
 
 		rmcResponseBytes := rmcResponse.Bytes()
 
@@ -560,6 +561,7 @@ func mainSecure(database *mongo.Database) {
 		gatherings := database.Collection("gatherings")
 
 		// the client sends the entire gathering again, so update it in the DB
+
 		result, err := gatherings.UpdateOne(
 			nil,
 			bson.M{"gathering_id": gatheringID},
@@ -578,7 +580,7 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(50)
 
-		rmcResponseStream.WriteU32LENext([]uint32{gatheringID}) // client expects the gathering ID in the response
+		rmcResponseStream.WriteU32LENext([]uint32{gatheringID})
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
@@ -610,8 +612,7 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseStream.Grow(50)
 
 		// i am not 100% sure what this method is for exactly
-		rmcResponseStream.WriteU32LENext([]uint32{gatheringID})
-		rmcResponseStream.WriteU32LENext([]uint32{1}) // response code
+		rmcResponseStream.WriteUInt8(1) // response code
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
@@ -643,8 +644,7 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseStream.Grow(50)
 
 		// i am not 100% sure what this method is for, but it is the inverse of participate
-		rmcResponseStream.WriteU32LENext([]uint32{gatheringID})
-		rmcResponseStream.WriteU32LENext([]uint32{1}) // response code
+		rmcResponseStream.WriteUInt8(1)
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
@@ -676,7 +676,7 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(50)
 
-		rmcResponseStream.WriteU32LENext([]uint32{1})
+		rmcResponseStream.WriteUInt8(1)
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
@@ -723,7 +723,7 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(50)
 
-		rmcResponseStream.WriteU32LENext([]uint32{1})
+		rmcResponseStream.WriteUInt8(1)
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
@@ -853,15 +853,15 @@ func mainSecure(database *mongo.Database) {
 		// This is to ensure that a Wii user can not just create a profile with the same name as a PS3 user and submit scores as them
 		// Presumably, in the DB we will either segregate them to a Wii leaderboard or add a [Wii] prefix or something onto their username
 		// Not sure if scoring works 100% the same on both consoles to where Wii/PS3 mixed leaderboard would be fair
-		if err = users.FindOne(nil, bson.M{"username": "wii!" + username}).Decode(&user); err != nil {
+		if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
 			fmt.Printf("%s has never connected before - create DB entry\n", username)
 			_, err := users.InsertOne(nil, bson.D{
-				{Key: "username", Value: "wii!" + username},
+				{Key: "username", Value: username},
 				{Key: "pid", Value: rand.Intn(250000-500) + 500},
 				// TODO: look into if the key that is passed here is per-profile, could use it as form of auth if so
 			})
 
-			if err = users.FindOne(nil, bson.M{"username": "wii!" + username}).Decode(&user); err != nil {
+			if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
 
 				if err != nil {
 					log.Fatal(err)
@@ -920,7 +920,37 @@ func mainSecure(database *mongo.Database) {
 		nexServer.Send(responsePacket)
 	})
 
-	nexServer.Listen("0.0.0.0:" + os.Getenv("SECUREPORT"))
+	unknownProtocolServer.UnknownMethod(func(err error, client *nex.Client, callID uint32, pid uint32) {
+
+		fmt.Printf("Unknown thing requested on PID %v\n", pid)
+		rmcResponseStream := nex.NewStream()
+		rmcResponseStream.Grow(10)
+		rmcResponseStream.WriteU32LENext([]uint32{0})
+
+		rmcResponseBody := rmcResponseStream.Bytes()
+
+		rmcResponse := nex.NewRMCResponse(nexproto.UnknownProtocolID, callID)
+		rmcResponse.SetSuccess(nexproto.UnknownMethod, rmcResponseBody)
+
+		rmcResponseBytes := rmcResponse.Bytes()
+
+		responsePacket, _ := nex.NewPacketV0(client, nil)
+
+		responsePacket.SetVersion(0)
+		responsePacket.SetSource(0x31)
+		responsePacket.SetDestination(0x3F)
+		responsePacket.SetType(nex.DataPacket)
+
+		newArray := make([]byte, len(rmcResponseBytes)+1)
+		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
+		responsePacket.SetPayload(newArray)
+
+		responsePacket.AddFlag(nex.FlagNeedsAck)
+
+		nexServer.Send(responsePacket)
+	})
+
+	nexServer.Listen(os.Getenv("LISTENINGIP") + ":" + os.Getenv("SECUREPORT"))
 }
 
 func generateKerberosTicket(userPID uint32, serverPID uint32, keySize int, pwd string) ([]byte, []byte) {
