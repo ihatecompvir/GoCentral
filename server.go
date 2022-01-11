@@ -491,6 +491,10 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	matchmakingServer.RegisterGathering(func(err error, client *nex.Client, callID uint32, gathering []byte) {
+		if client.Username == "Master User" {
+			fmt.Printf("Ignoring RegisterGathering for unauthenticated %s\n", client.WiiFC)
+			return
+		}
 		fmt.Println("Registering gathering...")
 
 		// delete old gatherings, and create a new gathering
@@ -556,6 +560,10 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	matchmakingServer.UpdateGathering(func(err error, client *nex.Client, callID uint32, gathering []byte, gatheringID uint32) {
+		if client.Username == "Master User" {
+			fmt.Printf("Ignoring UpdateGathering for unauthenticated %s\n", client.WiiFC)
+			return
+		}
 		fmt.Printf("Updating gathering for %s\n", client.Username)
 
 		gatherings := database.Collection("gatherings")
@@ -703,6 +711,10 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	matchmakingServer.TerminateGathering(func(err error, client *nex.Client, callID uint32, gatheringID uint32) {
+		if client.Username == "Master User" {
+			fmt.Printf("Ignoring TerminateGathering for unauthenticated %s\n", client.WiiFC)
+			return
+		}
 		fmt.Printf("Terminating gathering for %s...\n", client.Username)
 
 		gatherings := database.Collection("gatherings")
@@ -750,6 +762,10 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	matchmakingServer.CheckForGatherings(func(err error, client *nex.Client, callID uint32, data []byte) {
+		if client.Username == "Master User" {
+			fmt.Printf("Ignoring CheckForGatherings for unauthenticated %s\n", client.WiiFC)
+			return
+		}
 		fmt.Printf("Checking for available gatherings for %s...\n", client.Username)
 
 		gatherings := database.Collection("gatherings")
@@ -758,13 +774,19 @@ func mainSecure(database *mongo.Database) {
 		var gathering models.Gathering
 		var user models.User
 
-		// attempt to get a gathering and deserialize it
-		gatherings.FindOne(nil,
-			bson.D{{
+		// attempt to get a random gathering and deserialize it
+		cur, err := gatherings.Aggregate(nil, []bson.M{
+			bson.M{"$match": bson.D{{
 				Key:   "creator",
 				Value: bson.D{{Key: "$ne", Value: client.Username}},
-			}},
-		).Decode(&gathering)
+			}}},
+			bson.M{"$sample": bson.M{"size": 1}},
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+		cur.Next(nil)
+		cur.Decode(&gathering)
 
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(19)
@@ -849,10 +871,7 @@ func mainSecure(database *mongo.Database) {
 		users := database.Collection("users")
 		var user models.User
 
-		// Create a new user if not currently registered, with a Wii prefix.
-		// This is to ensure that a Wii user can not just create a profile with the same name as a PS3 user and submit scores as them
-		// Presumably, in the DB we will either segregate them to a Wii leaderboard or add a [Wii] prefix or something onto their username
-		// Not sure if scoring works 100% the same on both consoles to where Wii/PS3 mixed leaderboard would be fair
+		// Create a new user if not currently registered.
 		if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
 			fmt.Printf("%s has never connected before - create DB entry\n", username)
 			_, err := users.InsertOne(nil, bson.D{
@@ -868,9 +887,9 @@ func mainSecure(database *mongo.Database) {
 				}
 			}
 		}
-		fmt.Printf("wii!%s requesting log in from %s, has PID %v\n", username, client.WiiFC, user.PID)
+		fmt.Printf("%s requesting log in from %s, has PID %v\n", username, client.WiiFC, user.PID)
 
-		client.Username = "wii!" + username // make sure the username used later actually works
+		client.Username = username
 		
 		// since the Wii doesn't try hitting RegisterEx after logging in, we have to set station URLs here
 		// TODO: do this better / do this proper (there's gotta be a better way), find out how to set int_station_url
