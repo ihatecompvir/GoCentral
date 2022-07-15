@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
@@ -36,9 +35,7 @@ func (service ConfigService) Handle(data string, database *mongo.Database) (stri
 
 	motdCollection := database.Collection("motd")
 
-	result := motdCollection.FindOne(nil, bson.D{}).Decode(&motdInfo)
-
-	fmt.Printf("Found %v documents\n", result)
+	motdCollection.FindOne(nil, bson.D{}).Decode(&motdInfo)
 
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {

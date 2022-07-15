@@ -1,7 +1,7 @@
 package battles
 
 import (
-	"fmt"
+	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
@@ -61,7 +61,7 @@ func (service GetBattlesService) Handle(data string, database *mongo.Database) (
 	setlistCursor, err := setlistCollection.Find(nil, bson.D{})
 
 	if err != nil {
-		fmt.Println("Could not acquire songlists.")
+		log.Printf("Error getting setlist for battle: %s", err)
 	}
 
 	res := []GetBattlesResponse{}

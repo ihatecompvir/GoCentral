@@ -26,27 +26,32 @@ import (
 
 func main() {
 	uri := os.Getenv("MONGOCONNECTIONSTRING")
+
+	if uri == "" {
+		log.Fatalln("GoCentral relies on MongoDB. You must set a MongoDB connection string to use GoCentral.")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 
 	if err != nil {
-		panic(err)
+		log.Fatalln("Could not connect to MongoDB: ", err)
 	}
 
 	defer func() {
 		if err = client.Disconnect(ctx); err != nil {
-			panic(err)
+			log.Fatalln("Could not connect to MongoDB: ", err)
 		}
 	}()
 
 	// Ping the primary
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
-		panic(err)
+		log.Fatalln("Could not ping MongoDB: ", err)
 	}
 
-	fmt.Println("Successfully connected and pinged.")
+	log.Println("Successfully established connection to MongoDB.")
 
 	gocentralDatabase := client.Database("gocentral")
 
@@ -56,7 +61,7 @@ func main() {
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	s := <-sig
-	fmt.Printf("Signal (%s) received, stopping\n", s)
+	log.Printf("Signal (%s) received, stopping\n", s)
 }
 
 func mainAuth(database *mongo.Database) {
@@ -89,7 +94,7 @@ func mainAuth(database *mongo.Database) {
 		// PS3 usernames cannot contain parentheses so there is no chance of a PS3 client taking the wii path
 		if len(res) == 0 {
 			if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
-				fmt.Printf("%s has never connected before - create DB entry\n", username)
+				log.Printf("%s has never connected before - create DB entry\n", username)
 				_, err := users.InsertOne(nil, bson.D{
 					{Key: "username", Value: username},
 					{Key: "pid", Value: rand.Intn(250000-500) + 500},
@@ -98,7 +103,7 @@ func mainAuth(database *mongo.Database) {
 				if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
 
 					if err != nil {
-						log.Fatal(err)
+						log.Printf("Could not find user %s: %s\n", username, err)
 					}
 				}
 			}
@@ -107,10 +112,10 @@ func mainAuth(database *mongo.Database) {
 			client.Username = "Master User"
 			user.PID = 12345678 // master user PID is currently 12345678 - probably should go with 0 or something since it is a special account
 			client.WiiFC = res[1]
-			fmt.Printf("Wii client detected, friend code %v\n", client.WiiFC)
+			log.Printf("Wii client detected, friend code %v\n", client.WiiFC)
 		}
 
-		fmt.Printf("%s requesting log in, has PID %v\n", username, user.PID)
+		log.Printf("%s requesting log in, has PID %v\n", username, user.PID)
 		var encryptedTicket []byte
 		var kerberosKey []byte
 
@@ -125,6 +130,13 @@ func mainAuth(database *mongo.Database) {
 		calculatedHmac := mac.Sum(nil)
 
 		// Build the response body
+
+		addr := os.Getenv("ADDRESS")
+
+		if addr == "" {
+			log.Println("ADDRESS is not set, clients will likely be unable to connect to the secure server. Please set the ADDRESS environment variable and restart GoCentral.")
+		}
+
 		stationURL := fmt.Sprintf("prudps:/address=%s;port=%s;CID=1;PID=2;sid=1;stream=3;type=2", os.Getenv("ADDRESS"), os.Getenv("SECUREPORT"))
 
 		rmcResponseStream := nex.NewStream()
@@ -170,7 +182,7 @@ func mainAuth(database *mongo.Database) {
 	})
 
 	authenticationServer.RequestTicket(func(err error, client *nex.Client, callID uint32, userPID uint32, serverPID uint32) {
-		fmt.Printf("PID %v requesting ticket...\n", userPID)
+		log.Printf("PID %v requesting ticket...\n", userPID)
 
 		encryptedTicket, kerberosKey := generateKerberosTicket(userPID, uint32(serverPID), 16, client.WiiFC)
 		mac := hmac.New(md5.New, kerberosKey)
@@ -210,7 +222,18 @@ func mainAuth(database *mongo.Database) {
 		nexServer.Send(responsePacket)
 	})
 
-	nexServer.Listen(os.Getenv("LISTENINGIP") + ":" + os.Getenv("AUTHPORT"))
+	ip := os.Getenv("LISTENINGIP")
+	authPort := os.Getenv("AUTHPORT")
+
+	if ip == "" {
+		log.Println("No listening IP specified for the auth server, you may experience issues connecting. Please set the LISTENINGIP environment variable.")
+	}
+
+	if authPort == "" {
+		log.Fatalln("No auth server port specified, please set the AUTHPORT environment variable. The default auth server port for various platforms can be found at https://github.com/ihatecompvir/GoCentral/wiki/Game-specific-Network-Details")
+	}
+
+	nexServer.Listen(ip + ":" + authPort)
 
 }
 
@@ -302,7 +325,8 @@ func mainSecure(database *mongo.Database) {
 		var user models.User
 
 		if err = users.FindOne(nil, bson.M{"username": client.Username}).Decode(&user); err != nil {
-			log.Fatal(err)
+			log.Println("User " + client.Username + " did not exist in database, could not register")
+			return
 		}
 
 		// Build the response body
@@ -337,10 +361,14 @@ func mainSecure(database *mongo.Database) {
 			)
 
 			if err != nil {
-				log.Fatal(err)
+				log.Fatalln(err)
 			}
 
-			fmt.Printf("Updated %v station URL for %s \n", result.ModifiedCount, client.Username)
+			if result.ModifiedCount > 1 || result.ModifiedCount == 0 {
+				log.Printf("Updated %v station URLs for %s \n", result.ModifiedCount, client.Username)
+			} else {
+				log.Printf("Updated %v station URL for %s \n", result.ModifiedCount, client.Username)
+			}
 		}
 
 		// The game doesn't appear to do anything with this, but return something proper anyway
@@ -376,15 +404,15 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(50)
 
-		fmt.Println(stationCID)
-		fmt.Printf("Requesting station URL for %v\n", stationPID)
+		log.Printf("Requesting station URL for %v\n", stationPID)
 
 		users := database.Collection("users")
 
 		var user models.User
 
 		if err = users.FindOne(nil, bson.M{"pid": stationPID}).Decode(&user); err != nil {
-			log.Fatal(err)
+			log.Println("Could not find user with PID " + fmt.Sprint(stationPID) + " in database")
+			return
 		}
 
 		rmcResponseStream.WriteUInt8(1)                         // response code
@@ -421,11 +449,8 @@ func mainSecure(database *mongo.Database) {
 		// the JSON server will handle the request depending on what needs to be returned
 		res, err := jsonMgr.Handle(rawJson, database)
 		if err != nil {
-			fmt.Printf("failed to handle request: %+v\n", err)
+			log.Printf("Failed to handle JSON request: %+v", err)
 			res = "[]"
-		} else {
-			fmt.Printf("in:\n%s\n", rawJson)
-			fmt.Printf("out:\n%s\n", res)
 		}
 
 		rmcResponseStream := nex.NewStream()
@@ -492,10 +517,10 @@ func mainSecure(database *mongo.Database) {
 
 	matchmakingServer.RegisterGathering(func(err error, client *nex.Client, callID uint32, gathering []byte) {
 		if client.Username == "Master User" {
-			fmt.Printf("Ignoring RegisterGathering for unauthenticated %s\n", client.WiiFC)
+			log.Printf("Ignoring RegisterGathering for unauthenticated %s\n", client.WiiFC)
 			return
 		}
-		fmt.Println("Registering gathering...")
+		log.Println("Registering gathering...")
 
 		// delete old gatherings, and create a new gathering
 
@@ -510,24 +535,22 @@ func mainSecure(database *mongo.Database) {
 		})
 
 		if deleteError != nil {
-			fmt.Println("Could not clear stale gatherings")
+			log.Println("Could not clear stale gatherings")
 		}
 
 		if deleteResult.DeletedCount != 0 {
-			fmt.Printf("Successfully cleared %v stale gatherings for %s...\n", deleteResult.DeletedCount, client.Username)
+			log.Printf("Successfully cleared %v stale gatherings for %s...\n", deleteResult.DeletedCount, client.Username)
 		}
 
 		// Create a new gathering
-		res, err := gatherings.InsertOne(nil, bson.D{
+		_, err = gatherings.InsertOne(nil, bson.D{
 			{Key: "gathering_id", Value: gatheringID},
 			{Key: "contents", Value: gathering},
 			{Key: "creator", Value: client.Username},
 		})
 
-		fmt.Println(res)
-
 		if err != nil {
-			log.Fatal("Could not create gathering")
+			log.Printf("Failed to create gathering: %+v\n", err)
 		}
 
 		rmcResponseStream := nex.NewStream()
@@ -561,10 +584,10 @@ func mainSecure(database *mongo.Database) {
 
 	matchmakingServer.UpdateGathering(func(err error, client *nex.Client, callID uint32, gathering []byte, gatheringID uint32) {
 		if client.Username == "Master User" {
-			fmt.Printf("Ignoring UpdateGathering for unauthenticated %s\n", client.WiiFC)
+			log.Printf("Ignoring UpdateGathering for unauthenticated %s\n", client.WiiFC)
 			return
 		}
-		fmt.Printf("Updating gathering for %s\n", client.Username)
+		log.Printf("Updating gathering for %s\n", client.Username)
 
 		gatherings := database.Collection("gatherings")
 
@@ -579,11 +602,11 @@ func mainSecure(database *mongo.Database) {
 		)
 
 		if err != nil {
-			log.Fatal("Could not update gathering")
+			log.Println("Could not update gathering for " + client.Username)
 			return
 		}
 
-		fmt.Printf("Updated %v gatherings\n", result.ModifiedCount)
+		log.Printf("Updated %v gatherings\n", result.ModifiedCount)
 
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(50)
@@ -679,7 +702,7 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	matchmakingServer.LaunchSession(func(err error, client *nex.Client, callID uint32, gatheringID uint32) {
-		fmt.Printf("Launching session for %s...\n", client.Username)
+		log.Printf("Launching session for %s...\n", client.Username)
 
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(50)
@@ -712,10 +735,10 @@ func mainSecure(database *mongo.Database) {
 
 	matchmakingServer.TerminateGathering(func(err error, client *nex.Client, callID uint32, gatheringID uint32) {
 		if client.Username == "Master User" {
-			fmt.Printf("Ignoring TerminateGathering for unauthenticated %s\n", client.WiiFC)
+			log.Printf("Ignoring TerminateGathering for unauthenticated %s\n", client.WiiFC)
 			return
 		}
-		fmt.Printf("Terminating gathering for %s...\n", client.Username)
+		log.Printf("Terminating gathering for %s...\n", client.Username)
 
 		gatherings := database.Collection("gatherings")
 
@@ -726,11 +749,11 @@ func mainSecure(database *mongo.Database) {
 		)
 
 		if err != nil {
-			log.Fatal("Could not delete gathering")
+			log.Printf("Could not terminate gathering: %s\n", err)
 			return
 		}
 
-		fmt.Printf("Terminated %v gathering\n", result.DeletedCount)
+		log.Printf("Terminated %v gathering\n", result.DeletedCount)
 
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(50)
@@ -763,10 +786,10 @@ func mainSecure(database *mongo.Database) {
 
 	matchmakingServer.CheckForGatherings(func(err error, client *nex.Client, callID uint32, data []byte) {
 		if client.Username == "Master User" {
-			fmt.Printf("Ignoring CheckForGatherings for unauthenticated %s\n", client.WiiFC)
+			log.Printf("Ignoring CheckForGatherings for unauthenticated %s\n", client.WiiFC)
 			return
 		}
-		fmt.Printf("Checking for available gatherings for %s...\n", client.Username)
+		log.Printf("Checking for available gatherings for %s...\n", client.Username)
 
 		gatherings := database.Collection("gatherings")
 		users := database.Collection("users")
@@ -783,7 +806,7 @@ func mainSecure(database *mongo.Database) {
 			bson.M{"$sample": bson.M{"size": 1}},
 		})
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("Could not get a random gathering: %s\n", err)
 		}
 		cur.Next(nil)
 		cur.Decode(&gathering)
@@ -794,12 +817,12 @@ func mainSecure(database *mongo.Database) {
 		// if there are no availble gatherings, tell the client to check again.
 		// otherwise, pass the available gathering to the client
 		if len(gathering.Contents) == 0 {
-			fmt.Println("There are no active gatherings. Tell client to keep checking.")
+			log.Println("There are no active gatherings. Tell client to keep checking.")
 			rmcResponseStream.WriteU32LENext([]uint32{0})
 		} else {
-			fmt.Println("Found a gathering - attempting join!")
+			log.Println("Found a gathering - attempting join!")
 			if err = users.FindOne(nil, bson.M{"username": gathering.Creator}).Decode(&user); err != nil {
-				log.Fatal(err)
+				log.Printf("Could not find creator %s of gathering: %+v\n", gathering.Creator, err)
 			}
 			rmcResponseStream.WriteU32LENext([]uint32{1})
 			rmcResponseStream.WriteBufferString("HarmonixGathering")
@@ -837,7 +860,7 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	natTraversalServer.InitiateProbe(func(err error, client *nex.Client, callID uint32, stationURL string) {
-		fmt.Printf("Doing NAT traversal probe for  %s...\n", stationURL)
+		log.Printf("Client is performing a NAT traversal probe to %s...\n", stationURL)
 
 		rmcResponseStream := nex.NewStream()
 
@@ -873,24 +896,28 @@ func mainSecure(database *mongo.Database) {
 
 		// Create a new user if not currently registered.
 		if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
-			fmt.Printf("%s has never connected before - create DB entry\n", username)
+			log.Printf("%s has never connected before - create DB entry\n", username)
 			_, err := users.InsertOne(nil, bson.D{
 				{Key: "username", Value: username},
 				{Key: "pid", Value: rand.Intn(250000-500) + 500},
 				// TODO: look into if the key that is passed here is per-profile, could use it as form of auth if so
 			})
 
+			if err != nil {
+				log.Printf("Could not create Nintendo user %s: %s\n", username, err)
+			}
+
 			if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
 
 				if err != nil {
-					log.Fatal(err)
+					log.Printf("Could not find newly created Nintendo user: %s\n", err)
 				}
 			}
 		}
-		fmt.Printf("%s requesting log in from %s, has PID %v\n", username, client.WiiFC, user.PID)
+		log.Printf("%s requesting Nintendo log in from Wii Friend Code %s, has PID %v\n", username, client.WiiFC, user.PID)
 
 		client.Username = username
-		
+
 		// since the Wii doesn't try hitting RegisterEx after logging in, we have to set station URLs here
 		// TODO: do this better / do this proper (there's gotta be a better way), find out how to set int_station_url
 		randomRVCID := rand.Intn(250000-500) + 500
@@ -907,10 +934,10 @@ func mainSecure(database *mongo.Database) {
 		)
 
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("Could not update station URLs for Nintendo user %s: %s\n", username, err)
 		}
 
-		fmt.Printf("Updated %v station URL for %s \n", result.ModifiedCount, client.Username)
+		log.Printf("Updated %v station URL for %s \n", result.ModifiedCount, client.Username)
 
 		rmcResponseStream.Grow(19)
 		rmcResponseStream.WriteU32LENext([]uint32{user.PID})
@@ -941,7 +968,7 @@ func mainSecure(database *mongo.Database) {
 
 	unknownProtocolServer.UnknownMethod(func(err error, client *nex.Client, callID uint32, pid uint32) {
 
-		fmt.Printf("Unknown thing requested on PID %v\n", pid)
+		log.Printf("Game made unknown request to unknown protocol for %v\n", pid)
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(10)
 		rmcResponseStream.WriteU32LENext([]uint32{0})
@@ -969,7 +996,18 @@ func mainSecure(database *mongo.Database) {
 		nexServer.Send(responsePacket)
 	})
 
-	nexServer.Listen(os.Getenv("LISTENINGIP") + ":" + os.Getenv("SECUREPORT"))
+	ip := os.Getenv("LISTENINGIP")
+	securePort := os.Getenv("SECUREPORT")
+
+	if ip == "" {
+		log.Println("No listening IP specified for the secure server, you may experience issues connecting. Please set the LISTENINGIP environment variable.")
+	}
+
+	if securePort == "" {
+		log.Fatalln("No secure server port specified, please set the SECUREPORT environment variable. The default secure server port for various platforms can be found at https://github.com/ihatecompvir/GoCentral/wiki/Game-specific-Network-Details")
+	}
+
+	nexServer.Listen(ip + ":" + securePort)
 }
 
 func generateKerberosTicket(userPID uint32, serverPID uint32, keySize int, pwd string) ([]byte, []byte) {

@@ -52,9 +52,9 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database) (s
 	// Spoof account linking status, 12345 pid
 	res := []PlayerGetResponse{{
 		1,
-		"ihatecompvir",
+		"Leaderboards are not yet implemented",
 		3,
-		1337,
+		1,
 		1,
 		0,
 		1,
@@ -63,21 +63,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database) (s
 		0,
 		"A",
 		1,
-	},
-		{
-			1,
-			"ihatecompvir",
-			3,
-			1335,
-			1,
-			0,
-			1,
-			1,
-			0,
-			0,
-			"A",
-			1,
-		}}
+	}}
 
 	return marshaler.MarshalResponse(service.Path(), res)
 }
