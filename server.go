@@ -345,12 +345,20 @@ func mainSecure(database *mongo.Database) {
 
 			var stationURL string = "prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID)
 
+			// run a RegEx to extract the IP address from the station URL
 			re := regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}`)
 
-			submatchall := re.FindAllString(stationUrls[0], -1)
-			var internalStationURL string = "prudp:/address=" + submatchall[0] + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID)
+			ipRegexResults := re.FindAllString(stationUrls[0], -1)
+			var internalStationURL string
 
-			// update station URL
+			// if there aren't any results, use a blank internal IP URL
+			if len(ipRegexResults) != 0 {
+				internalStationURL = "prudp:/address=" + ipRegexResults[0] + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID)
+			} else {
+				internalStationURL = ""
+			}
+
+			// update station URLs
 			result, err := users.UpdateOne(
 				nil,
 				bson.M{"username": client.Username},
