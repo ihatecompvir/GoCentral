@@ -8,6 +8,8 @@ import (
 	"rb3server/protocols/jsonproto/services/battles"
 	"rb3server/protocols/jsonproto/services/config"
 	"rb3server/protocols/jsonproto/services/entities"
+	"rb3server/protocols/jsonproto/services/entities/band"
+	"rb3server/protocols/jsonproto/services/entities/character"
 	leaderboard "rb3server/protocols/jsonproto/services/leaderboards"
 	"rb3server/protocols/jsonproto/services/performance"
 	"rb3server/protocols/jsonproto/services/scores"
@@ -59,7 +61,8 @@ func (mgr *ServicesManager) registerAll() {
 
 	mgr.register(ticker.TickerInfoService{})
 
-	mgr.register(entities.CharacterUpdateService{})
+	mgr.register(character.CharacterUpdateService{})
+	mgr.register(band.BandUpdateService{})
 	mgr.register(entities.GetLinkcodeService{})
 
 	mgr.register(performance.PerformanceRecordService{})
