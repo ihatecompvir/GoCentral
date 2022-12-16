@@ -1,9 +1,14 @@
 package leaderboard
 
 import (
+	"context"
+	"log"
+	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type PlayerGetRequest struct {
@@ -49,21 +54,85 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database) (s
 		return "", err
 	}
 
-	// Spoof account linking status, 12345 pid
-	res := []PlayerGetResponse{{
-		1,
-		"Leaderboards are not yet implemented",
-		3,
-		1,
-		1,
-		0,
-		1,
-		1,
-		0,
-		0,
-		"A",
-		1,
-	}}
+	scores := database.Collection("scores")
 
-	return marshaler.MarshalResponse(service.Path(), res)
+	filter := bson.M{"song_id": req.SongID, "role_id": req.RoleID}
+	cur, err := scores.Find(context.TODO(), filter, options.Find().SetSort(bson.D{{"score", -1}}))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	res := []PlayerGetResponse{}
+
+	// for rank
+	curIndex := 1
+
+	for cur.Next(nil) && curIndex != 16 {
+		username := "Player"
+
+		// create a value into which the single document can be decoded
+		var score models.Score
+		err := cur.Decode(&score)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if score.BOI == 1 && req.RoleID != 10 {
+
+			users := database.Collection("users")
+			var user models.User
+			err = users.FindOne(nil, bson.M{"pid": score.OwnerPID}).Decode(&user)
+
+			if err == nil {
+				username = user.Username
+			}
+
+			res = append(res, PlayerGetResponse{
+				score.OwnerPID,
+				username,
+				score.DiffID,
+				curIndex,
+				score.Score,
+				0,
+				score.InstrumentMask,
+				score.NotesPercent,
+				0,
+				0,
+				"",
+				curIndex,
+			})
+
+		} else {
+			bands := database.Collection("bands")
+			var band models.Band
+			var bandName = "Band"
+			err = bands.FindOne(nil, bson.M{"owner_pid": score.OwnerPID}).Decode(&band)
+
+			if err == nil {
+				bandName = band.Name
+			}
+
+			res = append(res, PlayerGetResponse{
+				score.OwnerPID,
+				bandName,
+				score.DiffID,
+				curIndex,
+				score.Score,
+				0,
+				score.InstrumentMask,
+				score.NotesPercent,
+				0,
+				0,
+				"",
+				curIndex,
+			})
+		}
+		curIndex += 1
+	}
+
+	if len(res) == 0 {
+		return marshaler.MarshalResponse(service.Path(), []PlayerGetResponse{{}})
+	} else {
+		return marshaler.MarshalResponse(service.Path(), res)
+	}
 }

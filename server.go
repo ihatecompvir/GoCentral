@@ -75,6 +75,7 @@ func mainAuth(database *mongo.Database) {
 	nexServer.UsePacketCompression(false)
 	nexServer.SetFlagsVersion(0)
 	nexServer.SetAccessKey(os.Getenv("ACCESSKEY"))
+	nexServer.SetFragmentSize(962)
 
 	authenticationServer := nexproto.NewAuthenticationProtocol(nexServer)
 
@@ -246,6 +247,7 @@ func mainSecure(database *mongo.Database) {
 	nexServer.UsePacketCompression(false)
 	nexServer.SetFlagsVersion(0)
 	nexServer.SetAccessKey(os.Getenv("ACCESSKEY"))
+	nexServer.SetFragmentSize(962)
 
 	secureServer := nexproto.NewSecureProtocol(nexServer)
 	jsonServer := nexproto.NewJsonProtocol(nexServer)
@@ -457,7 +459,7 @@ func mainSecure(database *mongo.Database) {
 		// the JSON server will handle the request depending on what needs to be returned
 		res, err := jsonMgr.Handle(rawJson, database)
 		if err != nil {
-			log.Printf("Failed to handle JSON request: %+v", err)
+			//log.Printf("Failed to handle JSON request: %+v", err)
 			res = "[]"
 		}
 
