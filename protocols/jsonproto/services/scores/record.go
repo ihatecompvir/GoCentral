@@ -1,12 +1,13 @@
 package scores
 
 import (
-	"log"
+	"fmt"
 	"rb3server/protocols/jsonproto/marshaler"
 	"strings"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var instrumentMap = map[int]int{
@@ -421,12 +422,13 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database) 
 		})
 	}
 
-	scores := database.Collection("scores")
-
+	upsert := true
 	for i := 0; i < len(playerData); i++ {
-		_, err = scores.InsertOne(nil, playerData[i])
+		pid := playerData[i][1].Value.(int)
+		role_id := playerData[i][4].Value.(int)
+		_, err = database.Collection("scores").ReplaceOne(nil, bson.M{"song_id": songID, "pid": pid, "role_id": role_id}, playerData[i], &options.ReplaceOptions{Upsert: &upsert})
 		if err != nil {
-			log.Println("Could not insert score: %v", err)
+			fmt.Printf("Could not upsert score for song ID %v: %v\n", songID, err)
 		}
 	}
 
