@@ -24,11 +24,13 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
+var config models.Config
+
 func main() {
 	uri := os.Getenv("MONGOCONNECTIONSTRING")
 
 	if uri == "" {
-		log.Fatalln("GoCentral relies on MongoDB. You must set a MongoDB connection string to use GoCentral.")
+		log.Fatalln("GoCentral relies on MongoDB. You must set a MongoDB connection string to use GoCentral")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -51,9 +53,24 @@ func main() {
 		log.Fatalln("Could not ping MongoDB: ", err)
 	}
 
-	log.Println("Successfully established connection to MongoDB.")
+	log.Println("Successfully established connection to MongoDB")
 
 	gocentralDatabase := client.Database("gocentral")
+
+	configCollection := gocentralDatabase.Collection("config")
+
+	// get config from DB
+	err = configCollection.FindOne(nil, bson.M{}).Decode(&config)
+	if err != nil {
+		log.Println("Could not get config from MongoDB database, creating default config: ", err)
+		_, err = configCollection.InsertOne(nil, bson.D{
+			{Key: "last_pid", Value: 500},
+		})
+
+		if err != nil {
+			log.Fatalln("Could not create default config! GoCentral cannot proceed: ", err)
+		}
+	}
 
 	go mainAuth(gocentralDatabase)
 	go mainSecure(gocentralDatabase)
@@ -83,6 +100,7 @@ func mainAuth(database *mongo.Database) {
 		serverPID := 2 // Quazal Rendez-Vous
 
 		users := database.Collection("users")
+		configCollection := database.Collection("config")
 
 		var user models.User
 
@@ -98,15 +116,26 @@ func mainAuth(database *mongo.Database) {
 				log.Printf("%s has never connected before - create DB entry\n", username)
 				_, err := users.InsertOne(nil, bson.D{
 					{Key: "username", Value: username},
-					{Key: "pid", Value: rand.Intn(250000-500) + 500},
+					{Key: "pid", Value: config.LastPID + 1},
 				})
 
 				if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
-
-					if err != nil {
-						log.Printf("Could not find user %s: %s\n", username, err)
-					}
+					log.Printf("Could not find newly-created user %s: %s\n", username, err)
 				}
+
+				_, err = configCollection.UpdateOne(
+					nil,
+					bson.M{},
+					bson.D{
+						{"$set", bson.D{{"last_pid", config.LastPID + 1}}},
+					},
+				)
+				if err != nil {
+					log.Println("Could not update config in database: ", err)
+				}
+
+				config.LastPID++
+
 			}
 			client.Username = username
 		} else {
@@ -135,7 +164,7 @@ func mainAuth(database *mongo.Database) {
 		addr := os.Getenv("ADDRESS")
 
 		if addr == "" {
-			log.Println("ADDRESS is not set, clients will likely be unable to connect to the secure server. Please set the ADDRESS environment variable and restart GoCentral.")
+			log.Println("ADDRESS is not set, clients will likely be unable to connect to the secure server. Please set the ADDRESS environment variable and restart GoCentral")
 		}
 
 		stationURL := fmt.Sprintf("prudps:/address=%s;port=%s;CID=1;PID=2;sid=1;stream=3;type=2", os.Getenv("ADDRESS"), os.Getenv("SECUREPORT"))
@@ -827,7 +856,7 @@ func mainSecure(database *mongo.Database) {
 		// if there are no availble gatherings, tell the client to check again.
 		// otherwise, pass the available gathering to the client
 		if len(gathering.Contents) == 0 {
-			log.Println("There are no active gatherings. Tell client to keep checking.")
+			log.Println("There are no active gatherings. Tell client to keep checking")
 			rmcResponseStream.WriteU32LENext([]uint32{0})
 		} else {
 			log.Println("Found a gathering - attempting join!")
@@ -849,6 +878,57 @@ func mainSecure(database *mongo.Database) {
 
 		rmcResponse := nex.NewRMCResponse(nexproto.MatchmakingProtocolID2, callID)
 		rmcResponse.SetSuccess(nexproto.RegisterGathering, rmcResponseBody)
+
+		rmcResponseBytes := rmcResponse.Bytes()
+
+		responsePacket, _ := nex.NewPacketV0(client, nil)
+
+		responsePacket.SetVersion(0)
+		responsePacket.SetSource(0x31)
+		responsePacket.SetDestination(0x3F)
+		responsePacket.SetType(nex.DataPacket)
+
+		newArray := make([]byte, len(rmcResponseBytes)+1)
+		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
+		responsePacket.SetPayload(newArray)
+
+		responsePacket.AddFlag(nex.FlagNeedsAck)
+
+		nexServer.Send(responsePacket)
+
+	})
+
+	matchmakingServer.SetState(func(err error, client *nex.Client, callID uint32, gatheringID uint32, state uint32) {
+		log.Printf("Setting state for gathering %v...\n", gatheringID)
+
+		rmcResponseStream := nex.NewStream()
+
+		gatherings := database.Collection("gatherings")
+		var gathering models.Gathering
+		err = gatherings.FindOne(nil, bson.M{"gathering_id": gatheringID}).Decode(&gathering)
+
+		if err != nil {
+			log.Printf("Could not find gathering %v to set the state on: %v\n", gatheringID, err)
+		}
+
+		// TODO: Replace with something better
+		gathering.Contents[0x1C] = (byte)(state>>(8*3)) & 0xff
+		gathering.Contents[0x1D] = (byte)(state>>(8*2)) & 0xff
+		gathering.Contents[0x1E] = (byte)(state>>(8*1)) & 0xff
+		gathering.Contents[0x1F] = (byte)(state>>(8*0)) & 0xff
+
+		_, err = gatherings.ReplaceOne(nil, bson.M{"gathering_id": gatheringID}, gathering)
+		if err != nil {
+			log.Printf("Could not set state for gathering %v: %v\n", gatheringID, err)
+		}
+		rmcResponseStream.Grow(50)
+
+		rmcResponseStream.WriteUInt8(1)
+
+		rmcResponseBody := rmcResponseStream.Bytes()
+
+		rmcResponse := nex.NewRMCResponse(nexproto.MatchmakingProtocolID, callID)
+		rmcResponse.SetSuccess(nexproto.SetState, rmcResponseBody)
 
 		rmcResponseBytes := rmcResponse.Bytes()
 
@@ -902,6 +982,7 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseStream := nex.NewStream()
 
 		users := database.Collection("users")
+		configCollection := database.Collection("config")
 		var user models.User
 
 		// Create a new user if not currently registered.
@@ -909,13 +990,26 @@ func mainSecure(database *mongo.Database) {
 			log.Printf("%s has never connected before - create DB entry\n", username)
 			_, err := users.InsertOne(nil, bson.D{
 				{Key: "username", Value: username},
-				{Key: "pid", Value: rand.Intn(250000-500) + 500},
+				{Key: "pid", Value: config.LastPID + 1},
 				// TODO: look into if the key that is passed here is per-profile, could use it as form of auth if so
 			})
 
 			if err != nil {
 				log.Printf("Could not create Nintendo user %s: %s\n", username, err)
 			}
+
+			_, err = configCollection.UpdateOne(
+				nil,
+				bson.M{},
+				bson.D{
+					{"$set", bson.D{{"last_pid", config.LastPID + 1}}},
+				},
+			)
+			if err != nil {
+				log.Println("Could not update config in database: ", err)
+			}
+
+			config.LastPID++
 
 			if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
 
