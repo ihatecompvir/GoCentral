@@ -74,11 +74,11 @@ func main() {
 		}
 	}
 
-	go mainAuth(gocentralDatabase)
-	go mainSecure(gocentralDatabase)
-
 	// seed randomness with current time
 	rand.Seed(time.Now().UnixNano())
+
+	go mainAuth(gocentralDatabase)
+	go mainSecure(gocentralDatabase)
 
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -591,6 +591,7 @@ func mainSecure(database *mongo.Database) {
 			{Key: "gathering_id", Value: gatheringID},
 			{Key: "contents", Value: gathering},
 			{Key: "creator", Value: client.Username},
+			{Key: "last_updated", Value: time.Now().Unix()},
 		})
 
 		if err != nil {
@@ -642,6 +643,7 @@ func mainSecure(database *mongo.Database) {
 			bson.M{"gathering_id": gatheringID},
 			bson.D{
 				{"$set", bson.D{{"contents", gathering}}},
+				{"$set", bson.D{{"last_updated", time.Now().Unix()}}},
 			},
 		)
 
@@ -842,11 +844,20 @@ func mainSecure(database *mongo.Database) {
 		var user models.User
 
 		// attempt to get a random gathering and deserialize it
+		// any gatherings that havent been updated in 15 minutes are ignored
+		// this should prevent endless loops of trying to join old/stale gatherings that are still in the DB
+		// but any UI state change or playing a song will update the gathering
 		cur, err := gatherings.Aggregate(nil, []bson.M{
-			bson.M{"$match": bson.D{{
-				Key:   "creator",
-				Value: bson.D{{Key: "$ne", Value: client.Username}},
-			}}},
+			bson.M{"$match": bson.D{
+				{
+					Key:   "creator",
+					Value: bson.D{{Key: "$ne", Value: client.Username}},
+				},
+				{
+					Key:   "last_updated",
+					Value: bson.D{{Key: "$gt", Value: (time.Now().Unix()) - (15 * 60)}},
+				},
+			}},
 			bson.M{"$sample": bson.M{"size": 1}},
 		})
 		if err != nil {
