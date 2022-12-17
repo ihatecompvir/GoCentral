@@ -77,6 +77,9 @@ func main() {
 	go mainAuth(gocentralDatabase)
 	go mainSecure(gocentralDatabase)
 
+	// seed randomness with current time
+	rand.Seed(time.Now().UnixNano())
+
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	s := <-sig
