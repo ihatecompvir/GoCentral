@@ -914,10 +914,10 @@ func mainSecure(database *mongo.Database) {
 		}
 
 		// TODO: Replace with something better
-		gathering.Contents[0x1C] = (byte)(state>>(8*3)) & 0xff
-		gathering.Contents[0x1D] = (byte)(state>>(8*2)) & 0xff
-		gathering.Contents[0x1E] = (byte)(state>>(8*1)) & 0xff
-		gathering.Contents[0x1F] = (byte)(state>>(8*0)) & 0xff
+		gathering.Contents[0x1C] = (byte)(state>>(8*0)) & 0xff
+		gathering.Contents[0x1D] = (byte)(state>>(8*1)) & 0xff
+		gathering.Contents[0x1E] = (byte)(state>>(8*2)) & 0xff
+		gathering.Contents[0x1F] = (byte)(state>>(8*3)) & 0xff
 
 		_, err = gatherings.ReplaceOne(nil, bson.M{"gathering_id": gatheringID}, gathering)
 		if err != nil {
