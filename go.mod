@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/ihatecompvir/nex-go v0.0.0-20221216013912-1ef427fb8deb
-	github.com/ihatecompvir/nex-protocols-go v0.0.0-20220715083659-136a7f26a052
+	github.com/ihatecompvir/nex-protocols-go v0.0.0-20221217120721-8d22b6a68ebe
 	github.com/jinzhu/copier v0.3.5
 	github.com/klauspost/compress v1.15.13 // indirect
 	github.com/montanaflynn/stats v0.6.6 // indirect
