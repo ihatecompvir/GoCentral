@@ -46,7 +46,7 @@ func (service TickerInfoService) Handle(data string, database *mongo.Database) (
 
 	// Spoof account linking status, 12345 pid
 	res := []TickerInfoResponse{{
-		12345,
+		req.PID,
 		"Leaderboards are not currently implemented, so your scores won't track.",
 		1,
 		3,

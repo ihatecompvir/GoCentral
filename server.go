@@ -67,6 +67,8 @@ func main() {
 			{Key: "last_pid", Value: 500},
 		})
 
+		config.LastPID = 500
+
 		if err != nil {
 			log.Fatalln("Could not create default config! GoCentral cannot proceed: ", err)
 		}

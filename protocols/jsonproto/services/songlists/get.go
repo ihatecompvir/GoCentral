@@ -82,5 +82,9 @@ func (service GetSonglistsService) Handle(data string, database *mongo.Database)
 		return "", err
 	}
 
-	return marshaler.MarshalResponse(service.Path(), res)
+	if len(res) == 0 {
+		return marshaler.MarshalResponse(service.Path(), []GetSonglistsResponse{{}})
+	} else {
+		return marshaler.MarshalResponse(service.Path(), res)
+	}
 }
