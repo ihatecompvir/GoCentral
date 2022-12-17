@@ -459,10 +459,16 @@ func mainSecure(database *mongo.Database) {
 			return
 		}
 
-		rmcResponseStream.WriteUInt8(1)                         // response code
-		rmcResponseStream.WriteU32LENext([]uint32{2})           // the number of station urls present
-		rmcResponseStream.WriteBufferString(user.StationURL)    // WAN station URL
-		rmcResponseStream.WriteBufferString(user.IntStationURL) // LAN station URL used for connecting to other players on the same LAN
+		if user.IntStationURL != "" {
+			rmcResponseStream.WriteUInt8(1)                         // response code
+			rmcResponseStream.WriteU32LENext([]uint32{2})           // the number of station urls present
+			rmcResponseStream.WriteBufferString(user.StationURL)    // WAN station URL
+			rmcResponseStream.WriteBufferString(user.IntStationURL) // LAN station URL used for connecting to other players on the same LAN
+		} else {
+			rmcResponseStream.WriteUInt8(1)                      // response code
+			rmcResponseStream.WriteU32LENext([]uint32{1})        // the number of station urls present
+			rmcResponseStream.WriteBufferString(user.StationURL) // WAN station URL
+		}
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
