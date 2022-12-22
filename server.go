@@ -925,27 +925,31 @@ func mainSecure(database *mongo.Database) {
 
 		rmcResponseStream := nex.NewStream()
 
+		rmcResponseStream.Grow(50)
+
 		gatherings := database.Collection("gatherings")
 		var gathering models.Gathering
 		err = gatherings.FindOne(nil, bson.M{"gathering_id": gatheringID}).Decode(&gathering)
 
 		if err != nil {
 			log.Printf("Could not find gathering %v to set the state on: %v\n", gatheringID, err)
+
+			rmcResponseStream.WriteUInt8(0)
+		} else {
+			// TODO: Replace with something better
+			gathering.Contents[0x1C] = (byte)(state>>(8*0)) & 0xff
+			gathering.Contents[0x1D] = (byte)(state>>(8*1)) & 0xff
+			gathering.Contents[0x1E] = (byte)(state>>(8*2)) & 0xff
+			gathering.Contents[0x1F] = (byte)(state>>(8*3)) & 0xff
+
+			_, err = gatherings.ReplaceOne(nil, bson.M{"gathering_id": gatheringID}, gathering)
+			if err != nil {
+				log.Printf("Could not set state for gathering %v: %v\n", gatheringID, err)
+				rmcResponseStream.WriteUInt8(0)
+			} else {
+				rmcResponseStream.WriteUInt8(1)
+			}
 		}
-
-		// TODO: Replace with something better
-		gathering.Contents[0x1C] = (byte)(state>>(8*0)) & 0xff
-		gathering.Contents[0x1D] = (byte)(state>>(8*1)) & 0xff
-		gathering.Contents[0x1E] = (byte)(state>>(8*2)) & 0xff
-		gathering.Contents[0x1F] = (byte)(state>>(8*3)) & 0xff
-
-		_, err = gatherings.ReplaceOne(nil, bson.M{"gathering_id": gatheringID}, gathering)
-		if err != nil {
-			log.Printf("Could not set state for gathering %v: %v\n", gatheringID, err)
-		}
-		rmcResponseStream.Grow(50)
-
-		rmcResponseStream.WriteUInt8(1)
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
