@@ -598,6 +598,7 @@ func mainSecure(database *mongo.Database) {
 			{Key: "contents", Value: gathering},
 			{Key: "creator", Value: client.Username},
 			{Key: "last_updated", Value: time.Now().Unix()},
+			{Key: "state", Value: 0},
 		})
 
 		if err != nil {
@@ -855,13 +856,20 @@ func mainSecure(database *mongo.Database) {
 		// but any UI state change or playing a song will update the gathering
 		cur, err := gatherings.Aggregate(nil, []bson.M{
 			bson.M{"$match": bson.D{
+				// dont find our own gathering
 				{
 					Key:   "creator",
 					Value: bson.D{{Key: "$ne", Value: client.Username}},
 				},
+				// only look for gatherings updated in the last 15 minutes
 				{
 					Key:   "last_updated",
 					Value: bson.D{{Key: "$gt", Value: (time.Now().Unix()) - (15 * 60)}},
+				},
+				// dont look for gatherings in the "in song" state
+				{
+					Key:   "state",
+					Value: bson.D{{Key: "$ne", Value: 2}},
 				},
 			}},
 			bson.M{"$sample": bson.M{"size": 1}},
@@ -921,7 +929,7 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	matchmakingServer.SetState(func(err error, client *nex.Client, callID uint32, gatheringID uint32, state uint32) {
-		log.Printf("Setting state for gathering %v...\n", gatheringID)
+		log.Printf("Setting state to %v for gathering %v...\n", state, gatheringID)
 
 		rmcResponseStream := nex.NewStream()
 
@@ -941,6 +949,9 @@ func mainSecure(database *mongo.Database) {
 			gathering.Contents[0x1D] = (byte)(state>>(8*1)) & 0xff
 			gathering.Contents[0x1E] = (byte)(state>>(8*2)) & 0xff
 			gathering.Contents[0x1F] = (byte)(state>>(8*3)) & 0xff
+
+			gathering.State = state
+			gathering.LastUpdated = time.Now().Unix()
 
 			_, err = gatherings.ReplaceOne(nil, bson.M{"gathering_id": gatheringID}, gathering)
 			if err != nil {
