@@ -1013,7 +1013,7 @@ func mainSecure(database *mongo.Database) {
 
 		rmcMessage := nex.RMCRequest{}
 		rmcMessage.SetProtocolID(nexproto.NATTraversalID)
-		rmcMessage.SetCallID(0xffff0000 + callID)
+		rmcMessage.SetCallID(callID)
 		rmcMessage.SetMethodID(nexproto.InitiateProbe)
 		rmcRequestStream := nex.NewStreamOut(nexServer)
 		rmcRequestStream.WriteString(client.ExternalStationURL())
@@ -1037,8 +1037,11 @@ func mainSecure(database *mongo.Database) {
 				messagePacket.SetSource(0x31)
 				messagePacket.SetDestination(0x3F)
 				messagePacket.SetType(nex.DataPacket)
-				messagePacket.SetPayload(rmcMessageBytes)
 
+				// TODO: figure out why this is needed
+				rmcMessageBytes = append([]byte{0x00}, rmcMessageBytes...)
+
+				messagePacket.SetPayload(rmcMessageBytes)
 				messagePacket.AddFlag(nex.FlagNeedsAck)
 				messagePacket.AddFlag(nex.FlagReliable)
 

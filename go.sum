@@ -11,6 +11,8 @@ github.com/ihatecompvir/nex-go v0.0.0-20221216013912-1ef427fb8deb h1:Mge75UmxZxx
 github.com/ihatecompvir/nex-go v0.0.0-20221216013912-1ef427fb8deb/go.mod h1:93meCkk5UPXTRcA/gl65MAdInHbFgyI0X8/UEXQh+NI=
 github.com/ihatecompvir/nex-go v0.0.0-20230202172142-2997951cca7a h1:NVBPqYTtJujTyLehRRdJOWXO66XKAOysfwpGFJCOwt0=
 github.com/ihatecompvir/nex-go v0.0.0-20230202172142-2997951cca7a/go.mod h1:93meCkk5UPXTRcA/gl65MAdInHbFgyI0X8/UEXQh+NI=
+github.com/ihatecompvir/nex-go v0.0.0-20230203074736-74dece3c49ff h1:5tLZu74jqjuu3z93gwjjysqDkVV0nuzv8TPfq5752Sw=
+github.com/ihatecompvir/nex-go v0.0.0-20230203074736-74dece3c49ff/go.mod h1:93meCkk5UPXTRcA/gl65MAdInHbFgyI0X8/UEXQh+NI=
 github.com/ihatecompvir/nex-protocols-go v0.0.0-20221217120721-8d22b6a68ebe h1:wqLXPV+UkeHN+hGT5A/4GdQOrRN6iAhvdkLfuDHpF0Y=
 github.com/ihatecompvir/nex-protocols-go v0.0.0-20221217120721-8d22b6a68ebe/go.mod h1:CWANWIo6DkyT+pb/AGD/vNzjMMYTTlv4QYF2Mxd5LsI=
 github.com/ihatecompvir/nex-protocols-go v0.0.0-20230202172446-03241ef34b85 h1:FFezk++Zg3qsxVdmybyNKfJsGa6PUDdwMbcICTChe2Y=
