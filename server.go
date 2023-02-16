@@ -1186,6 +1186,9 @@ func mainSecure(database *mongo.Database) {
 		randomRVCID := rand.Intn(250000-500) + 500
 		var stationURL string = "prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID)
 
+		client.SetExternalStationURL(stationURL)
+		client.SetConnectionID(uint32(randomRVCID))
+
 		// update station URL
 		result, err := users.UpdateOne(
 			nil,
