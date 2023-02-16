@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto"
+	serialization "rb3server/serialization/gathering"
 	"regexp"
 	"strconv"
 	"syscall"
@@ -155,6 +156,8 @@ func mainAuth(database *mongo.Database) {
 		var encryptedTicket []byte
 		var kerberosKey []byte
 
+		client.SetPlayerID(user.PID)
+
 		// generate the ticket and pass the friend code as the pwd on Wii, or use static password on PS3
 		if client.Username == "Master User" {
 			encryptedTicket, kerberosKey = generateKerberosTicket(user.PID, uint32(serverPID), 16, client.WiiFC)
@@ -218,6 +221,12 @@ func mainAuth(database *mongo.Database) {
 	})
 
 	authenticationServer.RequestTicket(func(err error, client *nex.Client, callID uint32, userPID uint32, serverPID uint32) {
+
+		if userPID != client.PlayerID() {
+			log.Printf("Requested ticket for PID %v does not match server-assigned PID %v\n", userPID, client.PlayerID())
+			return
+		}
+
 		log.Printf("PID %v requesting ticket...\n", userPID)
 
 		encryptedTicket, kerberosKey := generateKerberosTicket(userPID, uint32(serverPID), 16, client.WiiFC)
@@ -374,6 +383,8 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseStream.WriteU16LENext([]uint16{0x01})     // same as above
 		rmcResponseStream.WriteU32LENext([]uint32{user.PID}) // pid
 
+		client.SetPlayerID(user.PID)
+
 		// the RVCID must differ across all clients otherwise clients will reject each other
 		randomRVCID := rand.Intn(250000-500) + 500
 
@@ -500,6 +511,11 @@ func mainSecure(database *mongo.Database) {
 	jsonMgr := jsonproto.NewServicesManager()
 	jsonServer.JSONRequest(func(err error, client *nex.Client, callID uint32, rawJson string) {
 
+		if client.PlayerID() == 0 {
+			log.Println("Client is attempting to call JSON method without valid server-assigned PID, rejecting call")
+			return
+		}
+
 		// the JSON server will handle the request depending on what needs to be returned
 		res, err := jsonMgr.Handle(rawJson, database)
 		if err != nil {
@@ -539,6 +555,10 @@ func mainSecure(database *mongo.Database) {
 	jsonServer.JSONRequest2(func(err error, client *nex.Client, callID uint32, rawJson string) {
 
 		// I believe the second request method never returns a payload
+		if client.PlayerID() == 0 {
+			log.Println("Client is attempting to call JSON method without valid server-assigned PID, rejecting call")
+			return
+		}
 
 		rmcResponseStream := nex.NewStream()
 
@@ -570,6 +590,12 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	matchmakingServer.RegisterGathering(func(err error, client *nex.Client, callID uint32, gathering []byte) {
+
+		if client.PlayerID() == 0 {
+			log.Println("Client is attempting to register a gathering without a valid server-assigned PID, rejecting call")
+			return
+		}
+
 		if client.Username == "Master User" {
 			log.Printf("Ignoring RegisterGathering for unauthenticated %s\n", client.WiiFC)
 			return
@@ -639,6 +665,19 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	matchmakingServer.UpdateGathering(func(err error, client *nex.Client, callID uint32, gathering []byte, gatheringID uint32) {
+
+		var deserializer serialization.GatheringDeserializer
+
+		if client.PlayerID() == 0 {
+			log.Println("Client is attempting to update a gathering without a valid server-assigned PID, rejecting call")
+			return
+		}
+
+		g, err := deserializer.Deserialize(gathering)
+		if err != nil {
+			log.Printf("Could not deserialize the gathering!")
+		}
+
 		if client.Username == "Master User" {
 			log.Printf("Ignoring UpdateGathering for unauthenticated %s\n", client.WiiFC)
 			return
@@ -654,6 +693,7 @@ func mainSecure(database *mongo.Database) {
 			bson.M{"gathering_id": gatheringID},
 			bson.D{
 				{"$set", bson.D{{"contents", gathering}}},
+				{"$set", bson.D{{"public", g.HarmonixGathering.Public}}},
 				{"$set", bson.D{{"last_updated", time.Now().Unix()}}},
 			},
 		)
@@ -696,6 +736,11 @@ func mainSecure(database *mongo.Database) {
 
 	matchmakingServer.Participate(func(err error, client *nex.Client, callID uint32, gatheringID uint32) {
 
+		if client.PlayerID() == 0 {
+			log.Println("Client is participate in a gathering without a valid server-assigned PID, rejecting call")
+			return
+		}
+
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(50)
 
@@ -728,6 +773,11 @@ func mainSecure(database *mongo.Database) {
 
 	matchmakingServer.Unparticipate(func(err error, client *nex.Client, callID uint32, gatheringID uint32) {
 
+		if client.PlayerID() == 0 {
+			log.Println("Client is attempting to unparticipate in a gathering without a valid server-assigned PID, rejecting call")
+			return
+		}
+
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(50)
 
@@ -759,6 +809,11 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	matchmakingServer.LaunchSession(func(err error, client *nex.Client, callID uint32, gatheringID uint32) {
+		if client.PlayerID() == 0 {
+			log.Println("Client is attempting to launch a session without a valid server-assigned PID, rejecting call")
+			return
+		}
+
 		log.Printf("Launching session for %s...\n", client.Username)
 
 		rmcResponseStream := nex.NewStream()
@@ -791,6 +846,12 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	matchmakingServer.TerminateGathering(func(err error, client *nex.Client, callID uint32, gatheringID uint32) {
+
+		if client.PlayerID() == 0 {
+			log.Println("Client is attempting to terminate a gathering without a valid server-assigned PID, rejecting call")
+			return
+		}
+
 		if client.Username == "Master User" {
 			log.Printf("Ignoring TerminateGathering for unauthenticated %s\n", client.WiiFC)
 			return
@@ -842,6 +903,12 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	matchmakingServer.CheckForGatherings(func(err error, client *nex.Client, callID uint32, data []byte) {
+
+		if client.PlayerID() == 0 {
+			log.Println("Client is attempting to check for gatherings without a valid server-assigned PID, rejecting call")
+			return
+		}
+
 		if client.Username == "Master User" {
 			log.Printf("Ignoring CheckForGatherings for unauthenticated %s\n", client.WiiFC)
 			return
@@ -874,6 +941,11 @@ func mainSecure(database *mongo.Database) {
 				{
 					Key:   "state",
 					Value: bson.D{{Key: "$ne", Value: 2}},
+				},
+				// only look for public gatherings
+				{
+					Key:   "public",
+					Value: bson.D{{Key: "$eq", Value: 1}},
 				},
 			}},
 			bson.M{"$sample": bson.M{"size": 1}},
@@ -933,6 +1005,12 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	matchmakingServer.SetState(func(err error, client *nex.Client, callID uint32, gatheringID uint32, state uint32) {
+
+		if client.PlayerID() == 0 {
+			log.Println("Client is attempting to set the state of a gathering without a valid server-assigned PID, rejecting call")
+			return
+		}
+
 		log.Printf("Setting state to %v for gathering %v...\n", state, gatheringID)
 
 		rmcResponseStream := nex.NewStream()
@@ -991,6 +1069,12 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	natTraversalServer.RequestProbeInitiation(func(err error, client *nex.Client, callID uint32, stationURLs []string) {
+
+		if client.PlayerID() == 0 {
+			log.Println("Client is attempting to initiate a NAT probe without a valid server-assigned PID, rejecting call")
+			return
+		}
+
 		log.Printf("Client wants to perform NAT traversal probes to %v servers...\n", len(stationURLs))
 
 		rmcResponseStream := nex.NewStream()
@@ -1016,7 +1100,7 @@ func mainSecure(database *mongo.Database) {
 		rmcMessage.SetCallID(callID)
 		rmcMessage.SetMethodID(nexproto.InitiateProbe)
 		rmcRequestStream := nex.NewStreamOut(nexServer)
-		rmcRequestStream.WriteString(client.ExternalStationURL())
+		rmcRequestStream.WriteBufferString(client.ExternalStationURL())
 		rmcRequestBody := rmcRequestStream.Bytes()
 		rmcMessage.SetParameters(rmcRequestBody)
 		rmcMessageBytes := rmcMessage.Bytes()
@@ -1043,7 +1127,6 @@ func mainSecure(database *mongo.Database) {
 
 				messagePacket.SetPayload(rmcMessageBytes)
 				messagePacket.AddFlag(nex.FlagNeedsAck)
-				messagePacket.AddFlag(nex.FlagReliable)
 
 				nexServer.Send(messagePacket)
 			} else {
@@ -1147,6 +1230,11 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	unknownProtocolServer.UnknownMethod(func(err error, client *nex.Client, callID uint32, pid uint32) {
+
+		if client.PlayerID() == 0 {
+			log.Println("Client is calling an unknown method without a valid server-assigned PID, rejecting call")
+			return
+		}
 
 		log.Printf("Game made unknown request to unknown protocol for %v\n", pid)
 		rmcResponseStream := nex.NewStream()
