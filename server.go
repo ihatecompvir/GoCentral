@@ -365,7 +365,6 @@ func mainSecure(database *mongo.Database) {
 	})
 
 	secureServer.RegisterEx(func(err error, client *nex.Client, callID uint32, stationUrls []string, className string, ticketData []byte) {
-
 		users := database.Collection("users")
 
 		var user models.User
@@ -375,23 +374,22 @@ func mainSecure(database *mongo.Database) {
 			return
 		}
 
+		newRVCID := uint32(nexServer.ConnectionIDCounter().Increment())
+
 		// Build the response body
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(200)
 
 		rmcResponseStream.WriteU16LENext([]uint16{0x01})     // likely a response code of sorts
 		rmcResponseStream.WriteU16LENext([]uint16{0x01})     // same as above
-		rmcResponseStream.WriteU32LENext([]uint32{user.PID}) // pid
+		rmcResponseStream.WriteU32LENext([]uint32{newRVCID}) // RVCID
 
 		client.SetPlayerID(user.PID)
-
-		// the RVCID must differ across all clients otherwise clients will reject each other
-		randomRVCID := rand.Intn(250000-500) + 500
 
 		// check if the PID is not the master PID. if it is the master PID, do not update the station URLs
 		if user.PID != 12345678 && len(stationUrls) != 0 {
 
-			var stationURL string = "prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID)
+			var stationURL string = "prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(newRVCID)
 
 			// run a RegEx to extract the IP address from the station URL
 			re := regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}`)
@@ -401,7 +399,7 @@ func mainSecure(database *mongo.Database) {
 
 			// if there aren't any results, use a blank internal IP URL
 			if len(ipRegexResults) != 0 {
-				internalStationURL = "prudp:/address=" + ipRegexResults[0] + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID)
+				internalStationURL = "prudp:/address=" + ipRegexResults[0] + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(newRVCID)
 			} else {
 				internalStationURL = ""
 			}
@@ -417,7 +415,7 @@ func mainSecure(database *mongo.Database) {
 			)
 
 			client.SetExternalStationURL(stationURL)
-			client.SetConnectionID(uint32(randomRVCID))
+			client.SetConnectionID(uint32(newRVCID))
 
 			if err != nil {
 				log.Fatalln(err)
@@ -1184,11 +1182,11 @@ func mainSecure(database *mongo.Database) {
 
 		// since the Wii doesn't try hitting RegisterEx after logging in, we have to set station URLs here
 		// TODO: do this better / do this proper (there's gotta be a better way), find out how to set int_station_url
-		randomRVCID := rand.Intn(250000-500) + 500
-		var stationURL string = "prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(randomRVCID)
+		newRVCID := uint32(nexServer.ConnectionIDCounter().Increment())
+		var stationURL string = "prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(newRVCID)
 
 		client.SetExternalStationURL(stationURL)
-		client.SetConnectionID(uint32(randomRVCID))
+		client.SetConnectionID(uint32(newRVCID))
 
 		// update station URL
 		result, err := users.UpdateOne(
@@ -1207,7 +1205,7 @@ func mainSecure(database *mongo.Database) {
 		log.Printf("Updated %v station URL for %s \n", result.ModifiedCount, client.Username)
 
 		rmcResponseStream.Grow(19)
-		rmcResponseStream.WriteU32LENext([]uint32{user.PID})
+		rmcResponseStream.WriteU32LENext([]uint32{newRVCID})
 		rmcResponseStream.WriteBufferString("FAKE-HMAC") // not 100% sure what this is supposed to be legitimately but the game doesn't complain if its not there
 
 		rmcResponseBody := rmcResponseStream.Bytes()
