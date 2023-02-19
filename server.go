@@ -1205,7 +1205,7 @@ func mainSecure(database *mongo.Database) {
 		log.Printf("Updated %v station URL for %s \n", result.ModifiedCount, client.Username)
 
 		rmcResponseStream.Grow(19)
-		rmcResponseStream.WriteU32LENext([]uint32{newRVCID})
+		rmcResponseStream.WriteU32LENext([]uint32{user.PID})
 		rmcResponseStream.WriteBufferString("FAKE-HMAC") // not 100% sure what this is supposed to be legitimately but the game doesn't complain if its not there
 
 		rmcResponseBody := rmcResponseStream.Bytes()
