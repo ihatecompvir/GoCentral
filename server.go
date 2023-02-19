@@ -629,6 +629,7 @@ func mainSecure(database *mongo.Database) {
 			{Key: "creator", Value: client.Username},
 			{Key: "last_updated", Value: time.Now().Unix()},
 			{Key: "state", Value: 0},
+			{Key: "public", Value: 0},
 		})
 
 		if err != nil {
