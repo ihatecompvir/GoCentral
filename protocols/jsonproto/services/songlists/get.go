@@ -5,6 +5,7 @@ import (
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
+	"github.com/ihatecompvir/nex-go"
 	"github.com/jinzhu/copier"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -14,7 +15,6 @@ type GetSonglistsRequest struct {
 	Region      string `json:"region"`
 	Locale      string `json:"locale"`
 	SystemMS    int    `json:"system_ms"`
-	SongID      int    `json:"song_id"`
 	MachineID   string `json:"machine_id"`
 	SessionGUID string `json:"session_guid"`
 	PID000      int    `json:"pid000"`
@@ -53,8 +53,18 @@ func (service GetSonglistsService) Path() string {
 	return "songlists/get"
 }
 
-func (service GetSonglistsService) Handle(data string, database *mongo.Database) (string, error) {
+func (service GetSonglistsService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req GetSonglistsRequest
+
+	err := marshaler.UnmarshalRequest(data, &req)
+	if err != nil {
+		return "", err
+	}
+
+	if req.PID000 != int(client.PlayerID()) {
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for songlists")
+		return "", err
+	}
 
 	setlistCollection := database.Collection("setlists")
 
@@ -75,11 +85,6 @@ func (service GetSonglistsService) Handle(data string, database *mongo.Database)
 		copier.Copy(&setlist, &setlistToCopy)
 
 		res = append(res, setlist)
-	}
-
-	err = marshaler.UnmarshalRequest(data, &req)
-	if err != nil {
-		return "", err
 	}
 
 	if len(res) == 0 {

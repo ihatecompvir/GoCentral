@@ -1,8 +1,10 @@
 package setlists
 
 import (
+	"log"
 	"rb3server/protocols/jsonproto/marshaler"
 
+	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -26,10 +28,15 @@ func (service SetlistCreationService) Path() string {
 	return "misc/get_accounts_setlist_creation_status"
 }
 
-func (service SetlistCreationService) Handle(data string, database *mongo.Database) (string, error) {
+func (service SetlistCreationService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req SetlistCreationRequest
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
+		return "", err
+	}
+
+	if req.PID != int(client.PlayerID()) {
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting setlist creation request")
 		return "", err
 	}
 

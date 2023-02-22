@@ -5,6 +5,7 @@ import (
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
+	"github.com/ihatecompvir/nex-go"
 	"github.com/jinzhu/copier"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -53,8 +54,18 @@ func (service GetBattlesService) Path() string {
 	return "battles/closed/get"
 }
 
-func (service GetBattlesService) Handle(data string, database *mongo.Database) (string, error) {
+func (service GetBattlesService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req GetBattlesRequest
+
+	err := marshaler.UnmarshalRequest(data, &req)
+	if err != nil {
+		return "", err
+	}
+
+	if req.PID000 != int(client.PlayerID()) {
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting getting battles")
+		return "", err
+	}
 
 	setlistCollection := database.Collection("battles")
 
@@ -75,11 +86,6 @@ func (service GetBattlesService) Handle(data string, database *mongo.Database) (
 		copier.Copy(&setlist, &setlistToCopy)
 
 		res = append(res, setlist)
-	}
-
-	err = marshaler.UnmarshalRequest(data, &req)
-	if err != nil {
-		return "", err
 	}
 
 	if len(res) == 0 {

@@ -1,8 +1,12 @@
 package ticker
 
 import (
+	"log"
+	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
+	"github.com/ihatecompvir/nex-go"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -37,25 +41,34 @@ func (service TickerInfoService) Path() string {
 	return "ticker/info/get"
 }
 
-func (service TickerInfoService) Handle(data string, database *mongo.Database) (string, error) {
+func (service TickerInfoService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req TickerInfoRequest
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
 		return "", err
 	}
 
+	if req.PID != int(client.PlayerID()) {
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for getting ticker info")
+		return "", err
+	}
+
+	bandsCollection := database.Collection("bands")
+	var band models.Band
+	err = bandsCollection.FindOne(nil, bson.M{"pid": req.PID}).Decode(&band)
+
 	// Spoof account linking status, 12345 pid
 	res := []TickerInfoResponse{{
 		req.PID,
-		"The following rankings are mock data. Proper calculation of ranks will be added soon.",
-		1,
-		3,
-		1,
-		1,
+		"",
 		0,
-		1,
-		1,
-		1,
+		3,
+		0,
+		0,
+		0,
+		band.BandID,
+		0,
+		0,
 		0,
 	}}
 

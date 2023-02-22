@@ -2,9 +2,11 @@ package scores
 
 import (
 	"fmt"
+	"log"
 	"rb3server/protocols/jsonproto/marshaler"
 	"strings"
 
+	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -235,7 +237,7 @@ func (service ScoreRecordService) Path() string {
 	return "scores/record"
 }
 
-func (service ScoreRecordService) Handle(data string, database *mongo.Database) (string, error) {
+func (service ScoreRecordService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req interface{}
 	var playerData []bson.D
 
@@ -285,6 +287,10 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database) 
 	case ScoreRecordRequestTwoPlayer:
 		err = marshaler.UnmarshalRequest(data, &request)
 		if err != nil {
+			return "", err
+		}
+		if request.PID000 != int(client.PlayerID()) {
+			log.Println("Client-supplied PID did not match server-assigned PID, rejecting recording score")
 			return "", err
 		}
 		songID = request.SongID

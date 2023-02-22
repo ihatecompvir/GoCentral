@@ -67,9 +67,13 @@ func main() {
 		log.Println("Could not get config from MongoDB database, creating default config: ", err)
 		_, err = configCollection.InsertOne(nil, bson.D{
 			{Key: "last_pid", Value: 500},
+			{Key: "last_band_id", Value: 0},
+			{Key: "last_character_id", Value: 0},
 		})
 
 		config.LastPID = 500
+		config.LastCharacterID = 0
+		config.LastBandID = 0
 
 		if err != nil {
 			log.Fatalln("Could not create default config! GoCentral cannot proceed: ", err)
@@ -99,7 +103,7 @@ func mainAuth(database *mongo.Database) {
 	nexServer.UsePacketCompression(false)
 	nexServer.SetFlagsVersion(0)
 	nexServer.SetAccessKey(os.Getenv("ACCESSKEY"))
-	nexServer.SetFragmentSize(962)
+	nexServer.SetFragmentSize(750)
 
 	authenticationServer := nexproto.NewAuthenticationProtocol(nexServer)
 
@@ -128,6 +132,8 @@ func mainAuth(database *mongo.Database) {
 
 				if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
 					log.Printf("Could not find newly-created user %s: %s\n", username, err)
+					sendErrorCode(nexServer, client, nexproto.AuthenticationProtocolID, callID, 0x00010001)
+					return
 				}
 
 				_, err = configCollection.UpdateOne(
@@ -173,7 +179,9 @@ func mainAuth(database *mongo.Database) {
 		addr := os.Getenv("ADDRESS")
 
 		if addr == "" {
-			log.Println("ADDRESS is not set, clients will likely be unable to connect to the secure server. Please set the ADDRESS environment variable and restart GoCentral")
+			log.Println("ADDRESS is not set, clients will be unable to connect to the secure server. Please set the ADDRESS environment variable and restart GoCentral")
+			sendErrorCode(nexServer, client, nexproto.AuthenticationProtocolID, callID, 0x00010001)
+			return
 		}
 
 		stationURL := fmt.Sprintf("prudps:/address=%s;port=%s;CID=1;PID=2;sid=1;stream=3;type=2", os.Getenv("ADDRESS"), os.Getenv("SECUREPORT"))
@@ -208,11 +216,7 @@ func mainAuth(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		// add one empty byte to each decrypted payload
-		// nintendos rendez-vous doesn't require this so its not implemented by default
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -224,6 +228,7 @@ func mainAuth(database *mongo.Database) {
 
 		if userPID != client.PlayerID() {
 			log.Printf("Requested ticket for PID %v does not match server-assigned PID %v\n", userPID, client.PlayerID())
+			sendErrorCode(nexServer, client, nexproto.AuthenticationProtocolID, callID, 0x0003006B) // invalid PID error
 			return
 		}
 
@@ -256,11 +261,7 @@ func mainAuth(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		// add one empty byte to each decrypted payload
-		// nintendos rendez-vous doesn't require this so its not implemented by default
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -291,14 +292,15 @@ func mainSecure(database *mongo.Database) {
 	nexServer.UsePacketCompression(false)
 	nexServer.SetFlagsVersion(0)
 	nexServer.SetAccessKey(os.Getenv("ACCESSKEY"))
-	nexServer.SetFragmentSize(962)
+	nexServer.SetFragmentSize(750)
 
 	secureServer := nexproto.NewSecureProtocol(nexServer)
 	jsonServer := nexproto.NewJsonProtocol(nexServer)
 	matchmakingServer := nexproto.NewMatchmakingProtocol(nexServer)
+	customMatchmakingServer := nexproto.NewCustomMatchmakingProtocol(nexServer)
 	natTraversalServer := nexproto.NewNATTraversalProtocol(nexServer)
 	accountManagementServer := nexproto.NewAccountManagementProtocol(nexServer)
-	unknownProtocolServer := nexproto.NewUnknownProtocol(nexServer)
+	messagingProtocolServer := nexproto.NewMessagingProtocol(nexServer)
 
 	// Handle PRUDP CONNECT packet (not an RMC method)
 	nexServer.On("Connect", func(packet *nex.PacketV0) {
@@ -371,6 +373,7 @@ func mainSecure(database *mongo.Database) {
 
 		if err = users.FindOne(nil, bson.M{"username": client.Username}).Decode(&user); err != nil {
 			log.Println("User " + client.Username + " did not exist in database, could not register")
+			sendErrorCode(nexServer, client, nexproto.SecureProtocolID, callID, 0x00010001)
 			return
 		}
 
@@ -402,6 +405,7 @@ func mainSecure(database *mongo.Database) {
 				internalStationURL = "prudp:/address=" + ipRegexResults[0] + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(newRVCID)
 			} else {
 				internalStationURL = ""
+				log.Printf("Client with PID %v did not have internal station URL, using empty string\n", user.PID)
 			}
 
 			// update station URLs
@@ -418,7 +422,9 @@ func mainSecure(database *mongo.Database) {
 			client.SetConnectionID(uint32(newRVCID))
 
 			if err != nil {
-				log.Fatalln(err)
+				log.Printf("Could not update station URLs for %s\n", result.ModifiedCount, client.Username)
+				sendErrorCode(nexServer, client, nexproto.SecureProtocolID, callID, 0x00010001)
+				return
 			}
 
 			if result.ModifiedCount > 1 || result.ModifiedCount == 0 {
@@ -446,11 +452,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		// add one empty byte to each decrypted payload
-		// nintendos rendez-vous doesn't require this so its not implemented by default
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -469,6 +471,7 @@ func mainSecure(database *mongo.Database) {
 
 		if err = users.FindOne(nil, bson.M{"pid": stationPID}).Decode(&user); err != nil {
 			log.Println("Could not find user with PID " + fmt.Sprint(stationPID) + " in database")
+			sendErrorCode(nexServer, client, nexproto.SecureProtocolID, callID, 0x00010001)
 			return
 		}
 
@@ -497,9 +500,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -511,14 +512,15 @@ func mainSecure(database *mongo.Database) {
 
 		if client.PlayerID() == 0 {
 			log.Println("Client is attempting to call JSON method without valid server-assigned PID, rejecting call")
+			sendErrorCode(nexServer, client, nexproto.JsonProtocolID, callID, 0x00010001)
 			return
 		}
 
 		// the JSON server will handle the request depending on what needs to be returned
-		res, err := jsonMgr.Handle(rawJson, database)
+		res, err := jsonMgr.Handle(rawJson, database, client)
 		if err != nil {
-			//log.Printf("Failed to handle JSON request: %+v", err)
-			res = "[]"
+			sendErrorCode(nexServer, client, nexproto.JsonProtocolID, callID, 0x00010001)
+			return
 		}
 
 		rmcResponseStream := nex.NewStream()
@@ -539,11 +541,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		// add one empty byte to each decrypted payload
-		// nintendos rendez-vous doesn't require this so its not implemented by default
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -555,6 +553,13 @@ func mainSecure(database *mongo.Database) {
 		// I believe the second request method never returns a payload
 		if client.PlayerID() == 0 {
 			log.Println("Client is attempting to call JSON method without valid server-assigned PID, rejecting call")
+			sendErrorCode(nexServer, client, nexproto.JsonProtocolID, callID, 0x00010001)
+			return
+		}
+
+		_, err = jsonMgr.Handle(rawJson, database, client)
+		if err != nil {
+			sendErrorCode(nexServer, client, nexproto.JsonProtocolID, callID, 0x00010001)
 			return
 		}
 
@@ -576,11 +581,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		// add one empty byte to each decrypted payload
-		// nintendos rendez-vous doesn't require this so its not implemented by default
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -591,11 +592,13 @@ func mainSecure(database *mongo.Database) {
 
 		if client.PlayerID() == 0 {
 			log.Println("Client is attempting to register a gathering without a valid server-assigned PID, rejecting call")
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 
 		if client.Username == "Master User" {
 			log.Printf("Ignoring RegisterGathering for unauthenticated %s\n", client.WiiFC)
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 		log.Println("Registering gathering...")
@@ -653,9 +656,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -669,16 +670,20 @@ func mainSecure(database *mongo.Database) {
 
 		if client.PlayerID() == 0 {
 			log.Println("Client is attempting to update a gathering without a valid server-assigned PID, rejecting call")
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 
 		g, err := deserializer.Deserialize(gathering)
 		if err != nil {
 			log.Printf("Could not deserialize the gathering!")
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
+			return
 		}
 
 		if client.Username == "Master User" {
 			log.Printf("Ignoring UpdateGathering for unauthenticated %s\n", client.WiiFC)
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 		log.Printf("Updating gathering for %s\n", client.Username)
@@ -699,6 +704,7 @@ func mainSecure(database *mongo.Database) {
 
 		if err != nil {
 			log.Println("Could not update gathering for " + client.Username)
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 
@@ -723,9 +729,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -737,6 +741,7 @@ func mainSecure(database *mongo.Database) {
 
 		if client.PlayerID() == 0 {
 			log.Println("Client is participate in a gathering without a valid server-assigned PID, rejecting call")
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 
@@ -760,9 +765,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -774,6 +777,7 @@ func mainSecure(database *mongo.Database) {
 
 		if client.PlayerID() == 0 {
 			log.Println("Client is attempting to unparticipate in a gathering without a valid server-assigned PID, rejecting call")
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 
@@ -797,9 +801,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -810,6 +812,7 @@ func mainSecure(database *mongo.Database) {
 	matchmakingServer.LaunchSession(func(err error, client *nex.Client, callID uint32, gatheringID uint32) {
 		if client.PlayerID() == 0 {
 			log.Println("Client is attempting to launch a session without a valid server-assigned PID, rejecting call")
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 
@@ -834,9 +837,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -848,11 +849,13 @@ func mainSecure(database *mongo.Database) {
 
 		if client.PlayerID() == 0 {
 			log.Println("Client is attempting to terminate a gathering without a valid server-assigned PID, rejecting call")
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 
 		if client.Username == "Master User" {
 			log.Printf("Ignoring TerminateGathering for unauthenticated %s\n", client.WiiFC)
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 		log.Printf("Terminating gathering for %s...\n", client.Username)
@@ -867,6 +870,7 @@ func mainSecure(database *mongo.Database) {
 
 		if err != nil {
 			log.Printf("Could not terminate gathering: %s\n", err)
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 
@@ -891,9 +895,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -901,30 +903,29 @@ func mainSecure(database *mongo.Database) {
 
 	})
 
-	matchmakingServer.CheckForGatherings(func(err error, client *nex.Client, callID uint32, data []byte) {
+	customMatchmakingServer.CustomFind(func(err error, client *nex.Client, callID uint32, data []byte) {
 
 		if client.PlayerID() == 0 {
 			log.Println("Client is attempting to check for gatherings without a valid server-assigned PID, rejecting call")
+			sendErrorCode(nexServer, client, nexproto.CustomMatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 
 		if client.Username == "Master User" {
-			log.Printf("Ignoring CheckForGatherings for unauthenticated %s\n", client.WiiFC)
+			log.Printf("Ignoring CheckForGatherings for unauthenticated Wii master user with friend code %s\n", client.WiiFC)
+			sendErrorCode(nexServer, client, nexproto.CustomMatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 		log.Printf("Checking for available gatherings for %s...\n", client.Username)
 
-		gatherings := database.Collection("gatherings")
-		users := database.Collection("users")
-
-		var gathering models.Gathering
-		var user models.User
+		gatheringCollection := database.Collection("gatherings")
+		usersCollection := database.Collection("users")
 
 		// attempt to get a random gathering and deserialize it
 		// any gatherings that havent been updated in 15 minutes are ignored
 		// this should prevent endless loops of trying to join old/stale gatherings that are still in the DB
 		// but any UI state change or playing a song will update the gathering
-		cur, err := gatherings.Aggregate(nil, []bson.M{
+		cur, err := gatheringCollection.Aggregate(nil, []bson.M{
 			bson.M{"$match": bson.D{
 				// dont find our own gathering
 				{
@@ -941,47 +942,69 @@ func mainSecure(database *mongo.Database) {
 					Key:   "state",
 					Value: bson.D{{Key: "$ne", Value: 2}},
 				},
+				// dont look for gatherings in the "on song select" state
+				{
+					Key:   "state",
+					Value: bson.D{{Key: "$ne", Value: 6}},
+				},
 				// only look for public gatherings
 				{
 					Key:   "public",
 					Value: bson.D{{Key: "$eq", Value: 1}},
 				},
 			}},
-			bson.M{"$sample": bson.M{"size": 1}},
+			bson.M{"$sample": bson.M{"size": 2}},
 		})
 		if err != nil {
 			log.Printf("Could not get a random gathering: %s\n", err)
+			sendErrorCode(nexServer, client, nexproto.CustomMatchmakingProtocolID, callID, 0x00010001)
+			return
 		}
-		cur.Next(nil)
-		cur.Decode(&gathering)
+		var gatherings = make([]models.Gathering, 0)
+		for cur.Next(nil) {
+			var g models.Gathering
+			err = cur.Decode(&g)
+			if err != nil {
+				log.Printf("Error decoding gathering: %+v\n", err)
+				sendErrorCode(nexServer, client, nexproto.CustomMatchmakingProtocolID, callID, 0x00010001)
+				return
+			}
+			gatherings = append(gatherings, g)
+		}
 
 		rmcResponseStream := nex.NewStream()
-		rmcResponseStream.Grow(19)
+		rmcResponseStream.Grow(50)
 
 		// if there are no availble gatherings, tell the client to check again.
 		// otherwise, pass the available gathering to the client
-		if len(gathering.Contents) == 0 {
+		if len(gatherings) == 0 {
 			log.Println("There are no active gatherings. Tell client to keep checking")
 			rmcResponseStream.WriteU32LENext([]uint32{0})
 		} else {
-			log.Println("Found a gathering - attempting join!")
-			if err = users.FindOne(nil, bson.M{"username": gathering.Creator}).Decode(&user); err != nil {
-				log.Printf("Could not find creator %s of gathering: %+v\n", gathering.Creator, err)
+			log.Printf("Found %d gatherings - telling client to attempt joining", len(gatherings))
+			rmcResponseStream.WriteU32LENext([]uint32{uint32(len(gatherings))})
+			for _, gathering := range gatherings {
+				var user models.User
+
+				if err = usersCollection.FindOne(nil, bson.M{"username": gathering.Creator}).Decode(&user); err != nil {
+					log.Printf("Could not find creator %s of gathering: %+v\n", gathering.Creator, err)
+					sendErrorCode(nexServer, client, nexproto.CustomMatchmakingProtocolID, callID, 0x00010001)
+					return
+				}
+				rmcResponseStream.WriteBufferString("HarmonixGathering")
+				rmcResponseStream.WriteU32LENext([]uint32{uint32(len(gathering.Contents) + 4)})
+				rmcResponseStream.WriteU32LENext([]uint32{uint32(len(gathering.Contents))})
+				rmcResponseStream.Grow(int64(len(gathering.Contents)))
+				rmcResponseStream.WriteBytesNext(gathering.Contents[0:4])
+				rmcResponseStream.WriteU32LENext([]uint32{user.PID})
+				rmcResponseStream.WriteU32LENext([]uint32{user.PID})
+				rmcResponseStream.WriteBytesNext(gathering.Contents[12:])
 			}
-			rmcResponseStream.WriteU32LENext([]uint32{1})
-			rmcResponseStream.WriteBufferString("HarmonixGathering")
-			rmcResponseStream.WriteU32LENext([]uint32{uint32(len(gathering.Contents) + 4)})
-			rmcResponseStream.WriteU32LENext([]uint32{uint32(len(gathering.Contents))})
-			rmcResponseStream.Grow(int64(len(gathering.Contents)))
-			rmcResponseStream.WriteBytesNext(gathering.Contents[0:4])
-			rmcResponseStream.WriteU32LENext([]uint32{user.PID})
-			rmcResponseStream.WriteU32LENext([]uint32{user.PID})
-			rmcResponseStream.WriteBytesNext(gathering.Contents[12:])
 		}
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
-		rmcResponse := nex.NewRMCResponse(nexproto.MatchmakingProtocolID2, callID)
+		rmcResponse := nex.NewRMCResponse(nexproto.CustomMatchmakingProtocolID, callID)
 		rmcResponse.SetSuccess(nexproto.RegisterGathering, rmcResponseBody)
 
 		rmcResponseBytes := rmcResponse.Bytes()
@@ -993,9 +1016,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -1007,6 +1028,7 @@ func mainSecure(database *mongo.Database) {
 
 		if client.PlayerID() == 0 {
 			log.Println("Client is attempting to set the state of a gathering without a valid server-assigned PID, rejecting call")
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 			return
 		}
 
@@ -1022,8 +1044,8 @@ func mainSecure(database *mongo.Database) {
 
 		if err != nil {
 			log.Printf("Could not find gathering %v to set the state on: %v\n", gatheringID, err)
-
-			rmcResponseStream.WriteUInt8(0)
+			sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
+			return
 		} else {
 			// TODO: Replace with something better
 			gathering.Contents[0x1C] = (byte)(state>>(8*0)) & 0xff
@@ -1037,7 +1059,8 @@ func mainSecure(database *mongo.Database) {
 			_, err = gatherings.ReplaceOne(nil, bson.M{"gathering_id": gatheringID}, gathering)
 			if err != nil {
 				log.Printf("Could not set state for gathering %v: %v\n", gatheringID, err)
-				rmcResponseStream.WriteUInt8(0)
+				sendErrorCode(nexServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
+				return
 			} else {
 				rmcResponseStream.WriteUInt8(1)
 			}
@@ -1057,9 +1080,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -1071,6 +1092,7 @@ func mainSecure(database *mongo.Database) {
 
 		if client.PlayerID() == 0 {
 			log.Println("Client is attempting to initiate a NAT probe without a valid server-assigned PID, rejecting call")
+			sendErrorCode(nexServer, client, nexproto.NATTraversalProtocolID, callID, 0x00010001)
 			return
 		}
 
@@ -1080,7 +1102,7 @@ func mainSecure(database *mongo.Database) {
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
-		rmcResponse := nex.NewRMCResponse(nexproto.NATTraversalID, callID)
+		rmcResponse := nex.NewRMCResponse(nexproto.NATTraversalProtocolID, callID)
 		rmcResponse.SetSuccess(nexproto.RequestProbeInitiation, rmcResponseBody)
 
 		responsePacket, _ := nex.NewPacketV0(client, nil)
@@ -1095,7 +1117,7 @@ func mainSecure(database *mongo.Database) {
 		nexServer.Send(responsePacket)
 
 		rmcMessage := nex.RMCRequest{}
-		rmcMessage.SetProtocolID(nexproto.NATTraversalID)
+		rmcMessage.SetProtocolID(nexproto.NATTraversalProtocolID)
 		rmcMessage.SetCallID(callID)
 		rmcMessage.SetMethodID(nexproto.InitiateProbe)
 		rmcRequestStream := nex.NewStreamOut(nexServer)
@@ -1130,6 +1152,8 @@ func mainSecure(database *mongo.Database) {
 				nexServer.Send(messagePacket)
 			} else {
 				log.Printf("Could not find active client with RVCID %v\n", targetRvcID)
+				sendErrorCode(nexServer, client, nexproto.NATTraversalProtocolID, callID, 0x00010001)
+				return
 			}
 		}
 
@@ -1144,7 +1168,7 @@ func mainSecure(database *mongo.Database) {
 		var user models.User
 
 		// Create a new user if not currently registered.
-		if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
+		if result := users.FindOne(nil, bson.M{"username": username}).Decode(&user); result != nil {
 			log.Printf("%s has never connected before - create DB entry\n", username)
 			_, err := users.InsertOne(nil, bson.D{
 				{Key: "username", Value: username},
@@ -1154,6 +1178,8 @@ func mainSecure(database *mongo.Database) {
 
 			if err != nil {
 				log.Printf("Could not create Nintendo user %s: %s\n", username, err)
+				sendErrorCode(nexServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+				return
 			}
 
 			_, err = configCollection.UpdateOne(
@@ -1165,6 +1191,8 @@ func mainSecure(database *mongo.Database) {
 			)
 			if err != nil {
 				log.Println("Could not update config in database: ", err)
+				sendErrorCode(nexServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+				return
 			}
 
 			config.LastPID++
@@ -1173,9 +1201,12 @@ func mainSecure(database *mongo.Database) {
 
 				if err != nil {
 					log.Printf("Could not find newly created Nintendo user: %s\n", err)
+					sendErrorCode(nexServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+					return
 				}
 			}
 		}
+
 		log.Printf("%s requesting Nintendo log in from Wii Friend Code %s, has PID %v\n", username, client.WiiFC, user.PID)
 
 		client.Username = username
@@ -1187,6 +1218,7 @@ func mainSecure(database *mongo.Database) {
 
 		client.SetExternalStationURL(stationURL)
 		client.SetConnectionID(uint32(newRVCID))
+		client.SetPlayerID(user.PID)
 
 		// update station URL
 		result, err := users.UpdateOne(
@@ -1200,6 +1232,8 @@ func mainSecure(database *mongo.Database) {
 
 		if err != nil {
 			log.Printf("Could not update station URLs for Nintendo user %s: %s\n", username, err)
+			sendErrorCode(nexServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+			return
 		}
 
 		log.Printf("Updated %v station URL for %s \n", result.ModifiedCount, client.Username)
@@ -1211,7 +1245,7 @@ func mainSecure(database *mongo.Database) {
 		rmcResponseBody := rmcResponseStream.Bytes()
 
 		rmcResponse := nex.NewRMCResponse(nexproto.AccountManagementProtocolID, callID)
-		rmcResponse.SetSuccess(nexproto.AccountManagementMethodNintendoCreateAccount, rmcResponseBody)
+		rmcResponse.SetSuccess(nexproto.NintendoCreateAccount, rmcResponseBody)
 
 		rmcResponseBytes := rmcResponse.Bytes()
 
@@ -1222,31 +1256,73 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
 		nexServer.Send(responsePacket)
 	})
 
-	unknownProtocolServer.UnknownMethod(func(err error, client *nex.Client, callID uint32, pid uint32) {
+	accountManagementServer.SetStatus(func(err error, client *nex.Client, callID uint32, status string) {
 
 		if client.PlayerID() == 0 {
-			log.Println("Client is calling an unknown method without a valid server-assigned PID, rejecting call")
+			log.Println("Client is attempting to update their status without a valid server-assigned PID, rejecting call")
+			sendErrorCode(nexServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+			return
+		}
+		usersCollection := database.Collection("users")
+		_, err = usersCollection.UpdateOne(
+			nil,
+			bson.M{"username": client.Username},
+			bson.D{
+				{"$set", bson.D{{"status", status}}},
+			},
+		)
+
+		if err != nil {
+			log.Printf("Could not update status for user %s: %s\n", client.Username, err)
+			sendErrorCode(nexServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
 			return
 		}
 
-		log.Printf("Game made unknown request to unknown protocol for %v\n", pid)
+		rmcResponseStream := nex.NewStream()
+
+		rmcResponseBody := rmcResponseStream.Bytes()
+
+		rmcResponse := nex.NewRMCResponse(nexproto.AccountManagementProtocolID, callID)
+		rmcResponse.SetSuccess(nexproto.SetStatus, rmcResponseBody)
+
+		responsePacket, _ := nex.NewPacketV0(client, nil)
+
+		responsePacket.SetVersion(0)
+		responsePacket.SetSource(0x31)
+		responsePacket.SetDestination(0x3F)
+		responsePacket.SetType(nex.DataPacket)
+
+		responsePacket.AddFlag(nex.FlagNeedsAck)
+
+		nexServer.Send(responsePacket)
+
+	})
+
+	messagingProtocolServer.GetMessageHeaders(func(err error, client *nex.Client, callID uint32, pid uint32, gatheringID uint32, rangeOffset uint32, rangeSize uint32) {
+
+		if client.PlayerID() == 0 {
+			log.Println("Client is trying to get message headers without a valid server-assigned PID, rejecting call")
+			sendErrorCode(nexServer, client, nexproto.MessagingProtocolID, callID, 0x00010001)
+			return
+		}
+
+		log.Printf("Getting message headers for PID %v\n", pid)
 		rmcResponseStream := nex.NewStream()
 		rmcResponseStream.Grow(10)
+		rmcResponseStream.WriteU32LENext([]uint32{0})
 		rmcResponseStream.WriteU32LENext([]uint32{0})
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
-		rmcResponse := nex.NewRMCResponse(nexproto.UnknownProtocolID, callID)
-		rmcResponse.SetSuccess(nexproto.UnknownMethod, rmcResponseBody)
+		rmcResponse := nex.NewRMCResponse(nexproto.MessagingProtocolID, callID)
+		rmcResponse.SetSuccess(nexproto.GetMessageHeaders, rmcResponseBody)
 
 		rmcResponseBytes := rmcResponse.Bytes()
 
@@ -1257,9 +1333,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetDestination(0x3F)
 		responsePacket.SetType(nex.DataPacket)
 
-		newArray := make([]byte, len(rmcResponseBytes)+1)
-		copy(newArray[1:len(rmcResponseBytes)+1], rmcResponseBytes)
-		responsePacket.SetPayload(newArray)
+		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -1278,6 +1352,26 @@ func mainSecure(database *mongo.Database) {
 	}
 
 	nexServer.Listen(ip + ":" + securePort)
+}
+
+func sendErrorCode(server *nex.Server, client *nex.Client, protocol int, callID uint32, code uint32) {
+	rmcResponse := nex.NewRMCResponse(nexproto.MatchmakingProtocolID, callID)
+	rmcResponse.SetError(code)
+
+	rmcResponseBytes := rmcResponse.Bytes()
+
+	responsePacket, _ := nex.NewPacketV0(client, nil)
+
+	responsePacket.SetVersion(0)
+	responsePacket.SetSource(0x31)
+	responsePacket.SetDestination(0x3F)
+	responsePacket.SetType(nex.DataPacket)
+
+	responsePacket.SetPayload(rmcResponseBytes)
+
+	responsePacket.AddFlag(nex.FlagNeedsAck)
+
+	server.Send(responsePacket)
 }
 
 func generateKerberosTicket(userPID uint32, serverPID uint32, keySize int, pwd string) ([]byte, []byte) {

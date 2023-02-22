@@ -1,8 +1,10 @@
 package leaderboard
 
 import (
+	"log"
 	"rb3server/protocols/jsonproto/marshaler"
 
+	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -28,10 +30,15 @@ func (service MaxrankGetService) Path() string {
 	return "leaderboards/maxrank/get"
 }
 
-func (service MaxrankGetService) Handle(data string, database *mongo.Database) (string, error) {
+func (service MaxrankGetService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req MaxrankGetRequest
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
+		return "", err
+	}
+
+	if req.PID000 != int(client.PlayerID()) {
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for maxrank")
 		return "", err
 	}
 

@@ -3,6 +3,7 @@ package entities
 import (
 	"rb3server/protocols/jsonproto/marshaler"
 
+	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -25,7 +26,7 @@ func (service GetLinkcodeService) Path() string {
 	return "entities/linkcode/get"
 }
 
-func (service GetLinkcodeService) Handle(data string, database *mongo.Database) (string, error) {
+func (service GetLinkcodeService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req GetLinkcodeRequest
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {

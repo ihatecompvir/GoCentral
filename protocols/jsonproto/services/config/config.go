@@ -4,6 +4,7 @@ import (
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
+	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -28,7 +29,7 @@ func (service ConfigService) Path() string {
 	return "config/get"
 }
 
-func (service ConfigService) Handle(data string, database *mongo.Database) (string, error) {
+func (service ConfigService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req ConfigRequest
 
 	var motdInfo models.MOTDInfo

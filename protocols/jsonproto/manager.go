@@ -18,6 +18,7 @@ import (
 	"rb3server/protocols/jsonproto/services/stats"
 	"rb3server/protocols/jsonproto/services/ticker"
 
+	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -26,7 +27,7 @@ type Service interface {
 	Path() string
 
 	// function to process request
-	Handle(string, *mongo.Database) (string, error)
+	Handle(string, *mongo.Database, *nex.Client) (string, error)
 }
 
 type ServicesManager struct {
@@ -87,7 +88,7 @@ func (mgr *ServicesManager) register(service Service) {
 }
 
 // delegates the request to the proper service
-func (mgr ServicesManager) Handle(jsonStr string, database *mongo.Database) (string, error) {
+func (mgr ServicesManager) Handle(jsonStr string, database *mongo.Database, client *nex.Client) (string, error) {
 
 	methodPath, err := marshaler.GetRequestName(jsonStr)
 	if err != nil {
@@ -100,6 +101,6 @@ func (mgr ServicesManager) Handle(jsonStr string, database *mongo.Database) (str
 		return "", fmt.Errorf("unimplemented service for path:%s\n", methodPath)
 	}
 
-	return service.Handle(jsonStr, database)
+	return service.Handle(jsonStr, database, client)
 
 }

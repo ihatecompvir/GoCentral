@@ -3,6 +3,7 @@ package performance
 import (
 	"rb3server/protocols/jsonproto/marshaler"
 
+	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -147,7 +148,7 @@ func (service PerformanceRecordService) Path() string {
 	return "performance/record"
 }
 
-func (service PerformanceRecordService) Handle(data string, database *mongo.Database) (string, error) {
+func (service PerformanceRecordService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	//var req PerformanceRecordRequest
 	//err := marshaler.UnmarshalRequest(data, &req)
 	//if err != nil {

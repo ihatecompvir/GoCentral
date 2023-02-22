@@ -1,8 +1,10 @@
 package battles
 
 import (
+	"log"
 	"rb3server/protocols/jsonproto/marshaler"
 
+	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -34,15 +36,20 @@ func (service BattleCreateService) Path() string {
 	return "battles/limit/check"
 }
 
-func (service BattleCreateService) Handle(data string, database *mongo.Database) (string, error) {
+func (service BattleCreateService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req BattleCreateRequest
-
-	res := []BattleCreateResponse{{0, 12345}}
 
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
 		return "", err
 	}
+
+	if req.PID != int(client.PlayerID()) {
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting battle creation")
+		return "", err
+	}
+
+	res := []BattleCreateResponse{{0, 12345}}
 
 	return marshaler.MarshalResponse(service.Path(), res)
 }

@@ -7,4 +7,5 @@ type Band struct {
 	Art      []byte             `json:"art" bson:"art"`
 	Name     string             `json:"name" bson:"name"`
 	OwnerPID int                `json:"owner_pid" bson:"owner_pid"`
+	BandID   int                `json:"band_id" bson:"band_id"`
 }

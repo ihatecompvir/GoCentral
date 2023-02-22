@@ -3,6 +3,7 @@ package stats
 import (
 	"rb3server/protocols/jsonproto/marshaler"
 
+	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -27,7 +28,7 @@ func (service StatsPadService) Path() string {
 	return "stats/pad_user"
 }
 
-func (service StatsPadService) Handle(data string, database *mongo.Database) (string, error) {
+func (service StatsPadService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req StatsPadRequest
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {

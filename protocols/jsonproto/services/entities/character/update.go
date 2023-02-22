@@ -6,6 +6,7 @@ import (
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
+	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -33,10 +34,15 @@ func (service CharacterUpdateService) Path() string {
 	return "entities/character/update"
 }
 
-func (service CharacterUpdateService) Handle(data string, database *mongo.Database) (string, error) {
+func (service CharacterUpdateService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req CharacterUpdateRequest
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
+		return "", err
+	}
+
+	if req.PID != int(client.PlayerID()) {
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting character update")
 		return "", err
 	}
 
@@ -46,16 +52,39 @@ func (service CharacterUpdateService) Handle(data string, database *mongo.Databa
 		return marshaler.MarshalResponse(service.Path(), []CharacterUpdateResponse{{0}})
 	}
 
+	var config models.Config
+	configCollection := database.Collection("config")
+	err = configCollection.FindOne(nil, bson.M{}).Decode(&config)
+	if err != nil {
+		log.Printf("Could not get config %v\n", err)
+	}
+
 	characters := database.Collection("characters")
 	var character models.Character
 	err = characters.FindOne(nil, bson.M{"guid": req.GUID}).Decode(&character)
 
 	if err != nil {
+
+		_, err = configCollection.UpdateOne(
+			nil,
+			bson.M{},
+			bson.D{
+				{"$set", bson.D{{"last_character_id", config.LastCharacterID + 1}}},
+			},
+		)
+
+		if err != nil {
+			log.Println("Could not update config in database while updating character: ", err)
+		}
+
+		config.LastCharacterID += 1
+
 		_, err = characters.InsertOne(nil, bson.D{
 			{Key: "guid", Value: req.GUID},
 			{Key: "char_data", Value: characterBytes},
 			{Key: "name", Value: req.Name},
 			{Key: "owner_pid", Value: req.PID},
+			{Key: "character_id", Value: config.LastCharacterID + 1},
 		})
 		if err != nil {
 			log.Printf("Could not update character %s with GUID %s for PID %v: %s\n", req.Name, req.GUID, req.PID, err)
