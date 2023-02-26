@@ -638,7 +638,7 @@ func mainSecure(database *mongo.Database) {
 		}
 
 		rmcResponseStream := nex.NewStream()
-		rmcResponseStream.Grow(50)
+		rmcResponseStream.Grow(4)
 
 		rmcResponseStream.WriteU32LENext([]uint32{uint32(gatheringID)}) // client expects the new gathering ID in the response
 
@@ -711,9 +711,9 @@ func mainSecure(database *mongo.Database) {
 		log.Printf("Updated %v gatherings\n", result.ModifiedCount)
 
 		rmcResponseStream := nex.NewStream()
-		rmcResponseStream.Grow(50)
+		rmcResponseStream.Grow(4)
 
-		rmcResponseStream.WriteU32LENext([]uint32{gatheringID})
+		rmcResponseStream.WriteUInt8(1)
 
 		rmcResponseBody := rmcResponseStream.Bytes()
 
@@ -746,7 +746,7 @@ func mainSecure(database *mongo.Database) {
 		}
 
 		rmcResponseStream := nex.NewStream()
-		rmcResponseStream.Grow(50)
+		rmcResponseStream.Grow(4)
 
 		// i am not 100% sure what this method is for exactly
 		rmcResponseStream.WriteUInt8(1) // response code
@@ -782,7 +782,7 @@ func mainSecure(database *mongo.Database) {
 		}
 
 		rmcResponseStream := nex.NewStream()
-		rmcResponseStream.Grow(50)
+		rmcResponseStream.Grow(4)
 
 		// i am not 100% sure what this method is for, but it is the inverse of participate
 		rmcResponseStream.WriteUInt8(1)
@@ -819,7 +819,7 @@ func mainSecure(database *mongo.Database) {
 		log.Printf("Launching session for %s...\n", client.Username)
 
 		rmcResponseStream := nex.NewStream()
-		rmcResponseStream.Grow(50)
+		rmcResponseStream.Grow(4)
 
 		rmcResponseStream.WriteUInt8(1)
 
@@ -877,7 +877,7 @@ func mainSecure(database *mongo.Database) {
 		log.Printf("Terminated %v gathering\n", result.DeletedCount)
 
 		rmcResponseStream := nex.NewStream()
-		rmcResponseStream.Grow(50)
+		rmcResponseStream.Grow(4)
 
 		rmcResponseStream.WriteUInt8(1)
 
@@ -1036,7 +1036,7 @@ func mainSecure(database *mongo.Database) {
 
 		rmcResponseStream := nex.NewStream()
 
-		rmcResponseStream.Grow(50)
+		rmcResponseStream.Grow(4)
 
 		gatherings := database.Collection("gatherings")
 		var gathering models.Gathering
@@ -1143,9 +1143,6 @@ func mainSecure(database *mongo.Database) {
 				messagePacket.SetDestination(0x3F)
 				messagePacket.SetType(nex.DataPacket)
 
-				// TODO: figure out why this is needed
-				rmcMessageBytes = append([]byte{0x00}, rmcMessageBytes...)
-
 				messagePacket.SetPayload(rmcMessageBytes)
 				messagePacket.AddFlag(nex.FlagNeedsAck)
 
@@ -1196,6 +1193,9 @@ func mainSecure(database *mongo.Database) {
 			}
 
 			config.LastPID++
+
+			// make sure we actually set the server-assigned PID to the new one when it is created
+			client.SetPlayerID(user.PID)
 
 			if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
 
@@ -1354,8 +1354,8 @@ func mainSecure(database *mongo.Database) {
 	nexServer.Listen(ip + ":" + securePort)
 }
 
-func sendErrorCode(server *nex.Server, client *nex.Client, protocol int, callID uint32, code uint32) {
-	rmcResponse := nex.NewRMCResponse(nexproto.MatchmakingProtocolID, callID)
+func sendErrorCode(server *nex.Server, client *nex.Client, protocol uint8, callID uint32, code uint32) {
+	rmcResponse := nex.NewRMCResponse(protocol, callID)
 	rmcResponse.SetError(code)
 
 	rmcResponseBytes := rmcResponse.Bytes()
