@@ -60,29 +60,71 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 		return "", err
 	}
 
-	scores := database.Collection("scores")
+	scoresCollection := database.Collection("scores")
 
-	filter := bson.M{"song_id": req.SongID, "role_id": req.RoleID}
-	cur, err := scores.Find(context.TODO(), filter, options.Find().SetSort(bson.D{{"score", -1}}))
+	var playerPosition int64 // where the player is on the leaderboards
+	var scoresToSkip int64   // how many scores to skip to get to the player's rank
+	var startIndex int
+
+	// First, get the player's score
+	// This will be used to find where the player is at on the leaderboards
+	playerFilter := bson.M{"song_id": req.SongID, "role_id": req.RoleID, "pid": req.PID000}
+	var playerScore models.Score
+	err = scoresCollection.FindOne(context.TODO(), playerFilter).Decode(&playerScore)
 	if err != nil {
-		log.Fatal(err)
+		// the player isn't on the leaderboards, so we just start from #1
+		playerPosition = 1
+		scoresToSkip = 0
+		startIndex = 1
+	} else {
+		// find the player's position on the leaderboards
+		playerPosition, err = scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID, "score": bson.M{"$gt": playerScore.Score}})
+		if err != nil {
+			// something went wrong so just get #1
+			playerPosition = 1
+			scoresToSkip = 0
+			startIndex = 1
+		} else {
+			scoresToSkip = playerPosition - 1
+			startIndex = int(scoresToSkip)
+		}
+	}
+
+	// get all scores for the song and role ID
+	// skipping ahead by the player's position on the leaderboards
+	// sorting by score descending
+	// limiting to the number of scores requested
+	filter := bson.M{"song_id": req.SongID, "role_id": req.RoleID}
+	cur, err := scoresCollection.Find(context.TODO(), filter, options.Find().
+		SetLimit(int64(req.NumRows)).
+		SetSkip(scoresToSkip).
+		SetSort(bson.D{{"score", -1}}))
+
+	if err != nil {
+		// we couldn't get any scores, so just fallback to a blank response
+		return marshaler.MarshalResponse(service.Path(), []PlayerGetResponse{{}})
 	}
 
 	res := []PlayerGetResponse{}
 
-	// for rank
-	curIndex := 1
+	// used to calculate rank
+	curIndex := startIndex
 
-	for cur.Next(nil) && curIndex != 16 {
+	// use the cursor to read every score and append it to the response
+	for cur.Next(nil) {
 		username := "Player"
 
-		// create a value into which the single document can be decoded
+		// decode the score into a score object
 		var score models.Score
 		err := cur.Decode(&score)
 		if err != nil {
-			log.Fatal(err)
+			// we couldn't decode the score, so just fallback to a blank response
+			log.Printf("Error decoding score: %v", err)
+			return marshaler.MarshalResponse(service.Path(), []PlayerGetResponse{{}})
 		}
 
+		// BOI = "band or instrument" presumably, so detect if we're looking up a band score or an instrument score
+		// role ID 10 == band role
 		if score.BOI == 1 && req.RoleID != 10 {
 
 			users := database.Collection("users")
@@ -104,11 +146,12 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 				score.NotesPercent,
 				0,
 				0,
-				"",
+				"N/A", // this is what the official servers used
 				curIndex,
 			})
 
 		} else {
+			// its a band score, so get the band name so it can appear properly on the leaderboard
 			bands := database.Collection("bands")
 			var band models.Band
 			var bandName = "Band"
@@ -129,7 +172,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 				score.NotesPercent,
 				0,
 				0,
-				"",
+				"N/A",
 				curIndex,
 			})
 		}

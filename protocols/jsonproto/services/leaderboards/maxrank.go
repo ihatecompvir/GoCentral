@@ -1,10 +1,12 @@
 package leaderboard
 
 import (
+	"context"
 	"log"
 	"rb3server/protocols/jsonproto/marshaler"
 
 	"github.com/ihatecompvir/nex-go"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -42,9 +44,17 @@ func (service MaxrankGetService) Handle(data string, database *mongo.Database, c
 		return "", err
 	}
 
-	// Spoof account linking status, 12345 pid
+	scoresCollection := database.Collection("scores")
+
+	numScores, err := scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID})
+	if err != nil {
+		return marshaler.MarshalResponse(service.Path(), []MaxrankGetResponse{{
+			0,
+		}})
+	}
+
 	res := []MaxrankGetResponse{{
-		1,
+		int(numScores),
 	}}
 
 	return marshaler.MarshalResponse(service.Path(), res)

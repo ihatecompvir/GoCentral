@@ -130,7 +130,7 @@ func (service AccPlayerGetService) Handle(data string, database *mongo.Database,
 	accomplishmentsCollection := database.Collection("accomplishments")
 	usersCollection := database.Collection("users")
 
-	cur, err := accomplishmentsCollection.Find(context.TODO(), bson.D{}, options.Find().SetSort(bson.D{{"lb_goal_value_" + req.AccID, -1}}))
+	cur, err := accomplishmentsCollection.Find(context.TODO(), bson.D{}, options.Find().SetLimit(20).SetSort(bson.D{{"lb_goal_value_" + req.AccID, -1}}))
 	if err != nil {
 		log.Printf("Could not find accomplishments for %v: %v", req.AccID, err)
 		return "", err
@@ -140,7 +140,7 @@ func (service AccPlayerGetService) Handle(data string, database *mongo.Database,
 
 	curIndex := 1
 
-	for cur.Next(nil) && curIndex != 16 {
+	for cur.Next(nil) {
 		username := "Player"
 
 		// create a value into which the single document can be decoded
