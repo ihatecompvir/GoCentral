@@ -8,6 +8,7 @@ import (
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type AccomplishmentRecordRequest struct {
@@ -82,9 +83,9 @@ func (service AccomplishmentRecordService) Handle(data string, database *mongo.D
 	var accomplishments models.Accomplishments
 	err = accomplishmentsCollection.FindOne(nil, bson.M{"pid": req.PID}).Decode(&accomplishments)
 
-	if err != nil {
-		_, err = accomplishmentsCollection.InsertOne(nil, bson.D{
-			{Key: "pid", Value: req.PID},
+	filter := bson.D{{"pid", req.PID}}
+	update := bson.D{
+		{Key: "$set", Value: bson.D{
 			{Key: "lb_goal_value_campaign_metascore", Value: req.LBGoalValueCampaignMetascore},
 			{Key: "lb_goal_value_acc_tourgoldlocal1", Value: req.LBGoalValueAccTourgoldlocal1},
 			{Key: "lb_goal_value_acc_tourgoldlocal2", Value: req.LBGoalValueAccTourgoldlocal2},
@@ -117,49 +118,10 @@ func (service AccomplishmentRecordService) Handle(data string, database *mongo.D
 			{Key: "lb_goal_value_acc_prokeystreaklong", Value: req.LBGoalValueAccProkeystreaklong},
 			{Key: "lb_goal_value_acc_deployvocals", Value: req.LBGoalValueAccDeployvocals},
 			{Key: "lb_goal_value_acc_deployvocalsonehundred", Value: req.LBGoalValueAccDeployvocalsonehundred},
-		})
-		if err != nil {
-			log.Printf("Could not update accomplishments for PID %v: %s\n", req.PID, err)
-			return "", err
-		}
-		return marshaler.MarshalResponse(service.Path(), []AccomplishmentRecordResponse{{1}})
+		}},
 	}
-
-	// update the existing document with the users achievements
-	_, err = accomplishmentsCollection.UpdateOne(nil, bson.M{"pid": req.PID}, bson.D{
-		{Key: "lb_goal_value_campaign_metascore", Value: req.LBGoalValueCampaignMetascore},
-		{Key: "lb_goal_value_acc_tourgoldlocal1", Value: req.LBGoalValueAccTourgoldlocal1},
-		{Key: "lb_goal_value_acc_tourgoldlocal2", Value: req.LBGoalValueAccTourgoldlocal2},
-		{Key: "lb_goal_value_acc_tourgoldregional1", Value: req.LBGoalValueAccTourgoldregional1},
-		{Key: "lb_goal_value_acc_tourgoldregional2", Value: req.LBGoalValueAccTourgoldregional2},
-		{Key: "lb_goal_value_acc_tourgoldcontinental1", Value: req.LBGoalValueAccTourgoldcontinental1},
-		{Key: "lb_goal_value_acc_tourgoldcontinental2", Value: req.LBGoalValueAccTourgoldcontinental2},
-		{Key: "lb_goal_value_acc_tourgoldcontinental3", Value: req.LBGoalValueAccTourgoldcontinental3},
-		{Key: "lb_goal_value_acc_tourgoldglobal1", Value: req.LBGoalValueAccTourgoldglobal1},
-		{Key: "lb_goal_value_acc_tourgoldglobal2", Value: req.LBGoalValueAccTourgoldglobal2},
-		{Key: "lb_goal_value_acc_tourgoldglobal3", Value: req.LBGoalValueAccTourgoldglobal3},
-		{Key: "lb_goal_value_acc_overdrivemaintain3", Value: req.LBGoalValueAccOverdrivemaintain3},
-		{Key: "lb_goal_value_acc_overdrivecareer", Value: req.LBGoalValueAccOverdrivecareer},
-		{Key: "lb_goal_value_acc_careersaves", Value: req.LBGoalValueAccCareersaves},
-		{Key: "lb_goal_value_acc_millionpoints", Value: req.LBGoalValueAccMillionpoints},
-		{Key: "lb_goal_value_acc_bassstreaklarge", Value: req.LBGoalValueAccBassstreaklarge},
-		{Key: "lb_goal_value_acc_hopothreehundredbass", Value: req.LBGoalValueAccHopothreehundredbass},
-		{Key: "lb_goal_value_acc_drumfill170", Value: req.LBGoalValueAccDrumfill170},
-		{Key: "lb_goal_value_acc_drumstreaklong", Value: req.LBGoalValueAccDrumstreaklong},
-		{Key: "lb_goal_value_acc_deployguitarfour", Value: req.LBGoalValueAccDeployguitarfour},
-		{Key: "lb_goal_value_acc_guitarstreaklarge", Value: req.LBGoalValueAccGuitarstreaklarge},
-		{Key: "lb_goal_value_acc_hopoonethousand", Value: req.LBGoalValueAccHopoonethousand},
-		{Key: "lb_goal_value_acc_doubleawesomealot", Value: req.LBGoalValueAccDoubleawesomealot},
-		{Key: "lb_goal_value_acc_tripleawesomealot", Value: req.LBGoalValueAccTripleawesomealot},
-		{Key: "lb_goal_value_acc_keystreaklong", Value: req.LBGoalValueAccKeystreaklong},
-		{Key: "lb_goal_value_acc_probassstreakepic", Value: req.LBGoalValueAccProbassstreakepic},
-		{Key: "lb_goal_value_acc_prodrumroll3", Value: req.LBGoalValueAccProdrumroll3},
-		{Key: "lb_goal_value_acc_prodrumstreaklong", Value: req.LBGoalValueAccProdrumstreaklong},
-		{Key: "lb_goal_value_acc_proguitarstreakepic", Value: req.LBGoalValueAccProguitarstreakepic},
-		{Key: "lb_goal_value_acc_prokeystreaklong", Value: req.LBGoalValueAccProkeystreaklong},
-		{Key: "lb_goal_value_acc_deployvocals", Value: req.LBGoalValueAccDeployvocals},
-		{Key: "lb_goal_value_acc_deployvocalsonehundred", Value: req.LBGoalValueAccDeployvocalsonehundred},
-	})
+	opts := options.Update().SetUpsert(true)
+	_, err = accomplishmentsCollection.UpdateOne(nil, filter, update, opts)
 
 	if err != nil {
 		log.Printf("Could not update accomplishments for PID %v: %s\n", req.PID, err)

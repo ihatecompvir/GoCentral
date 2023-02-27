@@ -219,6 +219,7 @@ func mainAuth(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 
@@ -264,6 +265,7 @@ func mainAuth(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 	})
@@ -362,6 +364,7 @@ func mainSecure(database *mongo.Database) {
 		packet.Sender().Cipher().XORKeyStream(bytes, tmpBuffer)
 		responsePacket.SetPayload(bytes)
 		responsePacket.AddFlag(nex.FlagAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 	})
@@ -455,6 +458,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 	})
@@ -503,6 +507,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 	})
@@ -544,6 +549,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 	})
@@ -584,6 +590,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 	})
@@ -659,6 +666,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 
@@ -732,6 +740,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 
@@ -768,6 +777,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 
@@ -804,6 +814,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 
@@ -840,6 +851,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 
@@ -898,6 +910,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 
@@ -953,7 +966,7 @@ func mainSecure(database *mongo.Database) {
 					Value: bson.D{{Key: "$eq", Value: 1}},
 				},
 			}},
-			bson.M{"$sample": bson.M{"size": 2}},
+			bson.M{"$sample": bson.M{"size": 10}},
 		})
 		if err != nil {
 			log.Printf("Could not get a random gathering: %s\n", err)
@@ -1019,6 +1032,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 
@@ -1083,6 +1097,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 
@@ -1113,6 +1128,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetType(nex.DataPacket)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 
@@ -1145,6 +1161,7 @@ func mainSecure(database *mongo.Database) {
 
 				messagePacket.SetPayload(rmcMessageBytes)
 				messagePacket.AddFlag(nex.FlagNeedsAck)
+				messagePacket.AddFlag(nex.FlagReliable)
 
 				nexServer.Send(messagePacket)
 			} else {
@@ -1259,6 +1276,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 	})
@@ -1300,6 +1318,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetType(nex.DataPacket)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 
@@ -1336,6 +1355,7 @@ func mainSecure(database *mongo.Database) {
 		responsePacket.SetPayload(rmcResponseBytes)
 
 		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
 
 		nexServer.Send(responsePacket)
 	})
@@ -1370,6 +1390,7 @@ func sendErrorCode(server *nex.Server, client *nex.Client, protocol uint8, callI
 	responsePacket.SetPayload(rmcResponseBytes)
 
 	responsePacket.AddFlag(nex.FlagNeedsAck)
+	responsePacket.AddFlag(nex.FlagReliable)
 
 	server.Send(responsePacket)
 }

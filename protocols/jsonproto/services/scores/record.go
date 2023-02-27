@@ -444,7 +444,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 	} else {
 		boi = 0
 	}
-	res := []ScoreRecordResponse{{songID, boi, 0, 1, "test", "test"}}
+	res := []ScoreRecordResponse{{songID, boi, 1, 1, "test", "test"}}
 
 	return marshaler.MarshalResponse(service.Path(), res)
 }
