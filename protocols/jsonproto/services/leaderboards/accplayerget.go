@@ -182,5 +182,9 @@ func (service AccPlayerGetService) Handle(data string, database *mongo.Database,
 		curIndex++
 	}
 
-	return marshaler.MarshalResponse(service.Path(), res)
+	if len(res) == 0 {
+		return marshaler.MarshalResponse(service.Path(), []AccPlayerGetResponse{{}})
+	} else {
+		return marshaler.MarshalResponse(service.Path(), res)
+	}
 }

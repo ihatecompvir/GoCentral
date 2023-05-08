@@ -2,6 +2,7 @@ package jsonproto
 
 import (
 	"fmt"
+	"rb3server/database"
 	"rb3server/protocols/jsonproto/marshaler"
 	"rb3server/protocols/jsonproto/services/accomplishment"
 	"rb3server/protocols/jsonproto/services/accountlink"
@@ -92,7 +93,7 @@ func (mgr *ServicesManager) register(service Service) {
 }
 
 // delegates the request to the proper service
-func (mgr ServicesManager) Handle(jsonStr string, database *mongo.Database, client *nex.Client) (string, error) {
+func (mgr ServicesManager) Handle(jsonStr string, client *nex.Client) (string, error) {
 
 	methodPath, err := marshaler.GetRequestName(jsonStr)
 	if err != nil {
@@ -105,6 +106,6 @@ func (mgr ServicesManager) Handle(jsonStr string, database *mongo.Database, clie
 		return "", fmt.Errorf("unimplemented service for path:%s\n", methodPath)
 	}
 
-	return service.Handle(jsonStr, database, client)
+	return service.Handle(jsonStr, database.GocentralDatabase, client)
 
 }
