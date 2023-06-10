@@ -26,8 +26,8 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 	}
 	log.Printf("Checking for available gatherings for %s...\n", client.Username)
 
-	gatheringCollection := database.GocentralDatabase.Collection("gatherings")
-	usersCollection := database.GocentralDatabase.Collection("users")
+	gatheringCollection := database.RockcentralDatabase.Collection("gatherings")
+	usersCollection := database.RockcentralDatabase.Collection("users")
 
 	// attempt to get a random gathering and deserialize it
 	// any gatherings that havent been updated in 15 minutes are ignored

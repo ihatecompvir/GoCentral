@@ -40,8 +40,23 @@ type PlayerGetResponse struct {
 	ORank        int    `json:"orank"`
 }
 
+var instrumentMap = map[int]int{
+	0: 1,
+	1: 2,
+	2: 4,
+	3: 8,
+	4: 16,
+	5: 32,
+	6: 64,
+	7: 128,
+	8: 256,
+	9: 512,
+}
+
 type PlayerGetService struct {
 }
+
+var debugging bool = true
 
 func (service PlayerGetService) Path() string {
 	return "leaderboards/player/get"
@@ -65,6 +80,10 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 	var playerPosition int64 // where the player is on the leaderboards
 	var scoresToSkip int64   // how many scores to skip to get to the player's rank
 	var startIndex int
+	var playerHasScore bool = false
+	var curIndex int
+
+	log.Println("Looking for scores")
 
 	// First, get the player's score
 	// This will be used to find where the player is at on the leaderboards
@@ -76,19 +95,29 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 		playerPosition = 1
 		scoresToSkip = 0
 		startIndex = 1
+		playerHasScore = false
 	} else {
 		// find the player's position on the leaderboards
 		playerPosition, err = scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID, "score": bson.M{"$gt": playerScore.Score}})
+		playerHasScore = true
 		if err != nil {
 			// something went wrong so just get #1
 			playerPosition = 1
 			scoresToSkip = 0
 			startIndex = 1
-		} else {
-			scoresToSkip = playerPosition - 1
-			startIndex = int(scoresToSkip)
+			playerHasScore = false
 		}
 	}
+	// get the name of the currently logged in player
+	var loggedinuser string
+	users := database.Collection("users")
+	var theusers models.User
+	err = users.FindOne(nil, bson.M{"pid": req.PID000}).Decode(&theusers)
+	if err == nil {
+		loggedinuser = theusers.Username
+	}
+
+	log.Println("Player position is : ", playerPosition)
 
 	// get all scores for the song and role ID
 	// skipping ahead by the player's position on the leaderboards
@@ -102,13 +131,17 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 
 	if err != nil {
 		// we couldn't get any scores, so just fallback to a blank response
-		return marshaler.MarshalResponse(service.Path(), []PlayerGetResponse{{}})
+		return marshaler.MarshalResponse(service.Path(), blankScore(req.PID000, req.RoleID, loggedinuser))
 	}
 
 	res := []PlayerGetResponse{}
 
 	// used to calculate rank
-	curIndex := startIndex
+	if playerHasScore {
+		curIndex = startIndex + 1
+	} else {
+		curIndex = 1
+	}
 
 	// use the cursor to read every score and append it to the response
 	for cur.Next(nil) {
@@ -116,6 +149,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 
 		// decode the score into a score object
 		var score models.Score
+		var createUserName string
 		err := cur.Decode(&score)
 		if err != nil {
 			// we couldn't decode the score, so just fallback to a blank response
@@ -134,21 +168,51 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 			if err == nil {
 				username = user.Username
 			}
+			createUserName = username
+			if debugging {
 
-			res = append(res, PlayerGetResponse{
-				score.OwnerPID,
-				username,
-				score.DiffID,
-				curIndex,
-				score.Score,
-				0,
-				score.InstrumentMask,
-				score.NotesPercent,
-				0,
-				0,
-				"N/A", // this is what the official servers used
-				curIndex,
-			})
+				log.Println("Owner pid : ", score.OwnerPID)
+				log.Println("Username : ", username)
+				log.Println("Difficulty : ", score.DiffID)
+				log.Println("Current index : ", curIndex)
+				switch user.ConsoleType {
+				case 0:
+					log.Println("Machine type - Xbox 360")
+				case 1:
+					log.Println("Machine type - PS3")
+				case 2:
+					log.Println("Machine type - Wii")
+				default:
+					log.Println("Machine type - unknown")
+				}
+				log.Println("Score : ", score.Score)
+				log.Println("Instrument mask : ", score.InstrumentMask)
+				log.Println("Note percentage : ", score.NotesPercent)
+			}
+			if user.ConsoleType == 0 {
+				createUserName = createUserName + " - XBOX360"
+			} else if user.ConsoleType == 1 {
+				createUserName = createUserName + " - PS3"
+			} else if user.ConsoleType == 2 {
+				createUserName = createUserName + " - Wii"
+			}
+			if score.OwnerPID > 500 && score.Score != 0 {
+				log.Println("Adding this score to res as owner > 500 ")
+				res = append(res, PlayerGetResponse{
+					score.OwnerPID,
+					createUserName,
+					score.DiffID,
+					curIndex,
+					score.Score,
+					0,
+					score.InstrumentMask,
+					score.NotesPercent,
+					0,
+					0,
+					"N/A", // this is what the official servers used
+					curIndex,
+				})
+			}
 
 		} else {
 			// its a band score, so get the band name so it can appear properly on the leaderboard
@@ -175,13 +239,63 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 				"N/A",
 				curIndex,
 			})
+			if debugging {
+
+				log.Println("Owner pid : ", score.OwnerPID)
+				log.Println("Band name : ", bandName)
+				log.Println("Difficulty : ", score.DiffID)
+				log.Println("Current index : ", curIndex)
+				switch band.ConsoleType {
+				case 0:
+					log.Println("Machine type - Xbox 360")
+				case 1:
+					log.Println("Machine type - PS3")
+				case 2:
+					log.Println("Machine type - Wii")
+				default:
+					log.Println("Machine type - unknown")
+				}
+				log.Println("Score : ", score.Score)
+				log.Println("Instrument mask : ", score.InstrumentMask)
+				log.Println("Note percentage : ", score.NotesPercent)
+			}
+			log.Print(score.OwnerPID)
+			log.Print(bandName)
+			log.Print(score.DiffID)
+			log.Print(curIndex)
+			log.Print(score.Score)
+			log.Print(score.InstrumentMask)
+			log.Print(score.NotesPercent)
+			log.Print(curIndex)
+
 		}
 		curIndex += 1
 	}
 
 	if len(res) == 0 {
-		return marshaler.MarshalResponse(service.Path(), []PlayerGetResponse{{}})
+		return marshaler.MarshalResponse(service.Path(), blankScore(req.PID000, req.RoleID, loggedinuser))
 	} else {
 		return marshaler.MarshalResponse(service.Path(), res)
 	}
+}
+func blankScore(pid int, role int, username string) []PlayerGetResponse {
+	// returns a score of zero for the currently logged in player, correctly
+	// respecting the instrument selection.  Note that this does not work currently
+	// for bands (needs implementation for them)
+	result := []PlayerGetResponse{}
+	result = append(result, PlayerGetResponse{
+		pid,
+		username,
+		1,
+		1,
+		0,
+		0,
+		instrumentMap[role],
+		0,
+		0,
+		0,
+		"N/A",
+		0,
+	})
+	return result
 }
