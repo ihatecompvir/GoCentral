@@ -17,7 +17,7 @@ func RequestURLs(err error, client *nex.Client, callID uint32, stationCID uint32
 
 	log.Printf("Requesting station URL for %v\n", stationPID)
 
-	users := database.GocentralDatabase.Collection("users")
+	users := database.RockcentralDatabase.Collection("users")
 
 	var user models.User
 

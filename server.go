@@ -47,9 +47,9 @@ func main() {
 
 	log.Println("Successfully established connection to MongoDB")
 
-	database.GocentralDatabase = client.Database("gocentral")
+	database.RockcentralDatabase = client.Database("rockcentral")
 
-	configCollection := database.GocentralDatabase.Collection("config")
+	configCollection := database.RockcentralDatabase.Collection("config")
 
 	// get config from DB
 	err = configCollection.FindOne(nil, bson.M{}).Decode(&servers.Config)

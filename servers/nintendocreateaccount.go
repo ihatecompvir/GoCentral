@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/database"
 	"rb3server/models"
+	"regexp"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -16,9 +17,20 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 
 	rmcResponseStream := nex.NewStream()
 
-	users := database.GocentralDatabase.Collection("users")
-	configCollection := database.GocentralDatabase.Collection("config")
+	users := database.RockcentralDatabase.Collection("users")
+	configCollection := database.RockcentralDatabase.Collection("config")
 	var user models.User
+
+	var ctype int // 0 = xbox360, 1= ps3, 2 = wii
+
+	// Look for 'DummyNintendo' in the email address, if we find it, its a Wii console
+	log.Printf("Email : '%s'", email)
+	var rgx = regexp.MustCompile(`DummyNintendo`)
+	res := rgx.FindStringSubmatch(email)
+
+	if len(res) != 0 {
+		ctype = 2
+	}
 
 	// Create a new user if not currently registered.
 	if result := users.FindOne(nil, bson.M{"username": username}).Decode(&user); result != nil {
@@ -26,6 +38,7 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 		_, err := users.InsertOne(nil, bson.D{
 			{Key: "username", Value: username},
 			{Key: "pid", Value: Config.LastPID + 1},
+			{Key: "console_type", Value: ctype},
 			// TODO: look into if the key that is passed here is per-profile, could use it as form of auth if so
 		})
 
