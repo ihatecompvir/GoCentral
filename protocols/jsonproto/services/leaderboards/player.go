@@ -2,6 +2,7 @@ package leaderboard
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
@@ -80,6 +81,8 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 	var playerPosition int64 // where the player is on the leaderboards
 	var scoresToSkip int64   // how many scores to skip to get to the player's rank
 	var startIndex int
+	var playerHasScore bool = false
+	var curIndex int
 
 	log.Println("Looking for scores")
 
@@ -93,21 +96,21 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 		playerPosition = 1
 		scoresToSkip = 0
 		startIndex = 1
+		playerHasScore = false
 	} else {
 		// find the player's position on the leaderboards
 		playerPosition, err = scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID, "score": bson.M{"$gt": playerScore.Score}})
+		playerHasScore = true
 		if err != nil {
 			// something went wrong so just get #1
 			playerPosition = 1
 			scoresToSkip = 0
 			startIndex = 1
-		} /* else {
-			scoresToSkip = playerPosition - 1
-			startIndex = int(playerPosition)
-		} */
+			playerHasScore = false
+		}
 	}
 	// get the name of the currently logged in player
-	var loggedinuser string = ""
+	var loggedinuser string
 	users := database.Collection("users")
 	var theusers models.User
 	err = users.FindOne(nil, bson.M{"pid": req.PID000}).Decode(&theusers)
@@ -135,7 +138,11 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 	res := []PlayerGetResponse{}
 
 	// used to calculate rank
-	curIndex := startIndex + 1
+	if playerHasScore {
+		curIndex = startIndex + 1
+	} else {
+		curIndex = 1
+	}
 
 	// use the cursor to read every score and append it to the response
 	for cur.Next(nil) {
@@ -143,6 +150,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 
 		// decode the score into a score object
 		var score models.Score
+		var createUserName string
 		err := cur.Decode(&score)
 		if err != nil {
 			// we couldn't decode the score, so just fallback to a blank response
@@ -161,7 +169,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 			if err == nil {
 				username = user.Username
 			}
-
+			createUserName = username
 			if debugging {
 
 				log.Println("Owner pid : ", score.OwnerPID)
@@ -182,37 +190,43 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 				log.Println("Instrument mask : ", score.InstrumentMask)
 				log.Println("Note percentage : ", score.NotesPercent)
 			}
+			if user.ConsoleType == 0 {
+				createUserName = createUserName + " - XBOX360"
+			} else if user.ConsoleType == 1 {
+				createUserName = createUserName + " - PS3"
+			} else if user.ConsoleType == 2 {
+				createUserName = createUserName + " - Wii"
+			}
 			if score.OwnerPID > 500 && score.Score != 0 {
 				log.Println("Adding this score to res as owner > 500 ")
 				res = append(res, PlayerGetResponse{
 					score.OwnerPID,
-					username,
+					createUserName,
 					score.DiffID,
 					curIndex,
 					score.Score,
 					0,
 					score.InstrumentMask,
 					score.NotesPercent,
-					0,
+					1,
 					0,
 					"N/A", // this is what the official servers used
 					curIndex,
 				})
-			} else {
-				log.Println("No score found")
-				// No scores at all for this song so just show a score of zero for the current player
-				// At least, this is what RB4 does
-				/* This part probably doesn't even get called if there are no scores for a song as
-				   we have already returned earlier with a blank score at line 130
-				*/
-				res = blankScore(req.PID000, req.RoleID, loggedinuser)
 			}
 
 		} else {
 			// its a band score, so get the band name so it can appear properly on the leaderboard
+
+			users := database.Collection("users")
+			var bandUser models.User
+			err = users.FindOne(nil, bson.M{"pid": score.OwnerPID}).Decode(&bandUser)
+
+			username = bandUser.Username
+
 			bands := database.Collection("bands")
 			var band models.Band
-			var bandName = "Band"
+			bandName := fmt.Sprintf("%v's Band", username)
 			err = bands.FindOne(nil, bson.M{"owner_pid": score.OwnerPID}).Decode(&band)
 
 			if err == nil {
@@ -228,11 +242,12 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 				0,
 				score.InstrumentMask,
 				score.NotesPercent,
-				0,
+				1,
 				0,
 				"N/A",
 				curIndex,
 			})
+
 			if debugging {
 
 				log.Println("Owner pid : ", score.OwnerPID)
