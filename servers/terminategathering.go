@@ -24,7 +24,7 @@ func TerminateGathering(err error, client *nex.Client, callID uint32, gatheringI
 	}
 	log.Printf("Terminating gathering for %s...\n", client.Username)
 
-	gatherings := database.GocentralDatabase.Collection("gatherings")
+	gatherings := database.RockcentralDatabase.Collection("gatherings")
 
 	// remove the gathering from the DB so other players won't attempt to connect to it later
 	result, err := gatherings.DeleteOne(

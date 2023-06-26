@@ -16,7 +16,7 @@ func SetStatus(err error, client *nex.Client, callID uint32, status string) {
 		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
 		return
 	}
-	usersCollection := database.GocentralDatabase.Collection("users")
+	usersCollection := database.RockcentralDatabase.Collection("users")
 	_, err = usersCollection.UpdateOne(
 		nil,
 		bson.M{"username": client.Username},

@@ -29,7 +29,7 @@ func RegisterGathering(err error, client *nex.Client, callID uint32, gathering [
 
 	// delete old gatherings, and create a new gathering
 
-	gatherings := database.GocentralDatabase.Collection("gatherings")
+	gatherings := database.RockcentralDatabase.Collection("gatherings")
 
 	gatheringID := rand.Intn(250000-500) + 500
 

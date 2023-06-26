@@ -247,7 +247,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 				"N/A",
 				curIndex,
 			})
-
+      
 			if debugging {
 
 				log.Println("Owner pid : ", score.OwnerPID)

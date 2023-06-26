@@ -26,7 +26,7 @@ func SetState(err error, client *nex.Client, callID uint32, gatheringID uint32, 
 
 	rmcResponseStream.Grow(4)
 
-	gatherings := database.GocentralDatabase.Collection("gatherings")
+	gatherings := database.RockcentralDatabase.Collection("gatherings")
 	var gathering models.Gathering
 	err = gatherings.FindOne(nil, bson.M{"gathering_id": gatheringID}).Decode(&gathering)
 
