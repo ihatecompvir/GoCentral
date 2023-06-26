@@ -2,6 +2,7 @@ package leaderboard
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
@@ -207,7 +208,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 					0,
 					score.InstrumentMask,
 					score.NotesPercent,
-					0,
+					1,
 					0,
 					"N/A", // this is what the official servers used
 					curIndex,
@@ -216,9 +217,16 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 
 		} else {
 			// its a band score, so get the band name so it can appear properly on the leaderboard
+
+			users := database.Collection("users")
+			var bandUser models.User
+			err = users.FindOne(nil, bson.M{"pid": score.OwnerPID}).Decode(&bandUser)
+
+			username = bandUser.Username
+
 			bands := database.Collection("bands")
 			var band models.Band
-			var bandName = "Band"
+			bandName := fmt.Sprintf("%v's Band", username)
 			err = bands.FindOne(nil, bson.M{"owner_pid": score.OwnerPID}).Decode(&band)
 
 			if err == nil {
@@ -234,11 +242,12 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 				0,
 				score.InstrumentMask,
 				score.NotesPercent,
-				0,
+				1,
 				0,
 				"N/A",
 				curIndex,
 			})
+      
 			if debugging {
 
 				log.Println("Owner pid : ", score.OwnerPID)
