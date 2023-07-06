@@ -49,8 +49,13 @@ func (service TickerInfoService) Handle(data string, database *mongo.Database, c
 	}
 
 	if req.PID != int(client.PlayerID()) {
+		users := database.Collection("users")
+		var user models.User
+		err = users.FindOne(nil, bson.M{"pid": req.PID}).Decode(&user)
 		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for getting ticker info")
-		return "", err
+		log.Println("Database PID : ", user.PID)
+		client.SetPlayerID(user.PID)
+		log.Println("Client PID : ", client.PlayerID())
 	}
 
 	bandsCollection := database.Collection("bands")

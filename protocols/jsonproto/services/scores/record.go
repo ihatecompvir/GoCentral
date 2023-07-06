@@ -3,6 +3,7 @@ package scores
 import (
 	"fmt"
 	"log"
+	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 	"strings"
 
@@ -373,7 +374,7 @@ type ScoreRecordRequestFivePlayer struct {
 	CScore007  int `json:"c_score007"`
 	CCScore007 int `json:"cc_score007"`
 	Percent007 int `json:"percent007"`
-	
+
 	RoleID008  int `json:"role_id008"`
 	Score008   int `json:"score008"`
 	Stars008   int `json:"stars008"`
@@ -456,8 +457,13 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			return "", err
 		}
 		if request.PID000 != int(client.PlayerID()) {
+			users := database.Collection("users")
+			var user models.User
+			err = users.FindOne(nil, bson.M{"pid": request.PID000}).Decode(&user)
 			log.Println("Client-supplied PID did not match server-assigned PID, rejecting recording score")
-			return "", err
+			log.Println("Database PID : ", user.PID)
+			client.SetPlayerID(user.PID)
+			log.Println("Client PID : ", client.PlayerID())
 		}
 		songID = request.SongID
 		playerData = append(playerData, bson.D{
@@ -506,8 +512,17 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		if err != nil {
 			return "", err
 		}
+		if request.PID000 != int(client.PlayerID()) {
+			users := database.Collection("users")
+			var user models.User
+			err = users.FindOne(nil, bson.M{"pid": request.PID000}).Decode(&user)
+			log.Println("Client-supplied PID did not match server-assigned PID, rejecting recording score")
+			log.Println("Database PID : ", user.PID)
+			client.SetPlayerID(user.PID)
+			log.Println("Client PID : ", client.PlayerID())
+		}
 		songID = request.SongID
-		// Band Scores Are Applied Here 
+		// Band Scores Are Applied Here
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
 			{Key: "pid", Value: request.PID000},
@@ -574,8 +589,17 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		if err != nil {
 			return "", err
 		}
+		if request.PID000 != int(client.PlayerID()) {
+			users := database.Collection("users")
+			var user models.User
+			err = users.FindOne(nil, bson.M{"pid": request.PID000}).Decode(&user)
+			log.Println("Client-supplied PID did not match server-assigned PID, rejecting recording score")
+			log.Println("Database PID : ", user.PID)
+			client.SetPlayerID(user.PID)
+			log.Println("Client PID : ", client.PlayerID())
+		}
 		songID = request.SongID
-				// Band Scores Are Applied Here 
+		// Band Scores Are Applied Here
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
 			{Key: "pid", Value: request.PID000},
@@ -662,9 +686,18 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		if err != nil {
 			return "", err
 		}
+		if request.PID000 != int(client.PlayerID()) {
+			users := database.Collection("users")
+			var user models.User
+			err = users.FindOne(nil, bson.M{"pid": request.PID000}).Decode(&user)
+			log.Println("Client-supplied PID did not match server-assigned PID, rejecting recording score")
+			log.Println("Database PID : ", user.PID)
+			client.SetPlayerID(user.PID)
+			log.Println("Client PID : ", client.PlayerID())
+		}
 		songID = request.SongID
 		log.Println("All-Instruments-Mode")
-		// Band Scores Are Applied Here 
+		// Band Scores Are Applied Here
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
 			{Key: "pid", Value: request.PID000},
