@@ -72,8 +72,13 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 	}
 
 	if req.PID000 != int(client.PlayerID()) {
+		users := database.Collection("users")
+		var user models.User
+		err = users.FindOne(nil, bson.M{"pid": req.PID000}).Decode(&user)
 		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for leaderboards")
-		return "", err
+		log.Println("Database PID : ", user.PID)
+		client.SetPlayerID(user.PID)
+		log.Println("Client PID : ", client.PlayerID())
 	}
 
 	scoresCollection := database.Collection("scores")
@@ -118,6 +123,8 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 		loggedinuser = theusers.Username
 	}
 
+	log.Println(loggedinuser)
+
 	log.Println("Player position is : ", playerPosition)
 
 	// get all scores for the song and role ID
@@ -132,7 +139,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 
 	if err != nil {
 		// we couldn't get any scores, so just fallback to a blank response
-		return marshaler.MarshalResponse(service.Path(), blankScore(req.PID000, req.RoleID, loggedinuser))
+		return "", err
 	}
 
 	res := []PlayerGetResponse{}
@@ -247,7 +254,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 				"N/A",
 				curIndex,
 			})
-      
+
 			if debugging {
 
 				log.Println("Owner pid : ", score.OwnerPID)
@@ -282,29 +289,8 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 	}
 
 	if len(res) == 0 {
-		return marshaler.MarshalResponse(service.Path(), blankScore(req.PID000, req.RoleID, loggedinuser))
+		return "", err
 	} else {
 		return marshaler.MarshalResponse(service.Path(), res)
 	}
-}
-func blankScore(pid int, role int, username string) []PlayerGetResponse {
-	// returns a score of zero for the currently logged in player, correctly
-	// respecting the instrument selection.  Note that this does not work currently
-	// for bands (needs implementation for them)
-	result := []PlayerGetResponse{}
-	result = append(result, PlayerGetResponse{
-		pid,
-		username,
-		1,
-		1,
-		0,
-		0,
-		instrumentMap[role],
-		0,
-		0,
-		0,
-		"N/A",
-		0,
-	})
-	return result
 }
