@@ -1,12 +1,13 @@
 package scores
 
 import (
-	"fmt"
+	"context"
 	"log"
+	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 	"strings"
 
-	"github.com/ihatecompvir/nex-go"
+	"github.com/knvtva/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -373,7 +374,7 @@ type ScoreRecordRequestFivePlayer struct {
 	CScore007  int `json:"c_score007"`
 	CCScore007 int `json:"cc_score007"`
 	Percent007 int `json:"percent007"`
-	
+
 	RoleID008  int `json:"role_id008"`
 	Score008   int `json:"score008"`
 	Stars008   int `json:"stars008"`
@@ -383,6 +384,16 @@ type ScoreRecordRequestFivePlayer struct {
 	CScore008  int `json:"c_score008"`
 	CCScore008 int `json:"cc_score008"`
 	Percent008 int `json:"percent008"`
+
+	RoleID009  int `json:"role_id009"`
+	Score009   int `json:"score009"`
+	Stars009   int `json:"stars009"`
+	PID009     int `json:"pid009"`
+	Slot009    int `json:"slot009"`
+	DiffID009  int `json:"diff_id009"`
+	CScore009  int `json:"c_score009"`
+	CCScore009 int `json:"cc_score009"`
+	Percent009 int `json:"percent009"`
 }
 
 type ScoreRecordResponse struct {
@@ -404,9 +415,9 @@ func (service ScoreRecordService) Path() string {
 func (service ScoreRecordService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req interface{}
 	var playerData []bson.D
-
+	
 	// check for number of players so we can parse the message correctly
-	if strings.Contains(data, "slot008") {
+	if strings.Contains(data, "slot009") {
 		req = ScoreRecordRequestFivePlayer{}
 	} else if strings.Contains(data, "slot007") {
 		req = ScoreRecordRequestFourPlayer{}
@@ -438,7 +449,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID000},
 			{Key: "diffid", Value: request.DiffID000},
 			{Key: "boi", Value: 0},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001]},
+			{Key: "instrument_mask", Value: request.BandMask},
 		})
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
@@ -448,7 +459,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID001},
 			{Key: "diffid", Value: request.DiffID001},
 			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001]},
+			{Key: "instrument_mask", Value: request.BandMask},
 		})
 	case ScoreRecordRequestTwoPlayer:
 		err = marshaler.UnmarshalRequest(data, &request)
@@ -456,8 +467,11 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			return "", err
 		}
 		if request.PID000 != int(client.PlayerID()) {
+			users := database.Collection("users")
+			var user models.User
+			err = users.FindOne(nil, bson.M{"pid": request.PID000}).Decode(&user)
 			log.Println("Client-supplied PID did not match server-assigned PID, rejecting recording score")
-			return "", err
+			client.SetPlayerID(user.PID)
 		}
 		songID = request.SongID
 		playerData = append(playerData, bson.D{
@@ -468,9 +482,8 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID000},
 			{Key: "diffid", Value: request.DiffID000},
 			{Key: "boi", Value: 0},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003]},
+			{Key: "instrument_mask", Value: request.BandMask},
 		})
-
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
 			{Key: "pid", Value: request.PID001},
@@ -479,7 +492,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID001},
 			{Key: "diffid", Value: request.DiffID001},
 			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003]},
+			{Key: "instrument_mask", Value: request.BandMask},
 		})
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
@@ -506,8 +519,15 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		if err != nil {
 			return "", err
 		}
+		if request.PID000 != int(client.PlayerID()) {
+			users := database.Collection("users")
+			var user models.User
+			err = users.FindOne(nil, bson.M{"pid": request.PID000}).Decode(&user)
+			log.Println("Client-supplied PID did not match server-assigned PID, rejecting recording score")
+			client.SetPlayerID(user.PID)
+		}
 		songID = request.SongID
-		// Band Scores Are Applied Here 
+		// Band Scores Are Applied Here
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
 			{Key: "pid", Value: request.PID000},
@@ -516,7 +536,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID000},
 			{Key: "diffid", Value: request.DiffID000},
 			{Key: "boi", Value: 0},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003] | instrumentMap[request.RoleID004] | instrumentMap[request.RoleID005]},
+			{Key: "instrument_mask", Value: request.BandMask},
 		})
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
@@ -526,7 +546,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID001},
 			{Key: "diffid", Value: request.DiffID001},
 			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003] | instrumentMap[request.RoleID004] | instrumentMap[request.RoleID005]},
+			{Key: "instrument_mask", Value: request.BandMask},
 		})
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
@@ -536,7 +556,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID002},
 			{Key: "diffid", Value: request.DiffID002},
 			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003] | instrumentMap[request.RoleID004] | instrumentMap[request.RoleID005]},
+			{Key: "instrument_mask", Value: request.BandMask},
 		})
 		// Individual Scores Are Applied Here
 		playerData = append(playerData, bson.D{
@@ -574,8 +594,15 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		if err != nil {
 			return "", err
 		}
+		if request.PID000 != int(client.PlayerID()) {
+			users := database.Collection("users")
+			var user models.User
+			err = users.FindOne(nil, bson.M{"pid": request.PID000}).Decode(&user)
+			log.Println("Client-supplied PID did not match server-assigned PID, rejecting recording score")
+			client.SetPlayerID(user.PID)
+		}
 		songID = request.SongID
-				// Band Scores Are Applied Here 
+		// Band Scores Are Applied Here
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
 			{Key: "pid", Value: request.PID000},
@@ -584,7 +611,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID000},
 			{Key: "diffid", Value: request.DiffID000},
 			{Key: "boi", Value: 0},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003] | instrumentMap[request.RoleID004] | instrumentMap[request.RoleID005] | instrumentMap[request.RoleID006] | instrumentMap[request.RoleID007]},
+			{Key: "instrument_mask", Value: request.BandMask},
 		})
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
@@ -594,7 +621,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID001},
 			{Key: "diffid", Value: request.DiffID001},
 			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003] | instrumentMap[request.RoleID004] | instrumentMap[request.RoleID005] | instrumentMap[request.RoleID006] | instrumentMap[request.RoleID007]},
+			{Key: "instrument_mask", Value: request.BandMask},
 		})
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
@@ -604,7 +631,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID002},
 			{Key: "diffid", Value: request.DiffID002},
 			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003] | instrumentMap[request.RoleID004] | instrumentMap[request.RoleID005] | instrumentMap[request.RoleID006] | instrumentMap[request.RoleID007]},
+			{Key: "instrument_mask", Value: request.BandMask},
 		})
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
@@ -614,8 +641,9 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID003},
 			{Key: "diffid", Value: request.DiffID003},
 			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003] | instrumentMap[request.RoleID004] | instrumentMap[request.RoleID005] | instrumentMap[request.RoleID006] | instrumentMap[request.RoleID007]},
+			{Key: "instrument_mask", Value: request.BandMask},
 		})
+
 		// Individual Scores Are Applied Here
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
@@ -662,9 +690,15 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		if err != nil {
 			return "", err
 		}
+		if request.PID000 != int(client.PlayerID()) {
+			users := database.Collection("users")
+			var user models.User
+			err = users.FindOne(nil, bson.M{"pid": request.PID000}).Decode(&user)
+			log.Println("Client-supplied PID did not match server-assigned PID, rejecting recording score")
+			client.SetPlayerID(user.PID)
+		}
 		songID = request.SongID
-		log.Println("All-Instruments-Mode")
-		// Band Scores Are Applied Here 
+		// Band Scores Are Applied Here
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
 			{Key: "pid", Value: request.PID000},
@@ -673,7 +707,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID000},
 			{Key: "diffid", Value: request.DiffID000},
 			{Key: "boi", Value: 0},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003] | instrumentMap[request.RoleID004] | instrumentMap[request.RoleID005] | instrumentMap[request.RoleID006] | instrumentMap[request.RoleID007] | instrumentMap[request.RoleID008]},
+			{Key: "instrument_mask", Value: instrumentMap[request.BandMask]},
 		})
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
@@ -683,7 +717,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID001},
 			{Key: "diffid", Value: request.DiffID001},
 			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003] | instrumentMap[request.RoleID004] | instrumentMap[request.RoleID005] | instrumentMap[request.RoleID006] | instrumentMap[request.RoleID007] | instrumentMap[request.RoleID008]},
+			{Key: "instrument_mask", Value: instrumentMap[request.BandMask]},
 		})
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
@@ -693,7 +727,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID002},
 			{Key: "diffid", Value: request.DiffID002},
 			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003] | instrumentMap[request.RoleID004] | instrumentMap[request.RoleID005] | instrumentMap[request.RoleID006] | instrumentMap[request.RoleID007] | instrumentMap[request.RoleID008]},
+			{Key: "instrument_mask", Value: instrumentMap[request.BandMask]},
 		})
 		playerData = append(playerData, bson.D{
 			{Key: "song_id", Value: request.SongID},
@@ -703,7 +737,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "role_id", Value: request.RoleID003},
 			{Key: "diffid", Value: request.DiffID003},
 			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003] | instrumentMap[request.RoleID004] | instrumentMap[request.RoleID005] | instrumentMap[request.RoleID006] | instrumentMap[request.RoleID007] | instrumentMap[request.RoleID008]},
+			{Key: "instrument_mask", Value: instrumentMap[request.BandMask]},
 		})
 		// Individual Scores Are Applied Here
 		playerData = append(playerData, bson.D{
@@ -746,15 +780,33 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "boi", Value: 1},
 			{Key: "instrument_mask", Value: instrumentMap[request.RoleID007]},
 		})
+		playerData = append(playerData, bson.D{
+			{Key: "song_id", Value: request.SongID},
+			{Key: "pid", Value: request.PID008},
+			{Key: "score", Value: request.Score008},
+			{Key: "notespct", Value: request.Percent008},
+			{Key: "role_id", Value: request.RoleID008},
+			{Key: "diffid", Value: request.DiffID008},
+			{Key: "boi", Value: 1},
+			{Key: "instrument_mask", Value: instrumentMap[request.RoleID008]},
+		})
 	}
 
 	upsert := true
 	for i := 0; i < len(playerData); i++ {
+		var playerScore models.Score
 		pid := playerData[i][1].Value.(int)
+		score := playerData[i][2].Value.(int)
 		role_id := playerData[i][4].Value.(int)
-		_, err = database.Collection("scores").ReplaceOne(nil, bson.M{"song_id": songID, "pid": pid, "role_id": role_id}, playerData[i], &options.ReplaceOptions{Upsert: &upsert})
-		if err != nil {
-			fmt.Printf("Could not upsert score for song ID %v: %v\n", songID, err)
+
+		playerFilter := bson.M{"song_id": songID, "pid": pid, "role_id": role_id}
+		err = database.Collection("scores").FindOne(context.TODO(), playerFilter).Decode(&playerScore)
+
+		if score >= playerScore.Score {
+			_, err = database.Collection("scores").ReplaceOne(nil, bson.M{"song_id": songID, "pid": pid, "role_id": role_id}, playerData[i], &options.ReplaceOptions{Upsert: &upsert})
+			if err != nil {
+				log.Printf("Could not upsert score for song ID %v: %v\n", songID, err)
+			}
 		}
 	}
 
@@ -764,7 +816,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 	} else {
 		boi = 0
 	}
-	res := []ScoreRecordResponse{{songID, boi, 1, 1, "test", "test"}}
+	res := []ScoreRecordResponse{{songID, boi, 1, 1, "abcd", "efgh"}}
 
 	return marshaler.MarshalResponse(service.Path(), res)
 }
