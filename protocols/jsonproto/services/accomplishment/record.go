@@ -74,8 +74,13 @@ func (service AccomplishmentRecordService) Handle(data string, database *mongo.D
 	}
 
 	if req.PID != int(client.PlayerID()) {
+		users := database.Collection("users")
+		var user models.User
+		err = users.FindOne(nil, bson.M{"pid": req.PID}).Decode(&user)
 		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for recording accomplishment")
-		return "", err
+		log.Println("Database PID : ", user.PID)
+		client.SetPlayerID(user.PID)
+		log.Println("Client PID : ", client.PlayerID())
 	}
 
 	accomplishmentsCollection := database.Collection("accomplishments")
