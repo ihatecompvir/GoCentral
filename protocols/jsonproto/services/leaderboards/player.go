@@ -213,7 +213,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 					curIndex,
 					score.Score,
 					0,
-					score.InstrumentMask,
+					instrumentMap[score.RoleID],
 					score.NotesPercent,
 					1,
 					0,
