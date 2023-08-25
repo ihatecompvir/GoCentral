@@ -2,7 +2,7 @@ package models
 
 type Setlist struct {
 	ID          string `bson:"_id"`
-	SetlistID   int    `bson:"id"`
+	SetlistID   int    `bson:"setlistid"`
 	PID         int    `bson:"pid"`
 	Title       string `bson:"title"`
 	Desc        string `bson:"desc"`
