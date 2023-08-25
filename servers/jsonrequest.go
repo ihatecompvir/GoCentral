@@ -5,8 +5,8 @@ import (
 
 	"rb3server/protocols/jsonproto"
 
-	"github.com/ihatecompvir/nex-go"
-	nexproto "github.com/ihatecompvir/nex-protocols-go"
+	"github.com/knvtva/nex-go"
+	nexproto "github.com/knvtva/nex-protocols-go"
 )
 
 var jsonMgr = jsonproto.NewServicesManager()
@@ -15,8 +15,6 @@ func JSONRequest(err error, client *nex.Client, callID uint32, rawJson string) {
 
 	if client.PlayerID() == 0 {
 		log.Println("Client is attempting to call JSON method without valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.JsonProtocolID, callID, 0x00010001)
-		return
 	}
 
 	// the JSON server will handle the request depending on what needs to be returned
