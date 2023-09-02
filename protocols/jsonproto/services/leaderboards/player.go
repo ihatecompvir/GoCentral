@@ -7,7 +7,7 @@ import (
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
-	"github.com/ihatecompvir/nex-go"
+	"github.com/knvtva/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -213,7 +213,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 					curIndex,
 					score.Score,
 					0,
-					score.InstrumentMask,
+					instrumentMap[score.RoleID],
 					score.NotesPercent,
 					1,
 					0,
@@ -240,21 +240,47 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 				bandName = band.Name
 			}
 
-			res = append(res, PlayerGetResponse{
-				score.OwnerPID,
-				bandName,
-				score.DiffID,
-				curIndex,
-				score.Score,
-				0,
-				score.InstrumentMask,
-				score.NotesPercent,
-				1,
-				0,
-				"N/A",
-				curIndex,
-			})
+			createUserName = username
 
+			if bandUser.ConsoleType == 0 {
+				createUserName = createUserName + " - XBOX360"
+			} else if bandUser.ConsoleType == 1 {
+				createUserName = createUserName + " - PS3"
+			} else if bandUser.ConsoleType == 2 {
+				createUserName = createUserName + " - Wii"
+			}
+
+			if score.RoleID != 10 {
+				res = append(res, PlayerGetResponse{
+					score.OwnerPID,
+					createUserName,
+					score.DiffID,
+					curIndex,
+					score.Score,
+					0,
+					instrumentMap[score.RoleID],
+					score.NotesPercent,
+					1,
+					0,
+					"N/A",
+					curIndex,
+				})
+			} else {
+				res = append(res, PlayerGetResponse{
+					score.OwnerPID,
+					bandName,
+					score.DiffID,
+					curIndex,
+					score.Score,
+					0,
+					score.InstrumentMask,
+					score.NotesPercent,
+					1,
+					0,
+					"N/A",
+					curIndex,
+			})
+		}
 			if debugging {
 
 				log.Println("Owner pid : ", score.OwnerPID)
