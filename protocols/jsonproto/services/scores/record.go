@@ -14,16 +14,16 @@ import (
 )
 
 var instrumentMap = map[int]int{
-	0: 1,
-	1: 2,
-	2: 4,
-	3: 8,
-	4: 16,
-	5: 32,
-	6: 64,
-	7: 128,
-	8: 256,
-	9: 512,
+	0: 1, // Drums
+	1: 2, // Bass
+	2: 4, // Guitar
+	3: 8, // Vocals
+	4: 16, // Harmonies
+	5: 32, // Keys
+	6: 64, // Pro Drums
+	7: 128, // Pro Guitar
+	8: 256, // Pro Bass
+	9: 512, // Pro Keys
 }
 
 type ScoreRecordRequestOnePlayer struct {
