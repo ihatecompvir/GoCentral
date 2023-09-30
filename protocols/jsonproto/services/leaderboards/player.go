@@ -7,7 +7,7 @@ import (
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
-	"github.com/knvtva/nex-go"
+	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -57,7 +57,7 @@ var instrumentMap = map[int]int{
 type PlayerGetService struct {
 }
 
-var debugging bool = true
+var debugging bool = false
 
 func (service PlayerGetService) Path() string {
 	return "leaderboards/player/get"
@@ -65,6 +65,8 @@ func (service PlayerGetService) Path() string {
 
 func (service PlayerGetService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req PlayerGetRequest
+	var consoleStrings = [5]string{" - XBOX 360", " - PS3", " - WII", "- RPCS3", "- DOLPHIN"}
+
 
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
@@ -83,13 +85,11 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 
 	scoresCollection := database.Collection("scores")
 
-	var playerPosition int64 // where the player is on the leaderboards
+	//var playerPosition int64 // where the player is on the leaderboards
 	var scoresToSkip int64   // how many scores to skip to get to the player's rank
 	var startIndex int
 	var playerHasScore bool = false
 	var curIndex int
-
-	log.Println("Looking for scores")
 
 	// First, get the player's score
 	// This will be used to find where the player is at on the leaderboards
@@ -98,34 +98,27 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 	err = scoresCollection.FindOne(context.TODO(), playerFilter).Decode(&playerScore)
 	if err != nil {
 		// the player isn't on the leaderboards, so we just start from #1
-		playerPosition = 1
+		//playerPosition = 1
 		scoresToSkip = 0
 		startIndex = 1
 		playerHasScore = false
 	} else {
 		// find the player's position on the leaderboards
-		playerPosition, err = scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID, "score": bson.M{"$gt": playerScore.Score}})
+		//playerPosition, err = scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID, "score": bson.M{"$gt": playerScore.Score}})
 		playerHasScore = true
 		if err != nil {
 			// something went wrong so just get #1
-			playerPosition = 1
+			//playerPosition = 1
 			scoresToSkip = 0
 			startIndex = 1
 			playerHasScore = false
 		}
 	}
 	// get the name of the currently logged in player
-	var loggedinuser string
 	users := database.Collection("users")
 	var theusers models.User
 	err = users.FindOne(nil, bson.M{"pid": req.PID000}).Decode(&theusers)
-	if err == nil {
-		loggedinuser = theusers.Username
-	}
 
-	log.Println(loggedinuser)
-
-	log.Println("Player position is : ", playerPosition)
 
 	// get all scores for the song and role ID
 	// skipping ahead by the player's position on the leaderboards
@@ -197,15 +190,14 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 				log.Println("Instrument mask : ", score.InstrumentMask)
 				log.Println("Note percentage : ", score.NotesPercent)
 			}
-			if user.ConsoleType == 0 {
-				createUserName = createUserName + " - XBOX360"
-			} else if user.ConsoleType == 1 {
-				createUserName = createUserName + " - PS3"
-			} else if user.ConsoleType == 2 {
-				createUserName = createUserName + " - Wii"
+
+			if user.ConsoleType >= 0 && user.ConsoleType < len(consoleStrings) {
+				createUserName = createUserName + consoleStrings[user.ConsoleType]
+			} else {
+				createUserName = createUserName + " - Unknown Console"
 			}
+
 			if score.OwnerPID > 500 && score.Score != 0 {
-				log.Println("Adding this score to res as owner > 500 ")
 				res = append(res, PlayerGetResponse{
 					score.OwnerPID,
 					createUserName,
@@ -242,12 +234,10 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 
 			createUserName = username
 
-			if bandUser.ConsoleType == 0 {
-				createUserName = createUserName + " - XBOX360"
-			} else if bandUser.ConsoleType == 1 {
-				createUserName = createUserName + " - PS3"
-			} else if bandUser.ConsoleType == 2 {
-				createUserName = createUserName + " - Wii"
+			if bandUser.ConsoleType >= 0 && bandUser.ConsoleType < len(consoleStrings) {
+				createUserName = createUserName + consoleStrings[bandUser.ConsoleType]
+			} else {
+				createUserName = createUserName + " - Unknown Console"
 			}
 
 			if score.RoleID != 10 {
@@ -301,15 +291,6 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 				log.Println("Instrument mask : ", score.InstrumentMask)
 				log.Println("Note percentage : ", score.NotesPercent)
 			}
-			log.Print(score.OwnerPID)
-			log.Print(bandName)
-			log.Print(score.DiffID)
-			log.Print(curIndex)
-			log.Print(score.Score)
-			log.Print(score.InstrumentMask)
-			log.Print(score.NotesPercent)
-			log.Print(curIndex)
-
 		}
 		curIndex += 1
 	}

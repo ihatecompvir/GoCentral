@@ -106,6 +106,6 @@ func (mgr ServicesManager) Handle(jsonStr string, client *nex.Client) (string, e
 		return "", fmt.Errorf("unimplemented service for path:%s\n", methodPath)
 	}
 
-	return service.Handle(jsonStr, database.RockcentralDatabase, client)
+	return service.Handle(jsonStr, database.GocentralDatabase, client)
 
 }

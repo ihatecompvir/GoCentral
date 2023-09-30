@@ -3,7 +3,7 @@ package servers
 import (
 	"log"
 
-	"github.com/ihatecompvir/nex-go"
+	"github.com/knvihatecompvirtva/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
 )
 

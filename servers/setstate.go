@@ -7,8 +7,8 @@ import (
 
 	"time"
 
-	"github.com/ihatecompvir/nex-go"
-	nexproto "github.com/ihatecompvir/nex-protocols-go"
+	"github.com/knvtva/nex-go"
+	nexproto "github.com/knvtva/nex-protocols-go"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -26,7 +26,7 @@ func SetState(err error, client *nex.Client, callID uint32, gatheringID uint32, 
 
 	rmcResponseStream.Grow(4)
 
-	gatherings := database.RockcentralDatabase.Collection("gatherings")
+	gatherings := database.GocentralDatabase.Collection("gatherings")
 	var gathering models.Gathering
 	err = gatherings.FindOne(nil, bson.M{"gathering_id": gatheringID}).Decode(&gathering)
 

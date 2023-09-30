@@ -17,7 +17,7 @@ type TickerInfoRequest struct {
 	MachineID   string `json:"machine_id"`
 	SessionGUID string `json:"session_guid"`
 	PID         int    `json:"pid"`
-	RoleID      int    `json:"role_id"` // current instrument?
+	RoleID      int    `json:"role_id"` // TODO (I was doing something but I forgot what it was.)
 }
 
 type TickerInfoResponse struct {

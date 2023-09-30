@@ -3,8 +3,8 @@ package servers
 import (
 	"log"
 
-	"github.com/knvtva/nex-go"
-	nexproto "github.com/knvtva/nex-protocols-go"
+	"github.com/ihatecompvir/nex-go"
+	nexproto "github.com/ihatecompvir/nex-protocols-go"
 )
 
 func GetMessageHeaders(err error, client *nex.Client, callID uint32, pid uint32, gatheringID uint32, rangeOffset uint32, rangeSize uint32) {

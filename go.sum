@@ -18,6 +18,12 @@ github.com/jinzhu/copier v0.3.5/go.mod h1:DfbEm0FYsaqBcKcFuvmOZb218JkPGtvSHsKg8S
 github.com/klauspost/compress v1.13.6/go.mod h1:/3/Vjq9QcHkK5uEr5lBEmyoZ1iFhe47etQ6QUkpK6sk=
 github.com/klauspost/compress v1.16.5 h1:IFV2oUNUzZaz+XyusxpLzpzS8Pt5rh0Z16For/djlyI=
 github.com/klauspost/compress v1.16.5/go.mod h1:ntbaceVETuRiXiv4DpjP66DpAtAGkEQskQzEyD//IeE=
+github.com/knvtva/nex-go v0.0.0-20230902192802-0875ff9be87c h1:cNmUubdedod1DZ001rjazd6D798rsyzCF3K1v+VDs7U=
+github.com/knvtva/nex-go v0.0.0-20230902192802-0875ff9be87c/go.mod h1:pbdC2v/fWumh5LNrNRbbdEiPVqDEAoqoO39n922jK90=
+github.com/knvtva/nex-protocols-go v0.0.0-20230902192453-6930824fef03 h1:cmhTW0UE5GXjhOgM9QfFluGbeCUKzKC2Sp8BsKEIHx4=
+github.com/knvtva/nex-protocols-go v0.0.0-20230902192453-6930824fef03/go.mod h1:87RMEo1n4APbiwY9RaMMWVRrLd7B7PKl0lyurenOy6I=
+github.com/knvtva/nex-protocols-go v0.0.0-20230930085748-28f3417208c9 h1:4zIvg+Nz3g1SncH4yVrNiiL6fFcoxG0+ajviW5HokFU=
+github.com/knvtva/nex-protocols-go v0.0.0-20230930085748-28f3417208c9/go.mod h1:87RMEo1n4APbiwY9RaMMWVRrLd7B7PKl0lyurenOy6I=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=

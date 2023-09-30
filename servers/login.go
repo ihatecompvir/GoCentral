@@ -63,8 +63,8 @@ func generateKerberosTicket(userPID uint32, serverPID uint32, keySize int, pwd s
 func Login(err error, client *nex.Client, callID uint32, username string) {
 	serverPID := 2 // Quazal Rendez-Vous
 
-	users := database.RockcentralDatabase.Collection("users")
-	configCollection := database.RockcentralDatabase.Collection("config")
+	users := database.GocentralDatabase.Collection("users")
+	configCollection := database.GocentralDatabase.Collection("config")
 
 	var user models.User
 
@@ -73,12 +73,11 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 	var rgx = regexp.MustCompile(`\(([^()]*)\)`)
 	res := rgx.FindStringSubmatch(username)
 
-	log.Println("nex.client stuff", client.Username)
-	log.Println("Server :", client.Server)
-	log.Println("Access Key : ", client.Server().AccessKey())
-
+	
 	// If there is no regex found, we are a PS3 client so get the correct stuff from the DB for the user
 	// PS3 usernames cannot contain parentheses so there is no chance of a PS3 client taking the wii path
+
+	// (TODO) Add support for RPCS3 & Dolphin (Xenia can be added once they make networking on it better.)
 
 	if client.Server().AccessKey() == "d52d1e000328fbc724fde65006b88b56" { // xbox 360
 		log.Println("Xbox client connecting")
@@ -92,7 +91,9 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 		log.Println("Wii client connecting")
 		machineType = 2
 	} else {
-		log.Println("Unknown machine connecting --- ABORT")
+		log.Println("Unknown machine connecting --- ABORT") // Basically it doesn't fall into this category 
+		SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, 0x00010001)
+		return
 	}
 
 	if machineType == 0 || machineType == 1 {

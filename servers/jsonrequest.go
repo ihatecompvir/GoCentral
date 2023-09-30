@@ -5,8 +5,8 @@ import (
 
 	"rb3server/protocols/jsonproto"
 
-	"github.com/knvtva/nex-go"
-	nexproto "github.com/knvtva/nex-protocols-go"
+	"github.com/ihatecompvir/nex-go"
+	nexproto "github.com/ihatecompvir/nex-protocols-go"
 )
 
 var jsonMgr = jsonproto.NewServicesManager()

@@ -4,8 +4,8 @@ import (
 	"log"
 	"rb3server/database"
 
-	"github.com/knvtva/nex-go"
-	nexproto "github.com/knvtva/nex-protocols-go"
+	"github.com/ihatecompvir/nex-go"
+	nexproto "github.com/ihatecompvir/nex-protocols-go"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -14,7 +14,7 @@ func SetStatus(err error, client *nex.Client, callID uint32, status string) {
 	if client.PlayerID() == 0 {
 		log.Println("Client is attempting to update their status without a valid server-assigned PID, rejecting call")
 	}
-	usersCollection := database.RockcentralDatabase.Collection("users")
+	usersCollection := database.GocentralDatabase.Collection("users")
 	_, err = usersCollection.UpdateOne(
 		nil,
 		bson.M{"username": client.Username},
