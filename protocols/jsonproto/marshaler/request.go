@@ -14,13 +14,13 @@ func GetRequestName(data string) (string, error) {
 	}
 
 	if len(out) != 1 {
-		x := fmt.Errorf("received bad length:%d", len(out))
+		x := fmt.Errorf("received bad length:%d\n", len(out))
 		return "", x
 	}
 
 	first := out[0]
 	if len(first) != 2 {
-		return "", fmt.Errorf("received bad length:%d", len(first))
+		return "", fmt.Errorf("received bad length:%d\n", len(first))
 	}
 
 	name, ok := first[0].(string)
@@ -58,12 +58,12 @@ func normalizeJson(data string) (map[string]interface{}, error) {
 	}
 
 	if len(out) != 1 {
-		return nil, fmt.Errorf("received bad length:%d", len(out))
+		return nil, fmt.Errorf("received bad length:%d\n", len(out))
 	}
 
 	outer := out[0]
 	if len(outer) != 2 {
-		return nil, fmt.Errorf("received bad length:%d", len(outer))
+		return nil, fmt.Errorf("received bad length:%d\n", len(outer))
 	}
 
 	inner, ok := outer[1].([]interface{})

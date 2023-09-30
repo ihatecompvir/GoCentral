@@ -17,8 +17,8 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 
 	rmcResponseStream := nex.NewStream()
 
-	users := database.RockcentralDatabase.Collection("users")
-	configCollection := database.RockcentralDatabase.Collection("config")
+	users := database.GocentralDatabase.Collection("users")
+	configCollection := database.GocentralDatabase.Collection("config")
 	var user models.User
 
 	var ctype int // 0 = xbox360, 1= ps3, 2 = wii

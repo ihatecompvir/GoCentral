@@ -13,7 +13,7 @@ import (
 )
 
 func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []string, className string, ticketData []byte) {
-	users := database.RockcentralDatabase.Collection("users")
+	users := database.GocentralDatabase.Collection("users")
 
 	var user models.User
 

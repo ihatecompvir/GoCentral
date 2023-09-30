@@ -36,7 +36,7 @@ func UpdateGathering(err error, client *nex.Client, callID uint32, gathering []b
 	}
 	log.Printf("Updating gathering for %s\n", client.Username)
 
-	gatherings := database.RockcentralDatabase.Collection("gatherings")
+	gatherings := database.GocentralDatabase.Collection("gatherings")
 
 	// the client sends the entire gathering again, so update it in the DB
 

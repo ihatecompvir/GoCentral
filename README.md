@@ -8,6 +8,9 @@ Note that this only aims to replicate what the game calls "Rock Central", suppor
 - Wii (real hardware and Dolphin)
 - Xbox 360 (real hardware, requires RB3Enhanced)
 
+## Setup and Usage
+COMING SOON
+
 ## Features Implemented
 - Message of the Day
 - Online Matchmaking

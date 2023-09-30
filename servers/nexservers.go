@@ -47,7 +47,7 @@ func OnConnection(packet *nex.PacketV0) {
 	// Get username for client from PID. This avoids having to grab it from the ticket
 	// On Wii, the ticket does not contain the username so this is a platform-agnostic solution
 	var user models.User
-	users := database.RockcentralDatabase.Collection("users")
+	users := database.GocentralDatabase.Collection("users")
 	users.FindOne(nil, bson.M{"pid": userPid}).Decode(&user)
 	packet.Sender().Username = user.Username
 
