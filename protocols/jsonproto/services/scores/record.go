@@ -6,7 +6,6 @@ import (
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 	"strings"
-	"sort"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
@@ -15,16 +14,16 @@ import (
 )
 
 var instrumentMap = map[int]int{
-	0: 1,
-	1: 2,
-	2: 4,
-	3: 8,
-	4: 16,
-	5: 32,
-	6: 64,
-	7: 128,
-	8: 256,
-	9: 512,
+	0: 1, // Drums
+	1: 2, // Bass
+	2: 4, // Guitar
+	3: 8, // Vocals
+	4: 16, // Harmonies
+	5: 32, // Keys
+	6: 64, // Pro Drums
+	7: 128, // Pro Guitar
+	8: 256, // Pro Bass
+	9: 512, // Pro Keys
 }
 
 type ScoreRecordRequestOnePlayer struct {
@@ -38,7 +37,7 @@ type ScoreRecordRequestOnePlayer struct {
 	BoiID            int    `json:"boi_id"`
 	BandMask         int    `json:"band_mask"`
 	ProvideInstaRank int    `json:"provide_insta_rank"`
-	
+
 	// band stuff
 	RoleID000  int `json:"role_id000"`
 	Score000   int `json:"score000"`
@@ -72,7 +71,6 @@ type ScoreRecordRequestTwoPlayer struct {
 	BoiID            int    `json:"boi_id"`
 	BandMask         int    `json:"band_mask"`
 	ProvideInstaRank int    `json:"provide_insta_rank"`
-	OvershellSlot 	 int	`json:"slot"`
 
 	// band stuff
 	RoleID000  int `json:"role_id000"`
@@ -127,7 +125,6 @@ type ScoreRecordRequestThreePlayer struct {
 	BoiID            int    `json:"boi_id"`
 	BandMask         int    `json:"band_mask"`
 	ProvideInstaRank int    `json:"provide_insta_rank"`
-	OvershellSlot 	 int	`json:"slot"`
 
 	// band stuff
 	RoleID000  int `json:"role_id000"`
@@ -202,7 +199,6 @@ type ScoreRecordRequestFourPlayer struct {
 	BoiID            int    `json:"boi_id"`
 	BandMask         int    `json:"band_mask"`
 	ProvideInstaRank int    `json:"provide_insta_rank"`
-	OvershellSlot 	 int	`json:"slot"`
 
 	// band stuff
 	RoleID000  int `json:"role_id000"`
@@ -297,7 +293,6 @@ type ScoreRecordRequestFivePlayer struct {
 	BoiID            int    `json:"boi_id"`
 	BandMask         int    `json:"band_mask"`
 	ProvideInstaRank int    `json:"provide_insta_rank"`
-	OvershellSlot 	 int	`json:"slot"`
 
 	// band stuff
 	RoleID000  int `json:"role_id000"`
@@ -408,7 +403,6 @@ type ScoreRecordResponse struct {
 	IsPercentile int    `json:"is_percentile"`
 	Part1        string `json:"part_1"`
 	Part2        string `json:"part_2"`
-	Slot         int    `json:"slot"`
 }
 
 type ScoreRecordService struct {
@@ -425,19 +419,14 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 	// check for number of players so we can parse the message correctly
 	if strings.Contains(data, "slot009") {
 		req = ScoreRecordRequestFivePlayer{}
-		log.Println(data)
 	} else if strings.Contains(data, "slot007") {
 		req = ScoreRecordRequestFourPlayer{}
-		log.Println(data)
 	} else if strings.Contains(data, "slot005") {
 		req = ScoreRecordRequestThreePlayer{}
-		log.Println(data)
 	} else if strings.Contains(data, "slot003") {
 		req = ScoreRecordRequestTwoPlayer{}
-		log.Println(data)
 	} else {
 		req = ScoreRecordRequestOnePlayer{}
-		log.Println(data)
 	}
 
 	var err error
@@ -472,7 +461,6 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "boi", Value: 1},
 			{Key: "instrument_mask", Value: request.BandMask},
 		})
-		log.Println("Slot:", request.Slot001)
 	case ScoreRecordRequestTwoPlayer:
 		err = marshaler.UnmarshalRequest(data, &request)
 		if err != nil {
@@ -526,10 +514,6 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "boi", Value: 1},
 			{Key: "instrument_mask", Value: instrumentMap[request.RoleID003]},
 		})
-		log.Println("Slot000:", request.Slot000)
-		log.Println("Slot001:", request.Slot001)
-		log.Println("Slot002:", request.Slot002)
-		log.Println("Slot003:", request.Slot003)
 	case ScoreRecordRequestThreePlayer:
 		err = marshaler.UnmarshalRequest(data, &request)
 		if err != nil {
@@ -605,7 +589,6 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "boi", Value: 1},
 			{Key: "instrument_mask", Value: instrumentMap[request.RoleID005]},
 		})
-		log.Println("Slot:", request.Slot001)
 	case ScoreRecordRequestFourPlayer:
 		err = marshaler.UnmarshalRequest(data, &request)
 		if err != nil {
@@ -702,122 +685,130 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			{Key: "boi", Value: 1},
 			{Key: "instrument_mask", Value: instrumentMap[request.RoleID007]},
 		})
-		log.Println("Slot:", request.Slot001)
+	case ScoreRecordRequestFivePlayer:
+		err = marshaler.UnmarshalRequest(data, &request)
+		if err != nil {
+			return "", err
+		}
+		if request.PID000 != int(client.PlayerID()) {
+			users := database.Collection("users")
+			var user models.User
+			err = users.FindOne(nil, bson.M{"pid": request.PID000}).Decode(&user)
+			log.Println("Client-supplied PID did not match server-assigned PID, rejecting recording score")
+			client.SetPlayerID(user.PID)
+		}
+		songID = request.SongID
+		// Band Scores Are Applied Here
+		playerData = append(playerData, bson.D{
+			{Key: "song_id", Value: request.SongID},
+			{Key: "pid", Value: request.PID000},
+			{Key: "score", Value: request.Score000},
+			{Key: "notespct", Value: request.Percent000},
+			{Key: "role_id", Value: request.RoleID000},
+			{Key: "diffid", Value: request.DiffID000},
+			{Key: "boi", Value: 0},
+			{Key: "instrument_mask", Value: instrumentMap[request.BandMask]},
+		})
+		playerData = append(playerData, bson.D{
+			{Key: "song_id", Value: request.SongID},
+			{Key: "pid", Value: request.PID001},
+			{Key: "score", Value: request.Score001},
+			{Key: "notespct", Value: request.Percent001},
+			{Key: "role_id", Value: request.RoleID001},
+			{Key: "diffid", Value: request.DiffID001},
+			{Key: "boi", Value: 1},
+			{Key: "instrument_mask", Value: instrumentMap[request.BandMask]},
+		})
+		playerData = append(playerData, bson.D{
+			{Key: "song_id", Value: request.SongID},
+			{Key: "pid", Value: request.PID002},
+			{Key: "score", Value: request.Score002},
+			{Key: "notespct", Value: request.Percent002},
+			{Key: "role_id", Value: request.RoleID002},
+			{Key: "diffid", Value: request.DiffID002},
+			{Key: "boi", Value: 1},
+			{Key: "instrument_mask", Value: instrumentMap[request.BandMask]},
+		})
+		playerData = append(playerData, bson.D{
+			{Key: "song_id", Value: request.SongID},
+			{Key: "pid", Value: request.PID003},
+			{Key: "score", Value: request.Score003},
+			{Key: "notespct", Value: request.Percent003},
+			{Key: "role_id", Value: request.RoleID003},
+			{Key: "diffid", Value: request.DiffID003},
+			{Key: "boi", Value: 1},
+			{Key: "instrument_mask", Value: instrumentMap[request.BandMask]},
+		})
+		// Individual Scores Are Applied Here
+		playerData = append(playerData, bson.D{
+			{Key: "song_id", Value: request.SongID},
+			{Key: "pid", Value: request.PID004},
+			{Key: "score", Value: request.Score004},
+			{Key: "notespct", Value: request.Percent004},
+			{Key: "role_id", Value: request.RoleID004},
+			{Key: "diffid", Value: request.DiffID004},
+			{Key: "boi", Value: 1},
+			{Key: "instrument_mask", Value: instrumentMap[request.RoleID004]},
+		})
+		playerData = append(playerData, bson.D{
+			{Key: "song_id", Value: request.SongID},
+			{Key: "pid", Value: request.PID005},
+			{Key: "score", Value: request.Score005},
+			{Key: "notespct", Value: request.Percent005},
+			{Key: "role_id", Value: request.RoleID005},
+			{Key: "diffid", Value: request.DiffID005},
+			{Key: "boi", Value: 1},
+			{Key: "instrument_mask", Value: instrumentMap[request.RoleID004]},
+		})
+		playerData = append(playerData, bson.D{
+			{Key: "song_id", Value: request.SongID},
+			{Key: "pid", Value: request.PID006},
+			{Key: "score", Value: request.Score006},
+			{Key: "notespct", Value: request.Percent006},
+			{Key: "role_id", Value: request.RoleID006},
+			{Key: "diffid", Value: request.DiffID006},
+			{Key: "boi", Value: 1},
+			{Key: "instrument_mask", Value: instrumentMap[request.RoleID006]},
+		})
+		playerData = append(playerData, bson.D{
+			{Key: "song_id", Value: request.SongID},
+			{Key: "pid", Value: request.PID007},
+			{Key: "score", Value: request.Score007},
+			{Key: "notespct", Value: request.Percent007},
+			{Key: "role_id", Value: request.RoleID007},
+			{Key: "diffid", Value: request.DiffID007},
+			{Key: "boi", Value: 1},
+			{Key: "instrument_mask", Value: instrumentMap[request.RoleID007]},
+		})
+		playerData = append(playerData, bson.D{
+			{Key: "song_id", Value: request.SongID},
+			{Key: "pid", Value: request.PID008},
+			{Key: "score", Value: request.Score008},
+			{Key: "notespct", Value: request.Percent008},
+			{Key: "role_id", Value: request.RoleID008},
+			{Key: "diffid", Value: request.DiffID008},
+			{Key: "boi", Value: 1},
+			{Key: "instrument_mask", Value: instrumentMap[request.RoleID008]},
+		})
 	}
 
 	upsert := true
-	//var results []ScoreRecordResponse
-	var rank int
-	var Bandrank int
-
 	for i := 0; i < len(playerData); i++ {
-		var playerScore models.Score // Assuming you have a Score model
+		var playerScore models.Score
 		pid := playerData[i][1].Value.(int)
 		score := playerData[i][2].Value.(int)
 		role_id := playerData[i][4].Value.(int)
 
 		playerFilter := bson.M{"song_id": songID, "pid": pid, "role_id": role_id}
-		err := database.Collection("scores").FindOne(context.TODO(), playerFilter).Decode(&playerScore)
-
-		if err != nil {
-			log.Printf("Error while retrieving player score: %v\n", err)
-			// Handle the error appropriately, e.g., return an error or continue
-		}
+		err = database.Collection("scores").FindOne(context.TODO(), playerFilter).Decode(&playerScore)
 
 		if score >= playerScore.Score {
-			_, err = database.Collection("scores").ReplaceOne(context.TODO(), bson.M{"song_id": songID, "pid": pid, "role_id": role_id}, playerData[i], &options.ReplaceOptions{Upsert: &upsert})
+			_, err = database.Collection("scores").ReplaceOne(nil, bson.M{"song_id": songID, "pid": pid, "role_id": role_id}, playerData[i], &options.ReplaceOptions{Upsert: &upsert})
 			if err != nil {
 				log.Printf("Could not upsert score for song ID %v: %v\n", songID, err)
-				// Handle the error appropriately, e.g., return an error or continue
 			}
 		}
-
-		newScore := playerScore.Score
-
-		// Use BandPosition if role_id is 10, otherwise use Position
-		if role_id == 10 {
-			var allScores []int
-
-			playerFilter = bson.M{"song_id": songID, "role_id": role_id}
-			log.Println("Role ID:", role_id)
-			cursor, err := database.Collection("scores").Find(context.TODO(), playerFilter)
-			if err != nil {
-				log.Printf("Error while retrieving scores: %v\n", err)
-				// Handle the error appropriately, e.g., return an error or continue
-			}
-			defer cursor.Close(context.TODO())
-	
-			for cursor.Next(context.TODO()) {
-				var playerScore models.Score
-				if err := cursor.Decode(&playerScore); err != nil {
-					log.Printf("Error decoding score: %v\n", err)
-					return "", err
-				}
-				allScores = append(allScores, playerScore.Score)
-			}
-	
-			allScores = append(allScores, newScore)
-			sort.Sort(sort.Reverse(sort.IntSlice(allScores)))
-	
-			Bandrank = 0
-			for i, score := range allScores {
-				if newScore == score {
-					Bandrank = i + 1
-					break
-				}
-			}
-		} else {
-			var allScores []int
-
-			playerFilter = bson.M{"song_id": songID, "role_id": role_id}
-			log.Println("Role ID:", role_id)
-			cursor, err := database.Collection("scores").Find(context.TODO(), playerFilter)
-			if err != nil {
-				log.Printf("Error while retrieving scores: %v\n", err)
-			}
-			defer cursor.Close(context.TODO())
-	
-			for cursor.Next(context.TODO()) {
-				var playerScore models.Score
-				if err := cursor.Decode(&playerScore); err != nil {
-					log.Printf("Error decoding score: %v\n", err)
-					return "", err
-				}
-				allScores = append(allScores, playerScore.Score)
-			}
-	
-			allScores = append(allScores, newScore)
-			sort.Sort(sort.Reverse(sort.IntSlice(allScores)))
-	
-			rank = 0
-			for i, score := range allScores {
-				if newScore == score {
-					rank = i + 1 // Adding 1 because ranks are usually 1-based
-					break
-				}
-			}
-		}
-
 	}
-
-	// Your other code here
-
-	// Example output (change it as needed)
-	res := []ScoreRecordResponse{		
-	{501, 0, rank, 1, "b", "j", 0},
-	{501, 1, Bandrank, 1, "b", "j", 0},
-	{502, 0, rank, 1, "b", "j", 1},
-	{502, 1, Bandrank, 1, "b", "j", 1},
-	{503, 0, rank, 1, "b", "j", 2},
-	{503, 1, Bandrank, 1, "b", "j", 2},
-	{503, 0, rank, 1, "b", "j", 2},
-	{503, 1, Bandrank, 1, "b", "j", 2},
-	{503, 0, rank, 1, "b", "j", 3},
-	{503, 1, Bandrank, 1, "b", "j", 3},
-	{503, 0, rank, 1, "b", "j", 3},
-	{503, 1, Bandrank, 1, "b", "j", 3},
-}
-	log.Println(res)
 
 	var boi int = 1
 	if len(playerData) == 2 {
@@ -825,9 +816,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 	} else {
 		boi = 0
 	}
-	log.Println(boi)
-	log.Println(playerData)
+	res := []ScoreRecordResponse{{songID, boi, 1, 1, "abcd", "efgh"}}
 
-	log.Println(marshaler.MarshalResponse(service.Path(), res))
 	return marshaler.MarshalResponse(service.Path(), res)
 }
