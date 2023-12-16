@@ -18,20 +18,17 @@ func UpdateGathering(err error, client *nex.Client, callID uint32, gathering []b
 
 	if client.PlayerID() == 0 {
 		log.Println("Client is attempting to update a gathering without a valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 		return
 	}
 
 	g, err := deserializer.Deserialize(gathering)
 	if err != nil {
 		log.Printf("Could not deserialize the gathering!")
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 		return
 	}
 
 	if client.Username == "Master User" {
 		log.Printf("Ignoring UpdateGathering for unauthenticated %s\n", client.WiiFC)
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 		return
 	}
 	log.Printf("Updating gathering for %s\n", client.Username)
@@ -52,7 +49,6 @@ func UpdateGathering(err error, client *nex.Client, callID uint32, gathering []b
 
 	if err != nil {
 		log.Println("Could not update gathering for " + client.Username)
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
 		return
 	}
 
