@@ -42,6 +42,9 @@ func OnConnection(packet *nex.PacketV0) {
 	requestDataStream := nex.NewStreamIn(decryptedRequestData, AuthServer)
 
 	// extract the PID
+	log.Println("RequestDataStream:", requestDataStream)
+	log.Println("DecryptedRequestData:", decryptedRequestData)
+	log.Println("RequestDataEncryption:", requestDataEncryption)
 	userPid := requestDataStream.ReadU32LENext(1)[0]
 
 	// Get username for client from PID. This avoids having to grab it from the ticket
@@ -170,6 +173,7 @@ func StartSecureServer() {
 	matchmakingProtocol.TerminateGathering(TerminateGathering)
 	matchmakingProtocol.UpdateGathering(UpdateGathering)
 	matchmakingProtocol.SetState(SetState)
+	matchmakingProtocol.Invite(AcceptInvite)
 
 	natTraversalProtocol.RequestProbeInitiation(RequestProbeInitiation)
 
