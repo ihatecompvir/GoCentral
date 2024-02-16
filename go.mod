@@ -13,6 +13,8 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/klauspost/compress v1.16.5 // indirect
+	github.com/knvtva/nex-go v0.0.0-20230902192802-0875ff9be87c // indirect
+	github.com/knvtva/nex-protocols-go v0.0.0-20230930085748-28f3417208c9 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/montanaflynn/stats v0.7.0 // indirect
 	github.com/stretchr/testify v1.8.2 // indirect

@@ -3,6 +3,7 @@ package leaderboard
 import (
 	"context"
 	"log"
+	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
 	"github.com/ihatecompvir/nex-go"
@@ -40,8 +41,13 @@ func (service MaxrankGetService) Handle(data string, database *mongo.Database, c
 	}
 
 	if req.PID000 != int(client.PlayerID()) {
+		users := database.Collection("users")
+		var user models.User
+		err = users.FindOne(nil, bson.M{"pid": req.PID000}).Decode(&user)
 		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for maxrank")
-		return "", err
+		log.Println("Database PID : ", user.PID)
+		client.SetPlayerID(user.PID)
+		log.Println("Client PID : ", client.PlayerID())
 	}
 
 	scoresCollection := database.Collection("scores")

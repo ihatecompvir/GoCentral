@@ -17,7 +17,7 @@ type TickerInfoRequest struct {
 	MachineID   string `json:"machine_id"`
 	SessionGUID string `json:"session_guid"`
 	PID         int    `json:"pid"`
-	RoleID      int    `json:"role_id"` // current instrument?
+	RoleID      int    `json:"role_id"` // TODO (I was doing something but I forgot what it was.)
 }
 
 type TickerInfoResponse struct {
@@ -49,8 +49,13 @@ func (service TickerInfoService) Handle(data string, database *mongo.Database, c
 	}
 
 	if req.PID != int(client.PlayerID()) {
+		users := database.Collection("users")
+		var user models.User
+		err = users.FindOne(nil, bson.M{"pid": req.PID}).Decode(&user)
 		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for getting ticker info")
-		return "", err
+		log.Println("Database PID : ", user.PID)
+		client.SetPlayerID(user.PID)
+		log.Println("Client PID : ", client.PlayerID())
 	}
 
 	bandsCollection := database.Collection("bands")

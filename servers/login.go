@@ -15,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
+var machineType int = 255 // 0 = xbox, 1 = ps3, 2 = wii
 func deriveKerberosKey(userPID uint32, pwd string) []byte {
 	var kerberosTicketKey []byte
 
@@ -72,14 +73,36 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 	var rgx = regexp.MustCompile(`\(([^()]*)\)`)
 	res := rgx.FindStringSubmatch(username)
 
+	
 	// If there is no regex found, we are a PS3 client so get the correct stuff from the DB for the user
 	// PS3 usernames cannot contain parentheses so there is no chance of a PS3 client taking the wii path
-	if len(res) == 0 {
+
+	// (TODO) Add support for RPCS3 & Dolphin (Xenia can be added once they make networking on it better.)
+
+	if client.Server().AccessKey() == "d52d1e000328fbc724fde65006b88b56" { // xbox 360
+		log.Println("Xbox client connecting")
+		machineType = 0
+		client.Username = "XBOX"
+	} else if client.Server().AccessKey() == "bfa620c57c2d3bcdf4362a6fa6418e58" {
+		log.Println("PS3 client connecting")
+		machineType = 1
+		client.Username = "PS3"
+	} else if client.Server().AccessKey() == "e97dc2ce9904698f84cae429a41b328a" {
+		log.Println("Wii client connecting")
+		machineType = 2
+	} else {
+		log.Println("Unknown machine connecting --- ABORT") // Basically it doesn't fall into this category 
+		SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, 0x00010001)
+		return
+	}
+
+	if machineType == 0 || machineType == 1 {
 		if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
 			log.Printf("%s has never connected before - create DB entry\n", username)
 			_, err := users.InsertOne(nil, bson.D{
 				{Key: "username", Value: username},
 				{Key: "pid", Value: Config.LastPID + 1},
+				{Key: "console_type", Value: machineType},
 			})
 
 			if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
@@ -102,8 +125,8 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 			Config.LastPID++
 
 		}
-		client.Username = username
-	} else {
+		// client.Username = username
+	} else if machineType == 2 {
 		client.Username = "Master User"
 		user.PID = 12345678 // master user PID is currently 12345678 - probably should go with 0 or something since it is a special account
 		client.WiiFC = res[1]

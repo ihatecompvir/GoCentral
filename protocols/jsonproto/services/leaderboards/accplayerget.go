@@ -140,7 +140,7 @@ func (service AccPlayerGetService) Handle(data string, database *mongo.Database,
 
 	curIndex := 1
 
-	for cur.Next(nil) {
+	for cur.Next(context.TODO()) {
 		username := "Player"
 
 		// create a value into which the single document can be decoded

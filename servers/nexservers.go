@@ -170,6 +170,7 @@ func StartSecureServer() {
 	matchmakingProtocol.TerminateGathering(TerminateGathering)
 	matchmakingProtocol.UpdateGathering(UpdateGathering)
 	matchmakingProtocol.SetState(SetState)
+	matchmakingProtocol.Invite(AcceptInvite)
 
 	natTraversalProtocol.RequestProbeInitiation(RequestProbeInitiation)
 
