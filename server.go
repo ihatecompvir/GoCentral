@@ -20,7 +20,6 @@ import (
 
 func main() {
 	uri := os.Getenv("MONGOCONNECTIONSTRING")
-
 	if uri == "" {
 		log.Fatalln("GoCentral relies on MongoDB. You must set a MongoDB connection string to use GoCentral")
 	}
@@ -47,7 +46,7 @@ func main() {
 
 	log.Println("Successfully established connection to MongoDB")
 
-	database.GocentralDatabase = client.Database("gocentral")
+	database.GocentralDatabase = client.Database("rockcentral")
 
 	configCollection := database.GocentralDatabase.Collection("config")
 

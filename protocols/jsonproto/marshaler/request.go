@@ -14,7 +14,8 @@ func GetRequestName(data string) (string, error) {
 	}
 
 	if len(out) != 1 {
-		return "", fmt.Errorf("received bad length:%d\n", len(out))
+		x := fmt.Errorf("received bad length:%d\n", len(out))
+		return "", x
 	}
 
 	first := out[0]
