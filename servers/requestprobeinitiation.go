@@ -18,6 +18,15 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 
 	log.Printf("Client wants to perform NAT traversal probes to %v servers...\n", len(stationURLs))
 
+	// make sure we aren't trying to probe more than 8 station URLs
+	// RB3 is limited to 4 player lobbies, but I believe the game can probe both the internal and external station URLs of each player
+	// so 8 should be a sufficient cap
+	if len(stationURLs) > 4 {
+		log.Println("Client is attempting to probe more than 8 servers, rejecting call")
+		SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, 0x00010001)
+		return
+	}
+
 	rmcResponseStream := nex.NewStream()
 
 	rmcResponseBody := rmcResponseStream.Bytes()
@@ -50,6 +59,12 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 	// loop through every station URL in the probe request and send InitiateProbe to them
 	// This should make all targets respond to NAT probes from the joining client
 	for _, target := range stationURLs {
+		// sanity check on station URL length
+		if len(target) > 256 {
+			log.Println("Station URL is too long, rejecting call")
+			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, 0x00010001)
+			return
+		}
 		targetUrl := nex.NewStationURL(target)
 		log.Println("Sending NAT probe to " + target)
 		targetRvcID, _ := strconv.Atoi(targetUrl.RVCID())
