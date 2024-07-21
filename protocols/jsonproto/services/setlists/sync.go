@@ -2,9 +2,11 @@ package setlists
 
 import (
 	"log"
+	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
 	"github.com/ihatecompvir/nex-go"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -36,8 +38,13 @@ func (service SetlistSyncService) Handle(data string, database *mongo.Database, 
 	}
 
 	if req.PID != int(client.PlayerID()) {
+		users := database.Collection("users")
+		var user models.User
+		err = users.FindOne(nil, bson.M{"pid": req.PID}).Decode(&user)
 		log.Println("Client-supplied PID did not match server-assigned PID, rejecting setlist synchronization")
-		return "", err
+		log.Println("Database PID : ", user.PID)
+		client.SetPlayerID(user.PID)
+		log.Println("Client PID : ", client.PlayerID())
 	}
 
 	res := []SetlistSyncResponse{{

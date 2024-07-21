@@ -3,6 +3,7 @@ package leaderboard
 import (
 	"context"
 	"log"
+	"fmt"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
@@ -49,6 +50,8 @@ func (service RankRangeGetService) Path() string {
 
 func (service RankRangeGetService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req RankRangeGetRequest
+	var consoleStrings = [5]string{" - XBOX 360", " - PS3", " - WII", "- RPCS3", "- DOLPHIN"}
+
 
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
@@ -62,7 +65,7 @@ func (service RankRangeGetService) Handle(data string, database *mongo.Database,
 
 	scores := database.Collection("scores")
 
-	options := options.Find().SetSort(bson.D{{"score", -1}}).SetSkip(int64(req.StartRank)).SetLimit(int64(req.EndRank - req.StartRank))
+	options := options.Find().SetSort(bson.D{{"score", -1}}).SetLimit(int64(req.EndRank))
 	filter := bson.M{"song_id": req.SongID, "role_id": req.RoleID}
 	cur, err := scores.Find(context.TODO(), filter, options)
 	if err != nil {
@@ -78,14 +81,13 @@ func (service RankRangeGetService) Handle(data string, database *mongo.Database,
 
 		// create a value into which the single document can be decoded
 		var score models.Score
+		var createUserName string
 		err := cur.Decode(&score)
 		if err != nil {
 			log.Printf("Error decoding score: %v", err)
 			return marshaler.MarshalResponse(service.Path(), []RankRangeGetResponse{{}})
 		}
-
-		if score.BOI == 1 && req.RoleID != 10 {
-
+		if req.RoleID != 10 {
 			users := database.Collection("users")
 			var user models.User
 			err = users.FindOne(nil, bson.M{"pid": score.OwnerPID}).Decode(&user)
@@ -94,25 +96,38 @@ func (service RankRangeGetService) Handle(data string, database *mongo.Database,
 				username = user.Username
 			}
 
+			createUserName = username
+
+			if user.ConsoleType >= 0 && user.ConsoleType < len(consoleStrings) {
+				createUserName = createUserName + consoleStrings[user.ConsoleType]
+			} else {
+				createUserName = createUserName + " - Unknown Console"
+			}
+
 			res = append(res, RankRangeGetResponse{
 				score.OwnerPID,
-				username,
+				createUserName,
 				score.DiffID,
 				curIndex,
 				score.Score,
 				0,
-				score.InstrumentMask,
+				instrumentMap[score.RoleID],
 				score.NotesPercent,
-				0,
+				1,
 				0,
 				"N/A",
 				curIndex,
 			})
 
-		} else {
+		} else {			
+			users := database.Collection("users")
+			var bandUser models.User
+			err = users.FindOne(nil, bson.M{"pid": score.OwnerPID}).Decode(&bandUser)
+			username = bandUser.Username
+
 			bands := database.Collection("bands")
 			var band models.Band
-			var bandName = "Band"
+			bandName := fmt.Sprintf("%v's Band", username)
 			err = bands.FindOne(nil, bson.M{"owner_pid": score.OwnerPID}).Decode(&band)
 
 			if err == nil {
@@ -126,9 +141,9 @@ func (service RankRangeGetService) Handle(data string, database *mongo.Database,
 				curIndex,
 				score.Score,
 				0,
-				score.InstrumentMask,
+				instrumentMap[score.RoleID],
 				score.NotesPercent,
-				0,
+				1,
 				0,
 				"N/A",
 				curIndex,
