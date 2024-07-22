@@ -25,3 +25,8 @@ COMING SOON
 - Setlist Sharing
 - Global rank calculation
 - Instaranks ("You are ranked #4 on the Guitar Leaderboard" on the post-song stats screen)
+
+## Special Thanks
+The following users made contributions to GoCentral, but aren't listed in the Contributors tab on GitHub, so they are listed here instead.
+- @knvtva
+- @li1lypad
