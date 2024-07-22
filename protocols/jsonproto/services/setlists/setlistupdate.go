@@ -184,10 +184,15 @@ func (service SetlistUpdateService) Handle(data string, database *mongo.Database
 		}
 	}
 
-	_, err = setlistCollection.InsertOne(context.TODO(), setlistDocument)
-
-	if err != nil {
-		return "", err
+	err = setlistCollection.FindOne(context.TODO(), bson.M{"pid": req.PID, "title": req.Name}).Err()
+	if err != nil { // If it's not nil document exists so we want to update to prevent duplicate entries
+		filter := bson.M{"pid": req.PID, "title": req.Name}
+		_, err = setlistCollection.UpdateOne(context.TODO(), filter, setlistDocument)
+	} else {
+		_, err = setlistCollection.InsertOne(context.TODO(), setlistDocument)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	res := []SetlistUpdateResponse{{1}}
