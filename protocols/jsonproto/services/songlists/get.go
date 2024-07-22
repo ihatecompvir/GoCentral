@@ -68,7 +68,7 @@ func (service GetSonglistsService) Handle(data string, database *mongo.Database,
 
 	setlistCollection := database.Collection("setlists")
 
-	setlistCursor, err := setlistCollection.Find(nil, bson.D{})
+	setlistCursor, err := setlistCollection.Find(nil, bson.D{{ "pid", bson.D{{"$ne", req.PID000}}}})
 
 	if err != nil {
 		log.Printf("Error getting songlists: %s", err)
