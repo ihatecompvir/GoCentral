@@ -3,6 +3,8 @@ package marshaler
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strings"
 )
 
 // gets the request name from the json data
@@ -37,19 +39,66 @@ func UnmarshalRequest(data string, out interface{}) error {
 		return err
 	}
 
-	// convert map to json
-	jsonString, err := json.Marshal(normalized)
-	if err != nil {
-		return err
+	outValue := reflect.ValueOf(out).Elem()
+	outType := outValue.Type()
+
+	for i := 0; i < outType.NumField(); i++ {
+		field := outType.Field(i)
+		jsonTag := field.Tag.Get("json")
+		if jsonTag == "" || jsonTag == "-" {
+			continue
+		}
+
+		// Handle static fields
+		if value, ok := normalized[jsonTag]; ok {
+			fieldValue := outValue.Field(i)
+			if fieldValue.CanSet() {
+				switch fieldValue.Kind() {
+				case reflect.Int:
+					if v, ok := value.(float64); ok {
+						fieldValue.SetInt(int64(v))
+					}
+				case reflect.String:
+					if v, ok := value.(string); ok {
+						fieldValue.SetString(v)
+					}
+				default:
+					fieldValue.Set(reflect.ValueOf(value))
+				}
+			}
+			delete(normalized, jsonTag)
+		}
+
+		// Handle dynamic fields (pid000, pid001, etc.)
+		if strings.Contains(jsonTag, "XXX") {
+			fieldNamePrefix := strings.TrimSuffix(jsonTag, "XXX")
+			for key, value := range normalized {
+				if strings.HasPrefix(key, fieldNamePrefix) {
+					fieldValue := outValue.Field(i)
+					if fieldValue.CanSet() {
+						switch fieldValue.Type().Elem().Kind() {
+						case reflect.Int:
+							if v, ok := value.(float64); ok {
+								fieldValue.Set(reflect.Append(fieldValue, reflect.ValueOf(int(v))))
+							}
+						case reflect.String:
+							if v, ok := value.(string); ok {
+								fieldValue.Set(reflect.Append(fieldValue, reflect.ValueOf(v)))
+							}
+						default:
+							fieldValue.Set(reflect.Append(fieldValue, reflect.ValueOf(value)))
+						}
+					}
+					delete(normalized, key)
+				}
+			}
+		}
 	}
 
-	// convert json to struct
-	return json.Unmarshal(jsonString, &out)
-
+	return nil
 }
 
 func normalizeJson(data string) (map[string]interface{}, error) {
-
 	var out [][]interface{}
 	err := json.Unmarshal([]byte(data), &out)
 	if err != nil {
@@ -67,26 +116,26 @@ func normalizeJson(data string) (map[string]interface{}, error) {
 
 	inner, ok := outer[1].([]interface{})
 	if !ok {
-		panic("bad inner")
+		return nil, fmt.Errorf("bad inner")
 	}
 
 	fields, ok := inner[0].([]interface{})
 	if !ok {
-		panic("bad fields")
+		return nil, fmt.Errorf("bad fields")
 	}
 
 	fieldLen := len(fields)
 
 	values, ok := inner[1].([]interface{})
 	if !ok {
-		panic("bad values")
+		return nil, fmt.Errorf("bad values")
 	}
 
 	m := make(map[string]interface{}, fieldLen)
 	for i := 0; i < fieldLen; i++ {
 		field, ok := fields[i].(string)
 		if !ok {
-			panic("bad field name")
+			return nil, fmt.Errorf("bad field name")
 		}
 		m[field] = values[i]
 	}

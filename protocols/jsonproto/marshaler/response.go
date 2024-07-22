@@ -9,7 +9,6 @@ import (
 
 // builds the response for the service
 func MarshalResponse(path string, obj interface{}) (string, error) {
-
 	var names []string
 	var types string
 	var values interface{}
@@ -53,29 +52,41 @@ func buildNamesAndTypesLists(v reflect.Value) ([]string, string) {
 
 	fieldCount := v.NumField()
 
-	names := make([]string, fieldCount)
-
+	names := make([]string, 0, fieldCount)
 	var types strings.Builder
 
 	for i := 0; i < fieldCount; i++ {
+		field := tp.Field(i)
 
-		// get tag value for name
-		name := tp.Field(i).Tag.Get("json")
-		if name == "" {
-			// fallback to field name
-			name = tp.Field(i).Name
-		}
+		if field.Type.Kind() == reflect.Slice {
+			for j := 0; j < v.Field(i).Len(); j++ {
+				name := fmt.Sprintf("%s%03d", strings.TrimSuffix(field.Tag.Get("json"), "XXX"), j)
+				names = append(names, name)
+				switch v.Field(i).Index(j).Interface().(type) {
+				case string:
+					types.WriteString("s")
+				case int:
+					types.WriteString("d")
+				default:
+					panic(fmt.Errorf("unsupported type in slice:%+v\n", field.Type))
+				}
+			}
+		} else {
+			name := field.Tag.Get("json")
+			if name == "" {
+				name = field.Name
+			}
 
-		names[i] = name
+			names = append(names, name)
 
-		// add type to list
-		switch v.Field(i).Interface().(type) {
-		case string:
-			types.WriteString("s")
-		case int:
-			types.WriteString("d")
-		default:
-			panic(fmt.Errorf("unsupported type:%+v\n", tp.Field(i).Type))
+			switch v.Field(i).Interface().(type) {
+			case string:
+				types.WriteString("s")
+			case int:
+				types.WriteString("d")
+			default:
+				panic(fmt.Errorf("unsupported type:%+v\n", field.Type))
+			}
 		}
 	}
 
@@ -83,17 +94,22 @@ func buildNamesAndTypesLists(v reflect.Value) ([]string, string) {
 }
 
 func buildValuesList(v reflect.Value) []interface{} {
-
 	if v.Type().Kind() == reflect.Slice {
 		panic(fmt.Errorf("slices should not be passed here:%+v", v))
 	}
 
 	fieldCount := v.NumField()
 
-	values := make([]interface{}, fieldCount)
+	values := make([]interface{}, 0, fieldCount)
 
 	for i := 0; i < fieldCount; i++ {
-		values[i] = v.Field(i).Interface()
+		if v.Field(i).Type().Kind() == reflect.Slice {
+			for j := 0; j < v.Field(i).Len(); j++ {
+				values = append(values, v.Field(i).Index(j).Interface())
+			}
+		} else {
+			values = append(values, v.Field(i).Interface())
+		}
 	}
 
 	return values
