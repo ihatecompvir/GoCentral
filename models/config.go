@@ -9,4 +9,5 @@ type Config struct {
 	LastCharacterID int                `json:"last_character_id" bson:"last_character_id"`
 	LastSetlistID   int                `json:"last_setlist_id" bson:"last_setlist_id"`
 	ProfanityList   []string           `json:"profanity_list" bson:"profanity_list"`
+	BattleLimit     int                `json:"battle_limit" bson:"battle_limit"`
 }

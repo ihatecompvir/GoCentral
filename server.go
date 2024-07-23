@@ -61,6 +61,7 @@ func main() {
 			{Key: "last_character_id", Value: 0},
 			{Key: "last_setlist_id", Value: 0},
 			{Key: "profanity_list", Value: []string{}},
+			{Key: "battle_limit", Value: 5},
 		})
 
 		servers.Config.LastPID = 500
@@ -68,6 +69,7 @@ func main() {
 		servers.Config.LastBandID = 0
 		servers.Config.LastSetlistID = 0
 		servers.Config.ProfanityList = []string{}
+		servers.Config.BattleLimit = 5
 
 		if err != nil {
 			log.Fatalln("Could not create default config! GoCentral cannot proceed: ", err)
