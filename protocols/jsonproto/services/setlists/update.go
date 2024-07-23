@@ -81,22 +81,6 @@ func (service SetlistUpdateService) Handle(data string, database *mongo.Database
 		}
 	}
 
-	log.Println("Attempting to update setlist with list_guid %s", req.ListGUID)
-
-	_, err = configCollection.UpdateOne(
-		context.TODO(),
-		bson.M{},
-		bson.D{
-			{"$set", bson.D{{"last_setlist_id", config.LastSetlistID + 1}}},
-		},
-	)
-
-	if err != nil {
-		log.Println("Could not update config in database while updating character: ", err)
-	}
-
-	config.LastSetlistID += 1
-
 	users := database.Collection("users")
 	var user models.User
 	err = users.FindOne(context.TODO(), bson.M{"pid": req.PID}).Decode(&user)
@@ -115,13 +99,47 @@ func (service SetlistUpdateService) Handle(data string, database *mongo.Database
 		return "", err
 	}
 
+	// Check if the setlist we are attempting to update is not a battle, as battles cannot be updated after-the-fact
+	if setlist.Type == 1000 || setlist.Type == 1001 || setlist.Type == 1002 {
+		log.Printf("Player with PID %d attempted to update a battle setlist, rejecting", req.PID)
+		return marshaler.MarshalResponse(service.Path(), []SetlistUpdateResponse{{0x16}})
+	}
+
+	// Access controls so that only the owner of the setlist can update it
+	if setlist.Owner != client.Username || setlist.PID != int(client.PlayerID()) {
+		log.Printf("Player with PID %d attempted to update a setlist that does not belong to them, rejecting", req.PID)
+		return marshaler.MarshalResponse(service.Path(), []SetlistUpdateResponse{{0x16}})
+	}
+
+	// look for the mongo no documents error to determine if we are inserting a new setlist
+	// maybe there is a better way to do this?
+	isNewSetlist := err == mongo.ErrNoDocuments
+
+	if isNewSetlist {
+		// Only update last_setlist_id if we are inserting a new setlist
+		config.LastSetlistID += 1
+
+		_, err = configCollection.UpdateOne(
+			context.TODO(),
+			bson.M{},
+			bson.D{
+				{"$set", bson.D{{"last_setlist_id", config.LastSetlistID}}},
+			},
+		)
+
+		if err != nil {
+			log.Println("Could not update config in database while updating character: ", err)
+		}
+
+		setlist.SetlistID = config.LastSetlistID
+	}
+
 	setlist.ArtURL = ""
 	setlist.Desc = req.Description
 	setlist.Title = req.Name
 	setlist.Type = 0
 	setlist.Owner = user.Username
 	setlist.OwnerGUID = user.GUID
-	setlist.SetlistID = config.LastSetlistID
 	setlist.PID = req.PID
 	setlist.SongIDs = req.SongIDs
 
