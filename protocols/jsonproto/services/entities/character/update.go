@@ -24,7 +24,7 @@ type CharacterUpdateRequest struct {
 }
 
 type CharacterUpdateResponse struct {
-	Test int `json:"test"`
+	RetCode int `json:"ret_code"`
 }
 
 type CharacterUpdateService struct {

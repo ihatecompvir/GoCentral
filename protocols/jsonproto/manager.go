@@ -56,6 +56,7 @@ func (mgr *ServicesManager) registerAll() {
 	// setlist creation
 	mgr.register(setlists.SetlistCreationService{})
 	mgr.register(setlists.SetlistSyncService{})
+	mgr.register(setlists.SetlistUpdateService{})
 
 	mgr.register(accountlink.AccountLinkService{})
 

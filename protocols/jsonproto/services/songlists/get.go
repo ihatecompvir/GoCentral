@@ -1,12 +1,12 @@
 package songlists
 
 import (
+	"context"
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
 	"github.com/ihatecompvir/nex-go"
-	"github.com/jinzhu/copier"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -21,29 +21,17 @@ type GetSonglistsRequest struct {
 }
 
 type GetSonglistsResponse struct {
-	SetlistID   int    `json:"id"`
-	PID         int    `json:"pid"`
-	Title       string `json:"title"`
-	Desc        string `json:"desc"`
-	Type        int    `json:"type"`
-	Owner       string `json:"owner"`
-	OwnerGUID   string `json:"owner_guid"`
-	GUID        string `json:"guid"`
-	ArtURL      string `json:"art_url"`
-	SongID000   int    `json:"s_id000"`
-	SongName000 string `json:"s_name000"`
-	SongID001   int    `json:"s_id001"`
-	SongName001 string `json:"s_name001"`
-	SongID002   int    `json:"s_id002"`
-	SongName002 string `json:"s_name002"`
-	SongID003   int    `json:"s_id003"`
-	SongName003 string `json:"s_name003"`
-	SongID004   int    `json:"s_id004"`
-	SongName004 string `json:"s_name004"`
-	SongID005   int    `json:"s_id005"`
-	SongName005 string `json:"s_name005"`
-	SongID006   int    `json:"s_id006"`
-	SongName006 string `json:"s_name006"`
+	SetlistID int      `json:"id"`
+	PID       int      `json:"pid"`
+	Title     string   `json:"title"`
+	Desc      string   `json:"desc"`
+	Type      int      `json:"type"`
+	Owner     string   `json:"owner"`
+	OwnerGUID string   `json:"owner_guid"`
+	GUID      string   `json:"guid"`
+	ArtURL    string   `json:"art_url"`
+	SongIDs   []int    `json:"s_idXXX"`
+	SongNames []string `json:"s_nameXXX"`
 }
 
 type GetSonglistsService struct {
@@ -76,13 +64,24 @@ func (service GetSonglistsService) Handle(data string, database *mongo.Database,
 
 	res := []GetSonglistsResponse{}
 
-	for setlistCursor.Next(nil) {
+	for setlistCursor.Next(context.TODO()) {
 		var setlist GetSonglistsResponse
 		var setlistToCopy models.Setlist
 
 		setlistCursor.Decode(&setlistToCopy)
 
-		copier.Copy(&setlist, &setlistToCopy)
+		setlist.ArtURL = setlistToCopy.ArtURL
+		setlist.Desc = setlistToCopy.Desc
+		setlist.GUID = setlistToCopy.GUID
+		setlist.Owner = setlistToCopy.Owner
+		setlist.OwnerGUID = setlistToCopy.OwnerGUID
+		setlist.PID = setlistToCopy.PID
+		setlist.SetlistID = setlistToCopy.SetlistID
+		setlist.Title = setlistToCopy.Title
+		setlist.Type = setlistToCopy.Type
+
+		setlist.SongIDs = append(setlist.SongIDs, setlistToCopy.SongIDs...)
+		setlist.SongNames = append(setlist.SongNames, setlistToCopy.SongNames...)
 
 		res = append(res, setlist)
 	}

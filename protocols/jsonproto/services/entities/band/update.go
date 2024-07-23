@@ -1,10 +1,12 @@
 package band
 
 import (
+	"context"
 	"encoding/hex"
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"strings"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
@@ -23,7 +25,7 @@ type BandUpdateRequest struct {
 }
 
 type BandUpdateResponse struct {
-	Test int `json:"test"`
+	RetCode int `json:"ret_code"`
 }
 
 type BandUpdateService struct {
@@ -40,6 +42,32 @@ func (service BandUpdateService) Handle(data string, database *mongo.Database, c
 		return "", err
 	}
 
+	// do a profanity check before updating the band
+	var config models.Config
+	configCollection := database.Collection("config")
+	err = configCollection.FindOne(context.TODO(), bson.M{}).Decode(&config)
+	if err != nil {
+		log.Printf("Could not get config %v\n", err)
+	}
+
+	// check if the band name contains anything in the profanity list
+	// NOTE: exercise caution with the profanity list. Putting "ass" on the list would mean that a name like "Band Assistant" is not allowed.
+	// use your best judgment, it's up to you to define your own profanity list as a server host, GoCentral does not and will not ship with one
+	for _, profanity := range config.ProfanityList {
+		if profanity != "" && req.Name != "" && len(req.Name) >= len(profanity) {
+			lowerName := strings.ToLower(req.Name)
+			lowerProfanity := strings.ToLower(profanity)
+
+			if lowerName == lowerProfanity {
+				return marshaler.MarshalResponse(service.Path(), []BandUpdateResponse{{2}})
+			}
+
+			if strings.Contains(lowerName, lowerProfanity) {
+				return marshaler.MarshalResponse(service.Path(), []BandUpdateResponse{{2}})
+			}
+		}
+	}
+
 	if req.PID != int(client.PlayerID()) {
 		log.Println("Client-supplied PID did not match server-assigned PID, rejecting band update")
 		return "", err
@@ -48,14 +76,7 @@ func (service BandUpdateService) Handle(data string, database *mongo.Database, c
 	artBytes, err := hex.DecodeString(req.Art)
 	if err != nil {
 		log.Printf("Could not update band %s for PID %v: %s\n", req.Name, req.PID, err)
-		return marshaler.MarshalResponse(service.Path(), []BandUpdateResponse{{0}})
-	}
-
-	var config models.Config
-	configCollection := database.Collection("config")
-	err = configCollection.FindOne(nil, bson.M{}).Decode(&config)
-	if err != nil {
-		log.Printf("Could not get config %v\n", err)
+		return marshaler.MarshalResponse(service.Path(), []BandUpdateResponse{{1}})
 	}
 
 	bands := database.Collection("bands")

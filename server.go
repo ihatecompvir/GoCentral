@@ -59,11 +59,15 @@ func main() {
 			{Key: "last_pid", Value: 500},
 			{Key: "last_band_id", Value: 0},
 			{Key: "last_character_id", Value: 0},
+			{Key: "last_setlist_id", Value: 0},
+			{Key: "profanity_list", Value: []string{}},
 		})
 
 		servers.Config.LastPID = 500
 		servers.Config.LastCharacterID = 0
 		servers.Config.LastBandID = 0
+		servers.Config.LastSetlistID = 0
+		servers.Config.ProfanityList = []string{}
 
 		if err != nil {
 			log.Fatalln("Could not create default config! GoCentral cannot proceed: ", err)

@@ -1,6 +1,7 @@
 package accomplishment
 
 import (
+	"context"
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
@@ -121,7 +122,7 @@ func (service AccomplishmentRecordService) Handle(data string, database *mongo.D
 		}},
 	}
 	opts := options.Update().SetUpsert(true)
-	_, err = accomplishmentsCollection.UpdateOne(nil, filter, update, opts)
+	_, err = accomplishmentsCollection.UpdateOne(context.TODO(), filter, update, opts)
 
 	if err != nil {
 		log.Printf("Could not update accomplishments for PID %v: %s\n", req.PID, err)
