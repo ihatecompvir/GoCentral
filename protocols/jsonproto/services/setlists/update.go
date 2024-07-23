@@ -6,10 +6,10 @@ import (
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 	"strings"
+	"time"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -52,7 +52,7 @@ func (service SetlistUpdateService) Handle(data string, database *mongo.Database
 		return "", err
 	}
 
-	// do a profanity check before updating the band
+	// Do a profanity check before updating the setlist
 	var config models.Config
 	configCollection := database.Collection("config")
 	err = configCollection.FindOne(context.TODO(), bson.M{}).Decode(&config)
@@ -60,37 +60,28 @@ func (service SetlistUpdateService) Handle(data string, database *mongo.Database
 		log.Printf("Could not get config %v\n", err)
 	}
 
-	// check if the setlist name or description contain anything in the profanity list
-	// NOTE: exercise caution with the profanity list. Putting "ass" on the list would mean that a setlist name like "Band Assistant" is not allowed.
-	// use your best judgment, it's up to you to define your own profanity list as a server host, GoCentral does not and will not ship with one
+	// Check if the setlist name or description contain anything in the profanity list
 	for _, profanity := range config.ProfanityList {
 		if profanity != "" && req.Name != "" && len(req.Name) >= len(profanity) {
 			lowerName := strings.ToLower(req.Name)
 			lowerProfanity := strings.ToLower(profanity)
 
-			if lowerName == lowerProfanity {
-				return marshaler.MarshalResponse(service.Path(), []SetlistUpdateResponse{{0xF}})
-			}
-
-			if strings.Contains(lowerName, lowerProfanity) {
+			if lowerName == lowerProfanity || strings.Contains(lowerName, lowerProfanity) {
 				return marshaler.MarshalResponse(service.Path(), []SetlistUpdateResponse{{0xF}})
 			}
 		}
 
-		// check description too
 		if profanity != "" && req.Description != "" && len(req.Description) >= len(profanity) {
-			lowerName := strings.ToLower(req.Description)
+			lowerDesc := strings.ToLower(req.Description)
 			lowerProfanity := strings.ToLower(profanity)
 
-			if lowerName == lowerProfanity {
-				return marshaler.MarshalResponse(service.Path(), []SetlistUpdateResponse{{0x10}})
-			}
-
-			if strings.Contains(lowerName, lowerProfanity) {
+			if lowerDesc == lowerProfanity || strings.Contains(lowerDesc, lowerProfanity) {
 				return marshaler.MarshalResponse(service.Path(), []SetlistUpdateResponse{{0x10}})
 			}
 		}
 	}
+
+	log.Println("Attempting to update setlist with list_guid %s", req.ListGUID)
 
 	_, err = configCollection.UpdateOne(
 		context.TODO(),
@@ -106,29 +97,44 @@ func (service SetlistUpdateService) Handle(data string, database *mongo.Database
 
 	config.LastSetlistID += 1
 
-	// write setlist to database
+	users := database.Collection("users")
+	var user models.User
+	err = users.FindOne(context.TODO(), bson.M{"pid": req.PID}).Decode(&user)
+	if err != nil {
+		log.Printf("Could not find user with PID %d, defaulting to \"Player\": %v", req.PID, err)
+		user.Username = "Player"
+	}
+
+	// Write setlist to database
 	setlistCollection := database.Collection("setlists")
 
 	var setlist models.Setlist
+	err = setlistCollection.FindOne(context.TODO(), bson.M{"guid": req.ListGUID}).Decode(&setlist)
+	if err != nil && err != mongo.ErrNoDocuments {
+		log.Printf("Error finding setlist: %s", err)
+		return "", err
+	}
+
 	setlist.ArtURL = ""
 	setlist.Desc = req.Description
 	setlist.Title = req.Name
 	setlist.Type = 0
-	setlist.Owner = "Test"
-	setlist.OwnerGUID = "00000000-0000-0000-0000-000000000000"
-	setlist.GUID = primitive.NewObjectID().Hex()
+	setlist.Owner = user.Username
+	setlist.OwnerGUID = user.GUID
 	setlist.SetlistID = config.LastSetlistID
 	setlist.PID = req.PID
 	setlist.SongIDs = req.SongIDs
 
-	// create song names that are just empty strings for now
-	// TODO: create a song ID DB so we can store the proper names
-	// perhaps there is some way we can automatically create this
+	if setlist.Created == 0 {
+		setlist.Created = time.Now().Unix()
+	}
+
+	// Create song names that are just empty strings for now
 	for i := 0; i < len(req.SongIDs); i++ {
 		setlist.SongNames = append(setlist.SongNames, "")
 	}
 
-	filter := bson.M{"guid": setlist.GUID}
+	filter := bson.M{"guid": req.ListGUID}
 	update := bson.M{
 		"$set": bson.M{
 			"art_url":    setlist.ArtURL,
@@ -141,6 +147,9 @@ func (service SetlistUpdateService) Handle(data string, database *mongo.Database
 			"pid":        setlist.PID,
 			"s_ids":      setlist.SongIDs,
 			"s_names":    setlist.SongNames,
+			"guid":       req.ListGUID,
+			"shared":     req.Shared,
+			"created":    setlist.Created,
 		},
 	}
 

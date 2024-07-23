@@ -83,6 +83,7 @@ func (mgr *ServicesManager) registerAll() {
 
 	mgr.register(battles.GetBattlesService{})
 	mgr.register(battles.LimitCheckService{})
+	mgr.register(battles.BattleCreateService{})
 
 	mgr.register(stats.StatsPadService{})
 

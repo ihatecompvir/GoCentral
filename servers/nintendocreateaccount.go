@@ -35,10 +35,14 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 	// Create a new user if not currently registered.
 	if result := users.FindOne(nil, bson.M{"username": username}).Decode(&user); result != nil {
 		log.Printf("%s has never connected before - create DB entry\n", username)
-		_, err := users.InsertOne(nil, bson.D{
+
+		guid, err := generateGUID()
+
+		_, err = users.InsertOne(nil, bson.D{
 			{Key: "username", Value: username},
 			{Key: "pid", Value: Config.LastPID + 1},
 			{Key: "console_type", Value: ctype},
+			{Key: "guid", Value: guid},
 			// TODO: look into if the key that is passed here is per-profile, could use it as form of auth if so
 		})
 

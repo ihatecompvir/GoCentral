@@ -3,12 +3,15 @@ package servers
 import (
 	"crypto/hmac"
 	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"rb3server/database"
 	"rb3server/models"
 	"regexp"
+	"strings"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -31,6 +34,17 @@ func deriveKerberosKey(userPID uint32, pwd string) []byte {
 	}
 
 	return kerberosTicketKey
+}
+
+func generateGUID() (string, error) {
+	bytes := make([]byte, 16)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
+
+	guid := hex.EncodeToString(bytes)
+	return strings.ToLower(guid), nil
 }
 
 func generateKerberosTicket(userPID uint32, serverPID uint32, keySize int, pwd string) ([]byte, []byte) {
@@ -73,7 +87,6 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 	var rgx = regexp.MustCompile(`\(([^()]*)\)`)
 	res := rgx.FindStringSubmatch(username)
 
-	
 	// If there is no regex found, we are a PS3 client so get the correct stuff from the DB for the user
 	// PS3 usernames cannot contain parentheses so there is no chance of a PS3 client taking the wii path
 
@@ -91,7 +104,7 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 		log.Println("Wii client connecting")
 		machineType = 2
 	} else {
-		log.Println("Unknown machine connecting --- ABORT") // Basically it doesn't fall into this category 
+		log.Println("Unknown machine connecting --- ABORT") // Basically it doesn't fall into this category
 		SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, 0x00010001)
 		return
 	}
@@ -99,10 +112,14 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 	if machineType == 0 || machineType == 1 {
 		if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
 			log.Printf("%s has never connected before - create DB entry\n", username)
-			_, err := users.InsertOne(nil, bson.D{
+
+			guid, err := generateGUID()
+
+			_, err = users.InsertOne(nil, bson.D{
 				{Key: "username", Value: username},
 				{Key: "pid", Value: Config.LastPID + 1},
 				{Key: "console_type", Value: machineType},
+				{Key: "guid", Value: guid},
 			})
 
 			if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
