@@ -25,12 +25,12 @@ func GetUsernameForPID(pid int) string {
 }
 
 // returns the name of the band for a given band_id
-func GetBandNameForBandID(band_id int) string {
+func GetBandNameForBandID(pid int) string {
 	var band models.Band
 
 	bandsCollection := GocentralDatabase.Collection("bands")
 
-	_ = bandsCollection.FindOne(nil, bson.M{"band_id": band_id}).Decode(&band)
+	_ = bandsCollection.FindOne(nil, bson.M{"owner_pid": pid}).Decode(&band)
 
 	if band.Name != "" {
 		return band.Name

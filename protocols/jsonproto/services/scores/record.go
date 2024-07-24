@@ -1,10 +1,9 @@
 package scores
 
 import (
-	"fmt"
 	"log"
+	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
-	"strings"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
@@ -25,200 +24,25 @@ var instrumentMap = map[int]int{
 	9: 512,
 }
 
-type ScoreRecordRequestOnePlayer struct {
+type ScoreRecordRequest struct {
 	Region           string `json:"region"`
 	Locale           string `json:"locale"`
 	SystemMS         int    `json:"system_ms"`
 	SongID           int    `json:"song_id"`
 	MachineID        string `json:"machine_id"`
 	SessionGUID      string `json:"session_guid"`
-	PID000           int    `json:"pid000"`
+	PIDs             []int  `json:"pidXXX"`
 	BoiID            int    `json:"boi_id"`
 	BandMask         int    `json:"band_mask"`
 	ProvideInstaRank int    `json:"provide_insta_rank"`
-
-	// band stuff
-	RoleID000  int `json:"role_id000"`
-	Score000   int `json:"score000"`
-	Stars000   int `json:"stars000"`
-	Slot000    int `json:"slot000"`
-	DiffID000  int `json:"diff_id000"`
-	CScore000  int `json:"c_score000"`
-	CCScore000 int `json:"cc_score000"`
-	Percent000 int `json:"percent000"`
-
-	// individual contributors
-	RoleID001  int `json:"role_id001"`
-	Score001   int `json:"score001"`
-	Stars001   int `json:"stars001"`
-	PID001     int `json:"pid001"`
-	Slot001    int `json:"slot001"`
-	DiffID001  int `json:"diff_id001"`
-	CScore001  int `json:"c_score001"`
-	CCScore001 int `json:"cc_score001"`
-	Percent001 int `json:"percent001"`
-}
-
-type ScoreRecordRequestTwoPlayer struct {
-	Region           string `json:"region"`
-	Locale           string `json:"locale"`
-	SystemMS         int    `json:"system_ms"`
-	SongID           int    `json:"song_id"`
-	MachineID        string `json:"machine_id"`
-	SessionGUID      string `json:"session_guid"`
-	PID000           int    `json:"pid000"`
-	BoiID            int    `json:"boi_id"`
-	BandMask         int    `json:"band_mask"`
-	ProvideInstaRank int    `json:"provide_insta_rank"`
-
-	// band stuff
-	RoleID000  int `json:"role_id000"`
-	Score000   int `json:"score000"`
-	Stars000   int `json:"stars000"`
-	Slot000    int `json:"slot000"`
-	DiffID000  int `json:"diff_id000"`
-	CScore000  int `json:"c_score000"`
-	CCScore000 int `json:"cc_score000"`
-	Percent000 int `json:"percent000"`
-
-	// individual contributors
-	RoleID001  int `json:"role_id001"`
-	Score001   int `json:"score001"`
-	Stars001   int `json:"stars001"`
-	PID001     int `json:"pid001"`
-	Slot001    int `json:"slot001"`
-	DiffID001  int `json:"diff_id001"`
-	CScore001  int `json:"c_score001"`
-	CCScore001 int `json:"cc_score001"`
-	Percent001 int `json:"percent001"`
-
-	RoleID002  int `json:"role_id002"`
-	Score002   int `json:"score002"`
-	Stars002   int `json:"stars002"`
-	PID002     int `json:"pid002"`
-	Slot002    int `json:"slot002"`
-	DiffID002  int `json:"diff_id002"`
-	CScore002  int `json:"c_score002"`
-	CCScore002 int `json:"cc_score002"`
-	Percent002 int `json:"percent002"`
-}
-
-type ScoreRecordRequestThreePlayer struct {
-	Region           string `json:"region"`
-	Locale           string `json:"locale"`
-	SystemMS         int    `json:"system_ms"`
-	SongID           int    `json:"song_id"`
-	MachineID        string `json:"machine_id"`
-	SessionGUID      string `json:"session_guid"`
-	PID000           int    `json:"pid000"`
-	BoiID            int    `json:"boi_id"`
-	BandMask         int    `json:"band_mask"`
-	ProvideInstaRank int    `json:"provide_insta_rank"`
-
-	// band stuff
-	RoleID000  int `json:"role_id000"`
-	Score000   int `json:"score000"`
-	Stars000   int `json:"stars000"`
-	Slot000    int `json:"slot000"`
-	DiffID000  int `json:"diff_id000"`
-	CScore000  int `json:"c_score000"`
-	CCScore000 int `json:"cc_score000"`
-	Percent000 int `json:"percent000"`
-
-	// individual contributors
-	RoleID001  int `json:"role_id001"`
-	Score001   int `json:"score001"`
-	Stars001   int `json:"stars001"`
-	PID001     int `json:"pid001"`
-	Slot001    int `json:"slot001"`
-	DiffID001  int `json:"diff_id001"`
-	CScore001  int `json:"c_score001"`
-	CCScore001 int `json:"cc_score001"`
-	Percent001 int `json:"percent001"`
-
-	RoleID002  int `json:"role_id002"`
-	Score002   int `json:"score002"`
-	Stars002   int `json:"stars002"`
-	PID002     int `json:"pid002"`
-	Slot002    int `json:"slot002"`
-	DiffID002  int `json:"diff_id002"`
-	CScore002  int `json:"c_score002"`
-	CCScore002 int `json:"cc_score002"`
-	Percent002 int `json:"percent002"`
-
-	RoleID003  int `json:"role_id003"`
-	Score003   int `json:"score003"`
-	Stars003   int `json:"stars003"`
-	PID003     int `json:"pid003"`
-	Slot003    int `json:"slot003"`
-	DiffID003  int `json:"diff_id003"`
-	CScore003  int `json:"c_score003"`
-	CCScore003 int `json:"cc_score003"`
-	Percent003 int `json:"percent003"`
-}
-
-type ScoreRecordRequestFourPlayer struct {
-	Region           string `json:"region"`
-	Locale           string `json:"locale"`
-	SystemMS         int    `json:"system_ms"`
-	SongID           int    `json:"song_id"`
-	MachineID        string `json:"machine_id"`
-	SessionGUID      string `json:"session_guid"`
-	PID000           int    `json:"pid000"`
-	BoiID            int    `json:"boi_id"`
-	BandMask         int    `json:"band_mask"`
-	ProvideInstaRank int    `json:"provide_insta_rank"`
-
-	// band stuff
-	RoleID000  int `json:"role_id000"`
-	Score000   int `json:"score000"`
-	Stars000   int `json:"stars000"`
-	Slot000    int `json:"slot000"`
-	DiffID000  int `json:"diff_id000"`
-	CScore000  int `json:"c_score000"`
-	CCScore000 int `json:"cc_score000"`
-	Percent000 int `json:"percent000"`
-
-	// individual contributors
-	RoleID001  int `json:"role_id001"`
-	Score001   int `json:"score001"`
-	Stars001   int `json:"stars001"`
-	PID001     int `json:"pid001"`
-	Slot001    int `json:"slot001"`
-	DiffID001  int `json:"diff_id001"`
-	CScore001  int `json:"c_score001"`
-	CCScore001 int `json:"cc_score001"`
-	Percent001 int `json:"percent001"`
-
-	RoleID002  int `json:"role_id002"`
-	Score002   int `json:"score002"`
-	Stars002   int `json:"stars002"`
-	PID002     int `json:"pid002"`
-	Slot002    int `json:"slot002"`
-	DiffID002  int `json:"diff_id002"`
-	CScore002  int `json:"c_score002"`
-	CCScore002 int `json:"cc_score002"`
-	Percent002 int `json:"percent002"`
-
-	RoleID003  int `json:"role_id003"`
-	Score003   int `json:"score003"`
-	Stars003   int `json:"stars003"`
-	PID003     int `json:"pid003"`
-	Slot003    int `json:"slot003"`
-	DiffID003  int `json:"diff_id003"`
-	CScore003  int `json:"c_score003"`
-	CCScore003 int `json:"cc_score003"`
-	Percent003 int `json:"percent003"`
-
-	RoleID004  int `json:"role_id004"`
-	Score004   int `json:"score004"`
-	Stars004   int `json:"stars004"`
-	PID004     int `json:"pid004"`
-	Slot004    int `json:"slot004"`
-	DiffID004  int `json:"diff_id004"`
-	CScore004  int `json:"c_score004"`
-	CCScore004 int `json:"cc_score004"`
-	Percent004 int `json:"percent004"`
+	RoleIDs          []int  `json:"role_idXXX"`
+	Scores           []int  `json:"scoreXXX"`
+	Stars            []int  `json:"starsXXX"`
+	Slots            []int  `json:"slotXXX"`
+	DiffIDs          []int  `json:"diff_idXXX"`
+	CScores          []int  `json:"c_scoreXXX"`
+	CCScores         []int  `json:"cc_scoreXXX"`
+	Percents         []int  `json:"percentXXX"`
 }
 
 type ScoreRecordResponse struct {
@@ -238,213 +62,68 @@ func (service ScoreRecordService) Path() string {
 }
 
 func (service ScoreRecordService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
-	var req interface{}
-	var playerData []bson.D
+	var req ScoreRecordRequest
 
-	// check for number of players so we can parse the message correctly
-	if strings.Contains(data, "slot004") {
-		req = ScoreRecordRequestFourPlayer{}
-	} else if strings.Contains(data, "slot003") {
-		req = ScoreRecordRequestThreePlayer{}
-	} else if strings.Contains(data, "slot002") {
-		req = ScoreRecordRequestTwoPlayer{}
-	} else {
-		req = ScoreRecordRequestOnePlayer{}
+	err := marshaler.UnmarshalRequest(data, &req)
+	if err != nil {
+		return "", err
 	}
 
-	var err error
-
-	// TODO: Make this not so horrible
-	// this is an unholy abomination
-	var songID int
-	switch request := req.(type) {
-	case ScoreRecordRequestOnePlayer:
-		err = marshaler.UnmarshalRequest(data, &request)
-		if err != nil {
-			return "", err
-		}
-		songID = request.SongID
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID000},
-			{Key: "score", Value: request.Score000},
-			{Key: "notespct", Value: request.Percent000},
-			{Key: "role_id", Value: request.RoleID000},
-			{Key: "diffid", Value: request.DiffID000},
-			{Key: "boi", Value: 0},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001]},
-		})
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID001},
-			{Key: "score", Value: request.Score001},
-			{Key: "notespct", Value: request.Percent001},
-			{Key: "role_id", Value: request.RoleID001},
-			{Key: "diffid", Value: request.DiffID001},
-			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001]},
-		})
-	case ScoreRecordRequestTwoPlayer:
-		err = marshaler.UnmarshalRequest(data, &request)
-		if err != nil {
-			return "", err
-		}
-		if request.PID000 != int(client.PlayerID()) {
-			log.Println("Client-supplied PID did not match server-assigned PID, rejecting recording score")
-			return "", err
-		}
-		songID = request.SongID
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID000},
-			{Key: "score", Value: request.Score000},
-			{Key: "notespct", Value: request.Percent000},
-			{Key: "role_id", Value: request.RoleID000},
-			{Key: "diffid", Value: request.DiffID000},
-			{Key: "boi", Value: 0},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002]},
-		})
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID001},
-			{Key: "score", Value: request.Score001},
-			{Key: "notespct", Value: request.Percent001},
-			{Key: "role_id", Value: request.RoleID001},
-			{Key: "diffid", Value: request.DiffID001},
-			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001]},
-		})
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID002},
-			{Key: "score", Value: request.Score002},
-			{Key: "notespct", Value: request.Percent002},
-			{Key: "role_id", Value: request.RoleID002},
-			{Key: "diffid", Value: request.DiffID002},
-			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID002]},
-		})
-	case ScoreRecordRequestThreePlayer:
-		err = marshaler.UnmarshalRequest(data, &request)
-		if err != nil {
-			return "", err
-		}
-		songID = request.SongID
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID000},
-			{Key: "score", Value: request.Score000},
-			{Key: "notespct", Value: request.Percent000},
-			{Key: "role_id", Value: request.RoleID000},
-			{Key: "diffid", Value: request.DiffID000},
-			{Key: "boi", Value: 0},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003]},
-		})
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID001},
-			{Key: "score", Value: request.Score001},
-			{Key: "notespct", Value: request.Percent001},
-			{Key: "role_id", Value: request.RoleID001},
-			{Key: "diffid", Value: request.DiffID001},
-			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001]},
-		})
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID002},
-			{Key: "score", Value: request.Score002},
-			{Key: "notespct", Value: request.Percent002},
-			{Key: "role_id", Value: request.RoleID002},
-			{Key: "diffid", Value: request.DiffID002},
-			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID002]},
-		})
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID003},
-			{Key: "score", Value: request.Score003},
-			{Key: "notespct", Value: request.Percent003},
-			{Key: "role_id", Value: request.RoleID003},
-			{Key: "diffid", Value: request.DiffID003},
-			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID003]},
-		})
-	case ScoreRecordRequestFourPlayer:
-		err = marshaler.UnmarshalRequest(data, &request)
-		if err != nil {
-			return "", err
-		}
-		songID = request.SongID
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID000},
-			{Key: "score", Value: request.Score000},
-			{Key: "notespct", Value: request.Percent000},
-			{Key: "role_id", Value: request.RoleID000},
-			{Key: "diffid", Value: request.DiffID000},
-			{Key: "boi", Value: 0},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001] | instrumentMap[request.RoleID002] | instrumentMap[request.RoleID003] | instrumentMap[request.RoleID004]},
-		})
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID001},
-			{Key: "score", Value: request.Score001},
-			{Key: "notespct", Value: request.Percent001},
-			{Key: "role_id", Value: request.RoleID001},
-			{Key: "diffid", Value: request.DiffID001},
-			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID001]},
-		})
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID002},
-			{Key: "score", Value: request.Score002},
-			{Key: "notespct", Value: request.Percent002},
-			{Key: "role_id", Value: request.RoleID002},
-			{Key: "diffid", Value: request.DiffID002},
-			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID002]},
-		})
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID003},
-			{Key: "score", Value: request.Score003},
-			{Key: "notespct", Value: request.Percent003},
-			{Key: "role_id", Value: request.RoleID003},
-			{Key: "diffid", Value: request.DiffID003},
-			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID003]},
-		})
-		playerData = append(playerData, bson.D{
-			{Key: "song_id", Value: request.SongID},
-			{Key: "pid", Value: request.PID004},
-			{Key: "score", Value: request.Score004},
-			{Key: "notespct", Value: request.Percent004},
-			{Key: "role_id", Value: request.RoleID004},
-			{Key: "diffid", Value: request.DiffID004},
-			{Key: "boi", Value: 1},
-			{Key: "instrument_mask", Value: instrumentMap[request.RoleID004]},
-		})
+	if req.PIDs[0] != int(client.PlayerID()) {
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting setlist update")
+		return "", err
 	}
 
-	upsert := true
-	for i := 0; i < len(playerData); i++ {
-		pid := playerData[i][1].Value.(int)
-		role_id := playerData[i][4].Value.(int)
-		_, err = database.Collection("scores").ReplaceOne(nil, bson.M{"song_id": songID, "pid": pid, "role_id": role_id}, playerData[i], &options.ReplaceOptions{Upsert: &upsert})
-		if err != nil {
-			fmt.Printf("Could not upsert score for song ID %v: %v\n", songID, err)
+	scoresCollection := database.Collection("scores")
+
+	// every PID in the request has a score and etc. so make sure all those get added to the DB
+	for idx, pid := range req.PIDs {
+		var Score models.Score
+		Score.OwnerPID = pid
+		Score.SongID = req.SongID
+		Score.Stars = req.Stars[idx]
+		Score.DiffID = req.DiffIDs[idx]
+		Score.Score = req.Scores[idx]
+		Score.InstrumentMask = req.BandMask
+		Score.NotesPercent = req.Percents[idx]
+		Score.RoleID = req.RoleIDs[idx]
+
+		if req.RoleIDs[idx] == 10 {
+			Score.BOI = 0
+		} else {
+			Score.BOI = 1
+			Score.InstrumentMask = instrumentMap[req.RoleIDs[idx]] // make sure the instrument mask for individual instruments is right
 		}
+
+		// upsert the new score
+		_, err = scoresCollection.UpdateOne(
+			nil,
+			bson.M{"song_id": req.SongID, "pid": Score.OwnerPID, "role_id": Score.RoleID},
+			bson.D{
+				{"$set", bson.D{
+					{"song_id", Score.SongID},
+					{"pid", Score.OwnerPID},
+					{"role_id", Score.RoleID},
+					{"score", Score.Score},
+					{"notespct", Score.NotesPercent},
+					{"stars", Score.Stars},
+					{"diff_id", Score.DiffID},
+					{"boi", Score.BOI},
+					{"instrument_mask", Score.InstrumentMask},
+				}},
+			},
+			options.Update().SetUpsert(true),
+		)
 	}
 
-	var boi int = 1
-	if len(playerData) == 2 {
-		boi = 1
-	} else {
-		boi = 0
-	}
-	res := []ScoreRecordResponse{{songID, boi, 1, 1, "test", "test"}}
+	res := []ScoreRecordResponse{{
+		req.SongID,
+		0,
+		1,
+		0,
+		"",
+		"",
+	}}
 
 	return marshaler.MarshalResponse(service.Path(), res)
 }

@@ -3,6 +3,7 @@ package leaderboard
 import (
 	"context"
 	"log"
+	db "rb3server/database"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
@@ -52,131 +53,97 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
-		return "", err
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
 	if req.PID000 != int(client.PlayerID()) {
 		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for leaderboards")
-		return "", err
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
 	scoresCollection := database.Collection("scores")
 
-	var playerPosition int64 // where the player is on the leaderboards
-	var scoresToSkip int64   // how many scores to skip to get to the player's rank
-	var startIndex int
-
-	// First, get the player's score
-	// This will be used to find where the player is at on the leaderboards
-	playerFilter := bson.M{"song_id": req.SongID, "role_id": req.RoleID, "pid": req.PID000}
 	var playerScore models.Score
-	err = scoresCollection.FindOne(context.TODO(), playerFilter).Decode(&playerScore)
-	if err != nil {
-		// the player isn't on the leaderboards, so we just start from #1
-		playerPosition = 1
-		scoresToSkip = 0
-		startIndex = 1
-	} else {
-		// find the player's position on the leaderboards
-		playerPosition, err = scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID, "score": bson.M{"$gt": playerScore.Score}})
-		if err != nil {
-			// something went wrong so just get #1
-			playerPosition = 1
-			scoresToSkip = 0
-			startIndex = 1
-		} else {
-			scoresToSkip = playerPosition - 1
-			startIndex = int(scoresToSkip)
+	err = scoresCollection.FindOne(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID, "pid": req.PID000}).Decode(&playerScore)
+	if err != nil && err != mongo.ErrNoDocuments {
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+	}
+
+	if err == mongo.ErrNoDocuments {
+		err = scoresCollection.FindOne(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID}, &options.FindOneOptions{
+			Sort: bson.M{"score": -1},
+		}).Decode(&playerScore)
+		if err != nil && err != mongo.ErrNoDocuments {
+			return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 		}
 	}
 
-	// get all scores for the song and role ID
-	// skipping ahead by the player's position on the leaderboards
-	// sorting by score descending
-	// limiting to the number of scores requested
-	filter := bson.M{"song_id": req.SongID, "role_id": req.RoleID}
-	cur, err := scoresCollection.Find(context.TODO(), filter, options.Find().
-		SetLimit(int64(req.NumRows)).
-		SetSkip(scoresToSkip).
-		SetSort(bson.D{{"score", -1}}))
-
+	playerScoreIdx, err := scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID, "score": bson.M{"$gt": playerScore.Score}})
 	if err != nil {
-		// we couldn't get any scores, so just fallback to a blank response
-		return marshaler.MarshalResponse(service.Path(), []PlayerGetResponse{{}})
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
-	res := []PlayerGetResponse{}
+	startRank := playerScoreIdx - (playerScoreIdx % 19)
+	endRank := startRank + 19
 
-	// used to calculate rank
-	curIndex := startIndex
+	cursor, err := scoresCollection.Find(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID}, &options.FindOptions{
+		Skip:  &startRank,
+		Limit: &endRank,
+		Sort:  bson.M{"score": -1},
+	})
 
-	// use the cursor to read every score and append it to the response
-	for cur.Next(nil) {
-		username := "Player"
+	if err != nil {
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+	}
 
-		// decode the score into a score object
+	var res []PlayerGetResponse
+
+	var idx int64 = startRank + 1
+
+	for cursor.Next(context.Background()) {
 		var score models.Score
-		err := cur.Decode(&score)
+		err := cursor.Decode(&score)
+
 		if err != nil {
-			// we couldn't decode the score, so just fallback to a blank response
-			log.Printf("Error decoding score: %v", err)
-			return marshaler.MarshalResponse(service.Path(), []PlayerGetResponse{{}})
+			log.Println("Failed to decode score:", err)
+			continue
 		}
 
-		// BOI = "band or instrument" presumably, so detect if we're looking up a band score or an instrument score
-		// role ID 10 == band role
-		if score.BOI == 1 && req.RoleID != 10 {
+		isBandScore := score.RoleID == 10
 
-			users := database.Collection("users")
-			var user models.User
-			err = users.FindOne(nil, bson.M{"pid": score.OwnerPID}).Decode(&user)
-
-			if err == nil {
-				username = user.Username
-			}
-
+		if isBandScore {
 			res = append(res, PlayerGetResponse{
-				score.OwnerPID,
-				username,
-				score.DiffID,
-				curIndex,
-				score.Score,
-				0,
-				score.InstrumentMask,
-				score.NotesPercent,
-				0,
-				0,
-				"N/A", // this is what the official servers used
-				curIndex,
+				PID:          score.OwnerPID,
+				Name:         db.GetBandNameForBandID(score.OwnerPID),
+				DiffID:       score.DiffID,
+				Rank:         int(idx),
+				Score:        score.Score,
+				IsPercentile: 0,
+				InstMask:     score.InstrumentMask,
+				NotesPct:     score.NotesPercent,
+				IsFriend:     0,
+				UnnamedBand:  0,
+				PGUID:        "",
+				ORank:        int(idx),
 			})
-
 		} else {
-			// its a band score, so get the band name so it can appear properly on the leaderboard
-			bands := database.Collection("bands")
-			var band models.Band
-			var bandName = "Band"
-			err = bands.FindOne(nil, bson.M{"owner_pid": score.OwnerPID}).Decode(&band)
-
-			if err == nil {
-				bandName = band.Name
-			}
-
 			res = append(res, PlayerGetResponse{
-				score.OwnerPID,
-				bandName,
-				score.DiffID,
-				curIndex,
-				score.Score,
-				0,
-				score.InstrumentMask,
-				score.NotesPercent,
-				0,
-				0,
-				"N/A",
-				curIndex,
+				PID:          score.OwnerPID,
+				Name:         db.GetUsernameForPID(score.OwnerPID),
+				DiffID:       score.DiffID,
+				Rank:         int(idx),
+				Score:        score.Score,
+				IsPercentile: 0,
+				InstMask:     score.InstrumentMask,
+				NotesPct:     score.NotesPercent,
+				IsFriend:     0,
+				UnnamedBand:  0,
+				PGUID:        "",
+				ORank:        int(idx),
 			})
 		}
-		curIndex += 1
+
+		idx++
 	}
 
 	if len(res) == 0 {
