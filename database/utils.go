@@ -9,6 +9,7 @@ import (
 // Convenience functions involving the DB
 // This is to reduce the boilerplate code everywhere for common functions like PID-->Username resolution
 
+// returns the username for a given PID
 func GetUsernameForPID(pid int) string {
 	var user models.User
 
@@ -20,5 +21,20 @@ func GetUsernameForPID(pid int) string {
 		return user.Username
 	} else {
 		return "Player"
+	}
+}
+
+// returns the name of the band for a given band_id
+func GetBandNameForBandID(band_id int) string {
+	var band models.Band
+
+	bandsCollection := GocentralDatabase.Collection("bands")
+
+	_ = bandsCollection.FindOne(nil, bson.M{"band_id": band_id}).Decode(&band)
+
+	if band.Name != "" {
+		return band.Name
+	} else {
+		return "Band"
 	}
 }
