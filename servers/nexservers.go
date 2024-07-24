@@ -166,11 +166,12 @@ func StartSecureServer() {
 
 	matchmakingProtocol.LaunchSession(LaunchSession)
 	matchmakingProtocol.Participate(Participate)
-	matchmakingProtocol.Unparticipate(Unparticipate)
+	matchmakingProtocol.CancelParticipation(CancelParticipation)
 	matchmakingProtocol.RegisterGathering(RegisterGathering)
 	matchmakingProtocol.TerminateGathering(TerminateGathering)
 	matchmakingProtocol.UpdateGathering(UpdateGathering)
 	matchmakingProtocol.SetState(SetState)
+	matchmakingProtocol.FindBySingleID(FindBySingleID)
 
 	natTraversalProtocol.RequestProbeInitiation(RequestProbeInitiation)
 

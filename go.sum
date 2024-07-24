@@ -20,6 +20,8 @@ github.com/ihatecompvir/nex-protocols-go v0.0.0-20240723205828-b4b299b30c4f h1:S
 github.com/ihatecompvir/nex-protocols-go v0.0.0-20240723205828-b4b299b30c4f/go.mod h1:CWANWIo6DkyT+pb/AGD/vNzjMMYTTlv4QYF2Mxd5LsI=
 github.com/ihatecompvir/nex-protocols-go v0.0.0-20240723213015-0856b6980cbd h1:kN+Ctc7oLbv5YGYUvvd9EnzdNIKrIBMlky5Tq8x5jgA=
 github.com/ihatecompvir/nex-protocols-go v0.0.0-20240723213015-0856b6980cbd/go.mod h1:CWANWIo6DkyT+pb/AGD/vNzjMMYTTlv4QYF2Mxd5LsI=
+github.com/ihatecompvir/nex-protocols-go v0.0.0-20240724190006-58d601b85602 h1:NH4MD/geBcaSNKD1qjt/h5PuXw0cO9YJgl8UydDjVtk=
+github.com/ihatecompvir/nex-protocols-go v0.0.0-20240724190006-58d601b85602/go.mod h1:CWANWIo6DkyT+pb/AGD/vNzjMMYTTlv4QYF2Mxd5LsI=
 github.com/jinzhu/copier v0.3.5 h1:GlvfUwHk62RokgqVNvYsku0TATCF7bAHVwEXoBh3iJg=
 github.com/jinzhu/copier v0.3.5/go.mod h1:DfbEm0FYsaqBcKcFuvmOZb218JkPGtvSHsKg8S8hyyg=
 github.com/jinzhu/copier v0.4.0 h1:w3ciUoD19shMCRargcpm0cm91ytaBhDvuRpz1ODO/U8=
