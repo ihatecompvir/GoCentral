@@ -99,21 +99,24 @@ func (service SetlistUpdateService) Handle(data string, database *mongo.Database
 		return "", err
 	}
 
-	// Check if the setlist we are attempting to update is not a battle, as battles cannot be updated after-the-fact
-	if setlist.Type == 1000 || setlist.Type == 1001 || setlist.Type == 1002 {
-		log.Printf("Player with PID %d attempted to update a battle setlist, rejecting", req.PID)
-		return marshaler.MarshalResponse(service.Path(), []SetlistUpdateResponse{{0x16}})
-	}
-
-	// Access controls so that only the owner of the setlist can update it
-	if setlist.Owner != client.Username || setlist.PID != int(client.PlayerID()) {
-		log.Printf("Player with PID %d attempted to update a setlist that does not belong to them, rejecting", req.PID)
-		return marshaler.MarshalResponse(service.Path(), []SetlistUpdateResponse{{0x16}})
-	}
-
 	// look for the mongo no documents error to determine if we are inserting a new setlist
 	// maybe there is a better way to do this?
 	isNewSetlist := err == mongo.ErrNoDocuments
+
+	// If it's an existing setlist, perform access control checks
+	if !isNewSetlist {
+		// Check if the setlist we are attempting to update is not a battle, as battles cannot be updated after-the-fact
+		if setlist.Type == 1000 || setlist.Type == 1001 || setlist.Type == 1002 {
+			log.Printf("Player with PID %d attempted to update a battle setlist, rejecting", req.PID)
+			return marshaler.MarshalResponse(service.Path(), []SetlistUpdateResponse{{0x16}})
+		}
+
+		// Access controls so that only the owner of the setlist can update it
+		if setlist.Owner != client.Username || setlist.PID != int(client.PlayerID()) {
+			log.Printf("Player with PID %d attempted to update a setlist that does not belong to them, rejecting", req.PID)
+			return marshaler.MarshalResponse(service.Path(), []SetlistUpdateResponse{{0x16}})
+		}
+	}
 
 	if isNewSetlist {
 		// Only update last_setlist_id if we are inserting a new setlist

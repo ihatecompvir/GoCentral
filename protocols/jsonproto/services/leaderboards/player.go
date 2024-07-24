@@ -180,7 +180,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 	}
 
 	if len(res) == 0 {
-		return marshaler.MarshalResponse(service.Path(), []PlayerGetResponse{{}})
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	} else {
 		return marshaler.MarshalResponse(service.Path(), res)
 	}

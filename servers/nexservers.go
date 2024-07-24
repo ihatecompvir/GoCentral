@@ -152,6 +152,7 @@ func StartSecureServer() {
 	natTraversalProtocol := nexproto.NewNATTraversalProtocol(SecureServer)
 	accountManagementProtocol := nexproto.NewAccountManagementProtocol(SecureServer)
 	messagingProtocolProtocol := nexproto.NewMessagingProtocol(SecureServer)
+	rbBinaryDataProtocol := nexproto.NewRBBinaryDataProtocol(SecureServer)
 
 	SecureServer.On("Connect", OnConnection)
 
@@ -175,6 +176,9 @@ func StartSecureServer() {
 
 	accountManagementProtocol.NintendoCreateAccount(NintendoCreateAccount)
 	accountManagementProtocol.SetStatus(SetStatus)
+
+	rbBinaryDataProtocol.GetBinaryData(GetBinaryData)
+	rbBinaryDataProtocol.SaveBinaryData(SaveBinaryData)
 
 	messagingProtocolProtocol.GetMessageHeaders(GetMessageHeaders)
 

@@ -22,3 +22,9 @@ func CombineJSONMethods(jsonStrings []string) (string, error) {
 
 	return string(output), nil
 }
+
+// GenerateEmptyJSONResponse generates an empty JSON response for the given service name
+// this is useful for things like leaderboards or battles or etc. so we can make the game show there are no scores or what not
+func GenerateEmptyJSONResponse(serviceName string) string {
+	return "[[\"" + serviceName + "\", \"\", [], []]]"
+}

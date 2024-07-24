@@ -60,8 +60,6 @@ func (mgr *ServicesManager) registerAll() {
 
 	mgr.register(accountlink.AccountLinkService{})
 
-	mgr.register(scores.ScoreRecordService{})
-
 	mgr.register(ticker.TickerInfoService{})
 
 	mgr.register(character.CharacterUpdateService{})
@@ -78,12 +76,18 @@ func (mgr *ServicesManager) registerAll() {
 	mgr.register(leaderboard.AccMaxrankGetService{})
 	mgr.register(leaderboard.AccRankRangeGetService{})
 	mgr.register(leaderboard.RankRangeGetService{})
+	mgr.register(leaderboard.BattleMaxrankGetService{})
+	mgr.register(leaderboard.BattlePlayerGetService{})
+	mgr.register(leaderboard.BattleRankRangeGetService{})
 
 	mgr.register(songlists.GetSonglistsService{})
 
-	mgr.register(battles.GetBattlesService{})
+	mgr.register(battles.GetBattlesClosedService{})
 	mgr.register(battles.LimitCheckService{})
 	mgr.register(battles.BattleCreateService{})
+
+	mgr.register(scores.ScoreRecordService{})
+	mgr.register(scores.BattleScoreRecordService{})
 
 	mgr.register(stats.StatsPadService{})
 

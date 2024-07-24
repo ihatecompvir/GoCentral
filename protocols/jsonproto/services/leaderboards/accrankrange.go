@@ -79,7 +79,6 @@ func (service AccRankRangeGetService) Handle(data string, database *mongo.Databa
 	for cur.Next(nil) {
 		username := "Player"
 
-		// create a value into which the single document can be decoded
 		var accomplishments models.Accomplishments
 		err := cur.Decode(&accomplishments)
 		if err != nil {

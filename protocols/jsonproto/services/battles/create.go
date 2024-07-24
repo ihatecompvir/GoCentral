@@ -123,7 +123,7 @@ func (service BattleCreateService) Handle(data string, database *mongo.Database,
 	setlist.ArtURL = ""
 	setlist.Desc = req.Description
 	setlist.Title = req.Name
-	setlist.Type = 0
+	setlist.Type = 1000
 	setlist.Owner = user.Username
 	setlist.OwnerGUID = user.GUID
 	setlist.SetlistID = config.LastSetlistID
@@ -135,6 +135,7 @@ func (service BattleCreateService) Handle(data string, database *mongo.Database,
 	setlist.TimeEndUnits = req.TimeEndUnits
 	setlist.Flags = req.Flags
 	setlist.Instrument = req.Instrument
+	setlist.BattleScores = []models.BattleScoreEntry{}
 
 	setlist.Created = time.Now().Unix()
 
@@ -162,6 +163,7 @@ func (service BattleCreateService) Handle(data string, database *mongo.Database,
 		{Key: "flags", Value: setlist.Flags},
 		{Key: "instrument", Value: setlist.Instrument},
 		{Key: "created", Value: setlist.Created},
+		{Key: "battle_scores", Value: setlist.BattleScores},
 	}
 
 	_, err = setlistCollection.InsertOne(context.TODO(), update)

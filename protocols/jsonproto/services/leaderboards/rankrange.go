@@ -138,7 +138,7 @@ func (service RankRangeGetService) Handle(data string, database *mongo.Database,
 	}
 
 	if len(res) == 0 {
-		return marshaler.MarshalResponse(service.Path(), []RankRangeGetResponse{{}})
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	} else {
 		return marshaler.MarshalResponse(service.Path(), res)
 	}
