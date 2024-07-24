@@ -3,13 +3,14 @@ package leaderboard
 import (
 	"context"
 	"log"
+	db "rb3server/database"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"sort"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type AccPlayerGetRequest struct {
@@ -41,7 +42,7 @@ type AccPlayerGetService struct {
 
 // a function that gets the acc_id and returns the proper field of the Accomplishments model
 // for example, campaign_metascore is LBGoalValueCampaignMetascore in models.Accomplishments
-func getAccomplishmentField(accID string, accomplishments models.Accomplishments) int {
+func getAccomplishmentField(accID string, accomplishments models.Accomplishments) []models.AccomplishmentScoreEntry {
 	switch accID {
 	case "campaign_metascore":
 		return accomplishments.LBGoalValueCampaignMetascore
@@ -106,7 +107,7 @@ func getAccomplishmentField(accID string, accomplishments models.Accomplishments
 	case "acc_deployvocalsonehundred":
 		return accomplishments.LBGoalValueAccDeployvocalsonehundred
 	default:
-		return 0
+		return []models.AccomplishmentScoreEntry{}
 	}
 }
 
@@ -123,63 +124,59 @@ func (service AccPlayerGetService) Handle(data string, database *mongo.Database,
 	}
 
 	if req.PID000 != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for accomplishment leaderboards")
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for acc leaderboards")
 		return "", err
 	}
 
 	accomplishmentsCollection := database.Collection("accomplishments")
-	usersCollection := database.Collection("users")
 
-	cur, err := accomplishmentsCollection.Find(context.TODO(), bson.D{}, options.Find().SetLimit(20).SetSort(bson.D{{"lb_goal_value_" + req.AccID, -1}}))
+	// FindOne the accomplishment scores
+	var accomplishments models.Accomplishments
+	err = accomplishmentsCollection.FindOne(context.TODO(), bson.M{}).Decode(&accomplishments)
+
 	if err != nil {
-		log.Printf("Could not find accomplishments for %v: %v", req.AccID, err)
-		return "", err
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
 	res := []AccPlayerGetResponse{}
 
-	curIndex := 1
+	accSlice := getAccomplishmentField(req.AccID, accomplishments)
 
-	for cur.Next(nil) {
-		username := "Player"
+	// sort acc scores by score
+	sort.Slice(accSlice, func(i, j int) bool {
+		return accSlice[i].Score > accSlice[j].Score
+	})
 
-		// create a value into which the single document can be decoded
-		var accomplishments models.Accomplishments
-		err := cur.Decode(&accomplishments)
-		if err != nil {
-			log.Printf("Could not decode accomplishments: %v", err)
-			return "", err
+	// find the player's score idx in the sorted list
+	// if the player has no scores, just start with the first score
+	playerScoreIdx := 0
+	for idx, score := range accSlice {
+		if score.PID == req.PID000 {
+			playerScoreIdx = idx
+			break
 		}
+	}
 
-		var user models.User
-		err = usersCollection.FindOne(nil, bson.M{"pid": accomplishments.PID}).Decode(&user)
+	// start and end idx must be in a window size of 20 otherwise the UI will act a bit buggy
+	startIdx := (playerScoreIdx / 20) * 20
+	endIdx := min(len(accSlice), startIdx+20)
 
-		if err != nil {
-			log.Printf("Could not find user with PID %d, defaulting to \"Player\": %v", accomplishments.PID, err)
-		}
-
-		if user.Username != "" {
-			username = user.Username
-		} else {
-			username = "Player"
-		}
-
+	for i := startIdx; i < endIdx; i++ {
+		score := accSlice[i]
 		res = append(res, AccPlayerGetResponse{
-			accomplishments.PID,
-			username,
-			0,
-			curIndex,
-			getAccomplishmentField(req.AccID, accomplishments),
-			0,
-			0,
-			100,
-			0,
-			0,
-			"",
-			1,
+			PID:          score.PID,
+			Score:        score.Score,
+			DiffID:       0,
+			Name:         db.GetUsernameForPID(score.PID),
+			IsPercentile: 0,
+			IsFriend:     0,
+			InstMask:     0,
+			NotesPct:     0,
+			UnnamedBand:  0,
+			PGUID:        "",
+			Rank:         i + 1,
+			ORank:        i + 1,
 		})
-
-		curIndex++
 	}
 
 	if len(res) == 0 {

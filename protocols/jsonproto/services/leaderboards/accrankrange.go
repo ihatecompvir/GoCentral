@@ -3,13 +3,14 @@ package leaderboard
 import (
 	"context"
 	"log"
+	db "rb3server/database"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"sort"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type AccRankRangeGetRequest struct {
@@ -54,68 +55,55 @@ func (service AccRankRangeGetService) Handle(data string, database *mongo.Databa
 	}
 
 	if req.PID000 != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for accomplishment rankrange leaderboards")
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for acc leaderboards")
 		return "", err
 	}
 
 	accomplishmentsCollection := database.Collection("accomplishments")
-	usersCollection := database.Collection("users")
 
-	cur, err := accomplishmentsCollection.Find(context.TODO(), bson.D{}, options.Find().
-		SetLimit(20).
-		SetSort(bson.D{{"lb_goal_value_" + req.AccID, -1}}).
-		SetSkip(int64(req.StartRank)).
-		SetLimit(int64(req.EndRank-(req.StartRank-1))))
+	// FindOne the accomplishment scores
+	var accomplishments models.Accomplishments
+	err = accomplishmentsCollection.FindOne(context.TODO(), bson.M{}).Decode(&accomplishments)
 
 	if err != nil {
-		log.Printf("Could not find accomplishments for %v: %v", req.AccID, err)
-		return "", err
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
 	res := []AccRankRangeGetResponse{}
 
-	curIndex := req.StartRank
+	accSlice := getAccomplishmentField(req.AccID, accomplishments)
 
-	for cur.Next(nil) {
-		username := "Player"
+	// sort acc scores by score
+	sort.Slice(accSlice, func(i, j int) bool {
+		return accSlice[i].Score > accSlice[j].Score
+	})
 
-		var accomplishments models.Accomplishments
-		err := cur.Decode(&accomplishments)
-		if err != nil {
-			log.Printf("Could not decode accomplishments: %v", err)
-			return "", err
+	// get the scores in the range, and append them to the response
+	for i := req.StartRank - 1; i < req.EndRank-1; i++ {
+		if i >= len(accSlice) {
+			break
 		}
 
-		var user models.User
-		err = usersCollection.FindOne(nil, bson.M{"pid": accomplishments.PID}).Decode(&user)
-
-		if err != nil {
-			log.Printf("Could not find user with PID %d, defaulting to \"Player\": %v", accomplishments.PID, err)
-		}
-
-		if user.Username != "" {
-			username = user.Username
-		} else {
-			username = "Player"
-		}
-
+		score := accSlice[i]
 		res = append(res, AccRankRangeGetResponse{
-			accomplishments.PID,
-			username,
-			0,
-			curIndex,
-			getAccomplishmentField(req.AccID, accomplishments),
-			0,
-			0,
-			100,
-			0,
-			0,
-			"",
-			1,
+			PID:          score.PID,
+			Name:         db.GetUsernameForPID(score.PID),
+			DiffID:       0,
+			Rank:         i + 1,
+			Score:        score.Score,
+			IsPercentile: 0,
+			InstMask:     0,
+			NotesPct:     0,
+			IsFriend:     0,
+			UnnamedBand:  0,
+			PGUID:        "",
+			ORank:        i + 1,
 		})
-
-		curIndex++
 	}
 
-	return marshaler.MarshalResponse(service.Path(), res)
+	if len(res) == 0 {
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+	} else {
+		return marshaler.MarshalResponse(service.Path(), res)
+	}
 }

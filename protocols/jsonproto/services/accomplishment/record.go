@@ -19,9 +19,6 @@ type AccomplishmentRecordRequest struct {
 	SessionGUID string `json:"session_guid"`
 	PID         int    `json:"pid"`
 
-	// there is more to this request but for now only extract the leaderboard values
-	// TODO: add the non-LB stuff here
-
 	LBGoalValueCampaignMetascore         int `json:"lb_goal_value_campaign_metascore"`
 	LBGoalValueAccTourgoldlocal1         int `json:"lb_goal_value_acc_tourgoldlocal1"`
 	LBGoalValueAccTourgoldlocal2         int `json:"lb_goal_value_acc_tourgoldlocal2"`
@@ -82,47 +79,123 @@ func (service AccomplishmentRecordService) Handle(data string, database *mongo.D
 	accomplishmentsCollection := database.Collection("accomplishments")
 
 	var accomplishments models.Accomplishments
-	err = accomplishmentsCollection.FindOne(nil, bson.M{"pid": req.PID}).Decode(&accomplishments)
+	err = accomplishmentsCollection.FindOne(nil, bson.M{}).Decode(&accomplishments)
 
-	filter := bson.D{{"pid", req.PID}}
-	update := bson.D{
-		{Key: "$set", Value: bson.D{
-			{Key: "lb_goal_value_campaign_metascore", Value: req.LBGoalValueCampaignMetascore},
-			{Key: "lb_goal_value_acc_tourgoldlocal1", Value: req.LBGoalValueAccTourgoldlocal1},
-			{Key: "lb_goal_value_acc_tourgoldlocal2", Value: req.LBGoalValueAccTourgoldlocal2},
-			{Key: "lb_goal_value_acc_tourgoldregional1", Value: req.LBGoalValueAccTourgoldregional1},
-			{Key: "lb_goal_value_acc_tourgoldregional2", Value: req.LBGoalValueAccTourgoldregional2},
-			{Key: "lb_goal_value_acc_tourgoldcontinental1", Value: req.LBGoalValueAccTourgoldcontinental1},
-			{Key: "lb_goal_value_acc_tourgoldcontinental2", Value: req.LBGoalValueAccTourgoldcontinental2},
-			{Key: "lb_goal_value_acc_tourgoldcontinental3", Value: req.LBGoalValueAccTourgoldcontinental3},
-			{Key: "lb_goal_value_acc_tourgoldglobal1", Value: req.LBGoalValueAccTourgoldglobal1},
-			{Key: "lb_goal_value_acc_tourgoldglobal2", Value: req.LBGoalValueAccTourgoldglobal2},
-			{Key: "lb_goal_value_acc_tourgoldglobal3", Value: req.LBGoalValueAccTourgoldglobal3},
-			{Key: "lb_goal_value_acc_overdrivemaintain3", Value: req.LBGoalValueAccOverdrivemaintain3},
-			{Key: "lb_goal_value_acc_overdrivecareer", Value: req.LBGoalValueAccOverdrivecareer},
-			{Key: "lb_goal_value_acc_careersaves", Value: req.LBGoalValueAccCareersaves},
-			{Key: "lb_goal_value_acc_millionpoints", Value: req.LBGoalValueAccMillionpoints},
-			{Key: "lb_goal_value_acc_bassstreaklarge", Value: req.LBGoalValueAccBassstreaklarge},
-			{Key: "lb_goal_value_acc_hopothreehundredbass", Value: req.LBGoalValueAccHopothreehundredbass},
-			{Key: "lb_goal_value_acc_drumfill170", Value: req.LBGoalValueAccDrumfill170},
-			{Key: "lb_goal_value_acc_drumstreaklong", Value: req.LBGoalValueAccDrumstreaklong},
-			{Key: "lb_goal_value_acc_deployguitarfour", Value: req.LBGoalValueAccDeployguitarfour},
-			{Key: "lb_goal_value_acc_guitarstreaklarge", Value: req.LBGoalValueAccGuitarstreaklarge},
-			{Key: "lb_goal_value_acc_hopoonethousand", Value: req.LBGoalValueAccHopoonethousand},
-			{Key: "lb_goal_value_acc_doubleawesomealot", Value: req.LBGoalValueAccDoubleawesomealot},
-			{Key: "lb_goal_value_acc_tripleawesomealot", Value: req.LBGoalValueAccTripleawesomealot},
-			{Key: "lb_goal_value_acc_keystreaklong", Value: req.LBGoalValueAccKeystreaklong},
-			{Key: "lb_goal_value_acc_probassstreakepic", Value: req.LBGoalValueAccProbassstreakepic},
-			{Key: "lb_goal_value_acc_prodrumroll3", Value: req.LBGoalValueAccProdrumroll3},
-			{Key: "lb_goal_value_acc_prodrumstreaklong", Value: req.LBGoalValueAccProdrumstreaklong},
-			{Key: "lb_goal_value_acc_proguitarstreakepic", Value: req.LBGoalValueAccProguitarstreakepic},
-			{Key: "lb_goal_value_acc_prokeystreaklong", Value: req.LBGoalValueAccProkeystreaklong},
-			{Key: "lb_goal_value_acc_deployvocals", Value: req.LBGoalValueAccDeployvocals},
-			{Key: "lb_goal_value_acc_deployvocalsonehundred", Value: req.LBGoalValueAccDeployvocalsonehundred},
-		}},
+	for idx, entry := range accomplishments.LBGoalValueCampaignMetascore {
+		if entry.PID == req.PID {
+			if entry.PID == req.PID {
+				accomplishments.LBGoalValueCampaignMetascore[idx].Score = req.LBGoalValueCampaignMetascore
+				accomplishments.LBGoalValueAccTourgoldlocal1[idx].Score = req.LBGoalValueAccTourgoldlocal1
+				accomplishments.LBGoalValueAccTourgoldlocal2[idx].Score = req.LBGoalValueAccTourgoldlocal2
+				accomplishments.LBGoalValueAccTourgoldregional1[idx].Score = req.LBGoalValueAccTourgoldregional1
+				accomplishments.LBGoalValueAccTourgoldregional2[idx].Score = req.LBGoalValueAccTourgoldregional2
+				accomplishments.LBGoalValueAccTourgoldcontinental1[idx].Score = req.LBGoalValueAccTourgoldcontinental1
+				accomplishments.LBGoalValueAccTourgoldcontinental2[idx].Score = req.LBGoalValueAccTourgoldcontinental2
+				accomplishments.LBGoalValueAccTourgoldcontinental3[idx].Score = req.LBGoalValueAccTourgoldcontinental3
+				accomplishments.LBGoalValueAccTourgoldglobal1[idx].Score = req.LBGoalValueAccTourgoldglobal1
+				accomplishments.LBGoalValueAccTourgoldglobal2[idx].Score = req.LBGoalValueAccTourgoldglobal2
+				accomplishments.LBGoalValueAccTourgoldglobal3[idx].Score = req.LBGoalValueAccTourgoldglobal3
+				accomplishments.LBGoalValueAccOverdrivemaintain3[idx].Score = req.LBGoalValueAccOverdrivemaintain3
+				accomplishments.LBGoalValueAccOverdrivecareer[idx].Score = req.LBGoalValueAccOverdrivecareer
+				accomplishments.LBGoalValueAccCareersaves[idx].Score = req.LBGoalValueAccCareersaves
+				accomplishments.LBGoalValueAccMillionpoints[idx].Score = req.LBGoalValueAccMillionpoints
+				accomplishments.LBGoalValueAccBassstreaklarge[idx].Score = req.LBGoalValueAccBassstreaklarge
+				accomplishments.LBGoalValueAccHopothreehundredbass[idx].Score = req.LBGoalValueAccHopothreehundredbass
+				accomplishments.LBGoalValueAccDrumfill170[idx].Score = req.LBGoalValueAccDrumfill170
+				accomplishments.LBGoalValueAccDrumstreaklong[idx].Score = req.LBGoalValueAccDrumstreaklong
+				accomplishments.LBGoalValueAccDeployguitarfour[idx].Score = req.LBGoalValueAccDeployguitarfour
+				accomplishments.LBGoalValueAccGuitarstreaklarge[idx].Score = req.LBGoalValueAccGuitarstreaklarge
+				accomplishments.LBGoalValueAccHopoonethousand[idx].Score = req.LBGoalValueAccHopoonethousand
+				accomplishments.LBGoalValueAccDoubleawesomealot[idx].Score = req.LBGoalValueAccDoubleawesomealot
+				accomplishments.LBGoalValueAccTripleawesomealot[idx].Score = req.LBGoalValueAccTripleawesomealot
+				accomplishments.LBGoalValueAccKeystreaklong[idx].Score = req.LBGoalValueAccKeystreaklong
+				accomplishments.LBGoalValueAccProbassstreakepic[idx].Score = req.LBGoalValueAccProbassstreakepic
+				accomplishments.LBGoalValueAccProdrumroll3[idx].Score = req.LBGoalValueAccProdrumroll3
+				accomplishments.LBGoalValueAccProdrumstreaklong[idx].Score = req.LBGoalValueAccProdrumstreaklong
+				accomplishments.LBGoalValueAccProguitarstreakepic[idx].Score = req.LBGoalValueAccProguitarstreakepic
+				accomplishments.LBGoalValueAccProkeystreaklong[idx].Score = req.LBGoalValueAccProkeystreaklong
+				accomplishments.LBGoalValueAccDeployvocals[idx].Score = req.LBGoalValueAccDeployvocals
+				accomplishments.LBGoalValueAccDeployvocalsonehundred[idx].Score = req.LBGoalValueAccDeployvocalsonehundred
+
+				goto update
+			}
+		}
 	}
+
+	accomplishments.LBGoalValueCampaignMetascore = append(accomplishments.LBGoalValueCampaignMetascore, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueCampaignMetascore})
+	accomplishments.LBGoalValueAccTourgoldlocal1 = append(accomplishments.LBGoalValueAccTourgoldlocal1, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccTourgoldlocal1})
+	accomplishments.LBGoalValueAccTourgoldlocal2 = append(accomplishments.LBGoalValueAccTourgoldlocal2, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccTourgoldlocal2})
+	accomplishments.LBGoalValueAccTourgoldregional1 = append(accomplishments.LBGoalValueAccTourgoldregional1, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccTourgoldregional1})
+	accomplishments.LBGoalValueAccTourgoldregional2 = append(accomplishments.LBGoalValueAccTourgoldregional2, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccTourgoldregional2})
+	accomplishments.LBGoalValueAccTourgoldcontinental1 = append(accomplishments.LBGoalValueAccTourgoldcontinental1, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccTourgoldcontinental1})
+	accomplishments.LBGoalValueAccTourgoldcontinental2 = append(accomplishments.LBGoalValueAccTourgoldcontinental2, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccTourgoldcontinental2})
+	accomplishments.LBGoalValueAccTourgoldcontinental3 = append(accomplishments.LBGoalValueAccTourgoldcontinental3, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccTourgoldcontinental3})
+	accomplishments.LBGoalValueAccTourgoldglobal1 = append(accomplishments.LBGoalValueAccTourgoldglobal1, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccTourgoldglobal1})
+	accomplishments.LBGoalValueAccTourgoldglobal2 = append(accomplishments.LBGoalValueAccTourgoldglobal2, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccTourgoldglobal2})
+	accomplishments.LBGoalValueAccTourgoldglobal3 = append(accomplishments.LBGoalValueAccTourgoldglobal3, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccTourgoldglobal3})
+	accomplishments.LBGoalValueAccOverdrivemaintain3 = append(accomplishments.LBGoalValueAccOverdrivemaintain3, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccOverdrivemaintain3})
+	accomplishments.LBGoalValueAccOverdrivecareer = append(accomplishments.LBGoalValueAccOverdrivecareer, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccOverdrivecareer})
+	accomplishments.LBGoalValueAccCareersaves = append(accomplishments.LBGoalValueAccCareersaves, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccCareersaves})
+	accomplishments.LBGoalValueAccMillionpoints = append(accomplishments.LBGoalValueAccMillionpoints, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccMillionpoints})
+	accomplishments.LBGoalValueAccBassstreaklarge = append(accomplishments.LBGoalValueAccBassstreaklarge, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccBassstreaklarge})
+	accomplishments.LBGoalValueAccHopothreehundredbass = append(accomplishments.LBGoalValueAccHopothreehundredbass, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccHopothreehundredbass})
+	accomplishments.LBGoalValueAccDrumfill170 = append(accomplishments.LBGoalValueAccDrumfill170, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccDrumfill170})
+	accomplishments.LBGoalValueAccDrumstreaklong = append(accomplishments.LBGoalValueAccDrumstreaklong, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccDrumstreaklong})
+	accomplishments.LBGoalValueAccDeployguitarfour = append(accomplishments.LBGoalValueAccDeployguitarfour, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccDeployguitarfour})
+	accomplishments.LBGoalValueAccGuitarstreaklarge = append(accomplishments.LBGoalValueAccGuitarstreaklarge, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccGuitarstreaklarge})
+	accomplishments.LBGoalValueAccHopoonethousand = append(accomplishments.LBGoalValueAccHopoonethousand, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccHopoonethousand})
+	accomplishments.LBGoalValueAccDoubleawesomealot = append(accomplishments.LBGoalValueAccDoubleawesomealot, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccDoubleawesomealot})
+	accomplishments.LBGoalValueAccTripleawesomealot = append(accomplishments.LBGoalValueAccTripleawesomealot, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccTripleawesomealot})
+	accomplishments.LBGoalValueAccKeystreaklong = append(accomplishments.LBGoalValueAccKeystreaklong, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccKeystreaklong})
+	accomplishments.LBGoalValueAccProbassstreakepic = append(accomplishments.LBGoalValueAccProbassstreakepic, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccProbassstreakepic})
+	accomplishments.LBGoalValueAccProdrumroll3 = append(accomplishments.LBGoalValueAccProdrumroll3, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccProdrumroll3})
+	accomplishments.LBGoalValueAccProdrumstreaklong = append(accomplishments.LBGoalValueAccProdrumstreaklong, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccProdrumstreaklong})
+	accomplishments.LBGoalValueAccProguitarstreakepic = append(accomplishments.LBGoalValueAccProguitarstreakepic, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccProguitarstreakepic})
+	accomplishments.LBGoalValueAccProkeystreaklong = append(accomplishments.LBGoalValueAccProkeystreaklong, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccProkeystreaklong})
+	accomplishments.LBGoalValueAccDeployvocals = append(accomplishments.LBGoalValueAccDeployvocals, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccDeployvocals})
+	accomplishments.LBGoalValueAccDeployvocalsonehundred = append(accomplishments.LBGoalValueAccDeployvocalsonehundred, models.AccomplishmentScoreEntry{req.PID, req.LBGoalValueAccDeployvocalsonehundred})
+
+update:
+	update := bson.M{
+		"$set": bson.M{
+			"lb_goal_value_campaign_metascore":         accomplishments.LBGoalValueCampaignMetascore,
+			"lb_goal_value_acc_tourgoldlocal1":         accomplishments.LBGoalValueAccTourgoldlocal1,
+			"lb_goal_value_acc_tourgoldlocal2":         accomplishments.LBGoalValueAccTourgoldlocal2,
+			"lb_goal_value_acc_tourgoldregional1":      accomplishments.LBGoalValueAccTourgoldregional1,
+			"lb_goal_value_acc_tourgoldregional2":      accomplishments.LBGoalValueAccTourgoldregional2,
+			"lb_goal_value_acc_tourgoldcontinental1":   accomplishments.LBGoalValueAccTourgoldcontinental1,
+			"lb_goal_value_acc_tourgoldcontinental2":   accomplishments.LBGoalValueAccTourgoldcontinental2,
+			"lb_goal_value_acc_tourgoldcontinental3":   accomplishments.LBGoalValueAccTourgoldcontinental3,
+			"lb_goal_value_acc_tourgoldglobal1":        accomplishments.LBGoalValueAccTourgoldglobal1,
+			"lb_goal_value_acc_tourgoldglobal2":        accomplishments.LBGoalValueAccTourgoldglobal2,
+			"lb_goal_value_acc_tourgoldglobal3":        accomplishments.LBGoalValueAccTourgoldglobal3,
+			"lb_goal_value_acc_overdrivemaintain3":     accomplishments.LBGoalValueAccOverdrivemaintain3,
+			"lb_goal_value_acc_overdrivecareer":        accomplishments.LBGoalValueAccOverdrivecareer,
+			"lb_goal_value_acc_careersaves":            accomplishments.LBGoalValueAccCareersaves,
+			"lb_goal_value_acc_millionpoints":          accomplishments.LBGoalValueAccMillionpoints,
+			"lb_goal_value_acc_bassstreaklarge":        accomplishments.LBGoalValueAccBassstreaklarge,
+			"lb_goal_value_acc_hopothreehundredbass":   accomplishments.LBGoalValueAccHopothreehundredbass,
+			"lb_goal_value_acc_drumfill170":            accomplishments.LBGoalValueAccDrumfill170,
+			"lb_goal_value_acc_drumstreaklong":         accomplishments.LBGoalValueAccDrumstreaklong,
+			"lb_goal_value_acc_deployguitarfour":       accomplishments.LBGoalValueAccDeployguitarfour,
+			"lb_goal_value_acc_guitarstreaklarge":      accomplishments.LBGoalValueAccGuitarstreaklarge,
+			"lb_goal_value_acc_hopoonethousand":        accomplishments.LBGoalValueAccHopoonethousand,
+			"lb_goal_value_acc_doubleawesomealot":      accomplishments.LBGoalValueAccDoubleawesomealot,
+			"lb_goal_value_acc_tripleawesomealot":      accomplishments.LBGoalValueAccTripleawesomealot,
+			"lb_goal_value_acc_keystreaklong":          accomplishments.LBGoalValueAccKeystreaklong,
+			"lb_goal_value_acc_probassstreakepic":      accomplishments.LBGoalValueAccProbassstreakepic,
+			"lb_goal_value_acc_prodrumroll3":           accomplishments.LBGoalValueAccProdrumroll3,
+			"lb_goal_value_acc_prodrumstreaklong":      accomplishments.LBGoalValueAccProdrumstreaklong,
+			"lb_goal_value_acc_proguitarstreakepic":    accomplishments.LBGoalValueAccProguitarstreakepic,
+			"lb_goal_value_acc_prokeystreaklong":       accomplishments.LBGoalValueAccProkeystreaklong,
+			"lb_goal_value_acc_deployvocals":           accomplishments.LBGoalValueAccDeployvocals,
+			"lb_goal_value_acc_deployvocalsonehundred": accomplishments.LBGoalValueAccDeployvocalsonehundred,
+		},
+	}
+
 	opts := options.Update().SetUpsert(true)
-	_, err = accomplishmentsCollection.UpdateOne(context.TODO(), filter, update, opts)
+
+	_, err = accomplishmentsCollection.UpdateOne(context.TODO(), bson.M{}, update, opts)
 
 	if err != nil {
 		log.Printf("Could not update accomplishments for PID %v: %s\n", req.PID, err)

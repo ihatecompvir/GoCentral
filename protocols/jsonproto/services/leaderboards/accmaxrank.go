@@ -3,6 +3,7 @@ package leaderboard
 import (
 	"context"
 	"log"
+	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
 	"github.com/ihatecompvir/nex-go"
@@ -45,15 +46,18 @@ func (service AccMaxrankGetService) Handle(data string, database *mongo.Database
 
 	accomplishmentsCollection := database.Collection("accomplishments")
 
-	numAccomplishments, err := accomplishmentsCollection.CountDocuments(context.TODO(), bson.D{})
+	var accomplishments models.Accomplishments
+	err = accomplishmentsCollection.FindOne(context.TODO(), bson.M{"acc_id": req.AccID}).Decode(&accomplishments)
+
 	if err != nil {
 		return marshaler.MarshalResponse(service.Path(), []AccMaxrankGetResponse{{
 			0,
 		}})
 	}
 
+	// return the number of scores, aka the "max rank"
 	res := []AccMaxrankGetResponse{{
-		int(numAccomplishments),
+		len(getAccomplishmentField(req.AccID, accomplishments)),
 	}}
 
 	return marshaler.MarshalResponse(service.Path(), res)
