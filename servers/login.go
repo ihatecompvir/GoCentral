@@ -108,6 +108,12 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 		return
 	}
 
+	var config models.Config
+	err = configCollection.FindOne(context.TODO(), bson.M{}).Decode(&config)
+	if err != nil {
+		log.Printf("Could not get config %v\n", err)
+	}
+
 	if machineType == 0 || machineType == 1 {
 		if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
 			log.Printf("%s has never connected before - create DB entry\n", username)
@@ -116,7 +122,7 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 
 			_, err = users.InsertOne(nil, bson.D{
 				{Key: "username", Value: username},
-				{Key: "pid", Value: Config.LastPID + 1},
+				{Key: "pid", Value: config.LastPID + 1},
 				{Key: "console_type", Value: machineType},
 				{Key: "guid", Value: guid},
 			})
@@ -131,14 +137,18 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 				nil,
 				bson.M{},
 				bson.D{
-					{"$set", bson.D{{"last_pid", Config.LastPID + 1}}},
+					{"$set", bson.D{{"last_pid", config.LastPID + 1}}},
 				},
 			)
 			if err != nil {
 				log.Println("Could not update config in database: ", err)
 			}
 
-			Config.LastPID++
+			Config.LastPID = config.LastPID + 1
+			Config.LastMachineID = config.LastMachineID
+			Config.LastBandID = config.LastBandID
+			Config.LastSetlistID = config.LastSetlistID
+			Config.LastCharacterID = config.LastCharacterID
 
 		}
 	} else if machineType == 2 {

@@ -1,6 +1,7 @@
 package servers
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"rb3server/database"
@@ -31,6 +32,12 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 		ctype = 2
 	}
 
+	var config models.Config
+	err = configCollection.FindOne(context.TODO(), bson.M{}).Decode(&config)
+	if err != nil {
+		log.Printf("Could not get config %v\n", err)
+	}
+
 	// Create a new user if not currently registered.
 	if result := users.FindOne(nil, bson.M{"username": username}).Decode(&user); result != nil {
 		log.Printf("%s has never connected before - create DB entry\n", username)
@@ -39,7 +46,7 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 
 		_, err = users.InsertOne(nil, bson.D{
 			{Key: "username", Value: username},
-			{Key: "pid", Value: Config.LastPID + 1},
+			{Key: "pid", Value: config.LastPID + 1},
 			{Key: "console_type", Value: ctype},
 			{Key: "guid", Value: guid},
 			{Key: "created_by_machine_id", Value: client.PlayerID()},
@@ -55,7 +62,7 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 			nil,
 			bson.M{},
 			bson.D{
-				{"$set", bson.D{{"last_pid", Config.LastPID + 1}}},
+				{"$set", bson.D{{"last_pid", config.LastPID + 1}}},
 			},
 		)
 		if err != nil {
@@ -64,7 +71,11 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 			return
 		}
 
-		Config.LastPID++
+		Config.LastPID = config.LastPID + 1
+		Config.LastMachineID = config.LastMachineID
+		Config.LastBandID = config.LastBandID
+		Config.LastSetlistID = config.LastSetlistID
+		Config.LastCharacterID = config.LastCharacterID
 
 		// make sure we actually set the server-assigned PID to the new one when it is created
 		client.SetPlayerID(user.PID)

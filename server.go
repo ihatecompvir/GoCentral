@@ -70,7 +70,7 @@ func main() {
 		servers.Config.LastBandID = 0
 		servers.Config.LastSetlistID = 0
 		servers.Config.ProfanityList = []string{}
-		servers.Config.BattleLimit = 5
+		servers.Config.BattleLimit = 1
 
 		if err != nil {
 			log.Fatalln("Could not create default config! GoCentral cannot proceed: ", err)
