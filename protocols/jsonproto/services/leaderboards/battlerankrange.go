@@ -86,7 +86,7 @@ func (service BattleRankRangeGetService) Handle(data string, database *mongo.Dat
 		score := setlist.BattleScores[i]
 		res = append(res, BattleRankRangeGetResponse{
 			PID:          score.PID,
-			Name:         db.GetUsernameForPID(score.PID),
+			Name:         db.GetConsolePrefixedUsernameForPID(score.PID),
 			DiffID:       0,
 			Rank:         i + 1,
 			Score:        score.Score,

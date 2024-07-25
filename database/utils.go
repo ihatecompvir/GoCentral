@@ -24,6 +24,29 @@ func GetUsernameForPID(pid int) string {
 	}
 }
 
+func GetConsolePrefixedUsernameForPID(pid int) string {
+	var user models.User
+
+	usersCollection := GocentralDatabase.Collection("users")
+
+	_ = usersCollection.FindOne(nil, bson.M{"pid": pid}).Decode(&user)
+
+	if user.Username != "" {
+		switch user.ConsoleType {
+		case 0:
+			return "[Xbox 360] " + user.Username
+		case 1:
+			return "[PS3] " + user.Username
+		case 2:
+			return "[Wii] " + user.Username
+		default:
+			return user.Username
+		}
+	} else {
+		return "Player"
+	}
+}
+
 // returns the name of the band for a given band_id
 func GetBandNameForBandID(pid int) string {
 	var band models.Band

@@ -129,7 +129,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 		} else {
 			res = append(res, PlayerGetResponse{
 				PID:          score.OwnerPID,
-				Name:         db.GetUsernameForPID(score.OwnerPID),
+				Name:         db.GetConsolePrefixedUsernameForPID(score.OwnerPID),
 				DiffID:       score.DiffID,
 				Rank:         int(idx),
 				Score:        score.Score,

@@ -102,7 +102,7 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 			PID:          score.PID,
 			Score:        score.Score,
 			DiffID:       0,
-			Name:         db.GetUsernameForPID(score.PID),
+			Name:         db.GetConsolePrefixedUsernameForPID(score.PID),
 			IsPercentile: 0,
 			IsFriend:     0,
 			InstMask:     0,

@@ -118,7 +118,7 @@ func (service RankRangeGetService) Handle(data string, database *mongo.Database,
 		} else {
 			res = append(res, RankRangeGetResponse{
 				PID:          score.OwnerPID,
-				Name:         db.GetUsernameForPID(score.OwnerPID),
+				Name:         db.GetConsolePrefixedUsernameForPID(score.OwnerPID),
 				DiffID:       score.DiffID,
 				Rank:         idx,
 				Score:        score.Score,
