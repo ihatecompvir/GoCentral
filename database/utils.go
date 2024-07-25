@@ -58,6 +58,11 @@ func GetBandNameForBandID(pid int) string {
 	if band.Name != "" {
 		return band.Name
 	} else {
-		return "Band"
+		username := GetUsernameForPID(pid)
+		if username != "" {
+			return username + "'s Band"
+		} else {
+			return "Unnamed Band"
+		}
 	}
 }
