@@ -1,6 +1,7 @@
 package ticker
 
 import (
+	"context"
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
@@ -57,18 +58,93 @@ func (service TickerInfoService) Handle(data string, database *mongo.Database, c
 	var band models.Band
 	err = bandsCollection.FindOne(nil, bson.M{"pid": req.PID}).Decode(&band)
 
+	setlistsCollection := database.Collection("setlists")
+
+	// count the number of setlists with a type of 1000, 1001, or 1002
+	battleCount, err := setlistsCollection.CountDocuments(nil, bson.M{"type": bson.M{"$in": []int{1000, 1001, 1002}}})
+	if err != nil {
+		return "", err
+	}
+
+	scoresCollection := database.Collection("scores")
+
+	// Aggregation to get total scores for each player across all instruments
+	// mongo actually the GOAT for this
+	pipeline := mongo.Pipeline{
+		{{"$group", bson.D{{"_id", "$pid"}, {"totalScore", bson.D{{"$sum", "$score"}}}}}},
+		{{"$sort", bson.D{{"totalScore", -1}}}},
+	}
+
+	cursor, err := scoresCollection.Aggregate(context.TODO(), pipeline)
+	if err != nil {
+		return "", err
+	}
+	defer cursor.Close(context.TODO())
+
+	var results []struct {
+		ID         int `bson:"_id"`
+		TotalScore int `bson:"totalScore"`
+	}
+	if err := cursor.All(context.TODO(), &results); err != nil {
+		return "", err
+	}
+
+	// Calculate overall rank
+	totalScoreRank := 0
+	for i, result := range results {
+		if result.ID == req.PID {
+			totalScoreRank = i + 1
+			break
+		}
+	}
+	if totalScoreRank == 0 {
+		totalScoreRank = len(results) + 1
+	}
+
+	// Aggregation to get total scores for the specified instrument
+	rolePipeline := mongo.Pipeline{
+		{{"$match", bson.D{{"role_id", req.RoleID}}}},
+		{{"$group", bson.D{{"_id", "$pid"}, {"totalScore", bson.D{{"$sum", "$score"}}}}}},
+		{{"$sort", bson.D{{"totalScore", -1}}}},
+	}
+
+	roleCursor, err := scoresCollection.Aggregate(context.TODO(), rolePipeline)
+	if err != nil {
+		return "", err
+	}
+	defer roleCursor.Close(context.TODO())
+
+	var roleResults []struct {
+		ID         int `bson:"_id"`
+		TotalScore int `bson:"totalScore"`
+	}
+	if err := roleCursor.All(context.TODO(), &roleResults); err != nil {
+		return "", err
+	}
+
+	roleRank := 0
+	for i, result := range roleResults {
+		if result.ID == req.PID {
+			roleRank = i + 1
+			break
+		}
+	}
+	if roleRank == 0 {
+		roleRank = len(roleResults) + 1
+	}
+
 	// Spoof account linking status, 12345 pid
 	res := []TickerInfoResponse{{
 		req.PID,
 		"",
-		0,
-		3,
-		0,
-		0,
+		int(battleCount),
+		req.RoleID,
+		roleRank,
+		1,
 		0,
 		band.BandID,
-		0,
-		0,
+		totalScoreRank,
+		1,
 		0,
 	}}
 

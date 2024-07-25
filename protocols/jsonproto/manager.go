@@ -58,18 +58,24 @@ func (mgr *ServicesManager) registerAll() {
 	mgr.register(setlists.SetlistSyncService{})
 	mgr.register(setlists.SetlistUpdateService{})
 
+	// account linking
 	mgr.register(accountlink.AccountLinkService{})
 
+	// ticker for instaranks and etc.
 	mgr.register(ticker.TickerInfoService{})
 
+	// entities
 	mgr.register(character.CharacterUpdateService{})
 	mgr.register(band.BandUpdateService{})
 	mgr.register(entities.GetLinkcodeService{})
 
+	// performance
 	mgr.register(performance.PerformanceRecordService{})
 
+	// accomplishments
 	mgr.register(accomplishment.AccomplishmentRecordService{})
 
+	// leaderboards
 	mgr.register(leaderboard.MaxrankGetService{})
 	mgr.register(leaderboard.PlayerGetService{})
 	mgr.register(leaderboard.AccPlayerGetService{})
@@ -79,16 +85,21 @@ func (mgr *ServicesManager) registerAll() {
 	mgr.register(leaderboard.BattleMaxrankGetService{})
 	mgr.register(leaderboard.BattlePlayerGetService{})
 	mgr.register(leaderboard.BattleRankRangeGetService{})
+	mgr.register(leaderboard.PlayerranksGetService{})
 
+	// songlists
 	mgr.register(songlists.GetSonglistsService{})
 
+	// battles
 	mgr.register(battles.GetBattlesClosedService{})
 	mgr.register(battles.LimitCheckService{})
 	mgr.register(battles.BattleCreateService{})
 
+	// score recording
 	mgr.register(scores.ScoreRecordService{})
 	mgr.register(scores.BattleScoreRecordService{})
 
+	// stats
 	mgr.register(stats.StatsPadService{})
 
 }

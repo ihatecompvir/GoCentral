@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"strconv"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
@@ -63,6 +64,19 @@ func (service ScoreRecordService) Path() string {
 	return "scores/record"
 }
 
+// instarank documentation
+// part_1:
+// a - top rank percent (%X)
+// b - exact rank (#X)
+// c - previous best X (#X)
+// d - score | rank "Get SCORE more points to reach %RANK on the band leaderboard"
+// e - score | rank "Get SCORE more points to reach #RANK on the band leaderboard"
+// part_2
+// f - You didn't beat any friends (doesn't work? or maybe this is just to hide the second label)
+// g - band name "You beat BAND NAME'S score"
+// h - rival name | num beat "You beat the scores of BAND and NUM other bands"
+// i - score | rival name "Get SCORE more points to beat RIVAL NAME"
+
 func (service ScoreRecordService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req ScoreRecordRequest
 
@@ -78,7 +92,9 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 
 	scoresCollection := database.Collection("scores")
 
-	// every PID in the request has a score and etc. so make sure all those get added to the DB
+	scoreHigher := []bool{}
+	currentScore := []int{}
+
 	for idx, pid := range req.PIDs {
 		var Score models.Score
 		Score.OwnerPID = pid
@@ -94,42 +110,42 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			Score.BOI = 0
 		} else {
 			Score.BOI = 1
-			Score.InstrumentMask = instrumentMap[req.RoleIDs[idx]] // make sure the instrument mask for individual instruments is right
+			Score.InstrumentMask = instrumentMap[req.RoleIDs[idx]]
 		}
 
-		// upsert the new score
-		_, err = scoresCollection.UpdateOne(
-			nil,
-			bson.M{"song_id": req.SongID, "pid": Score.OwnerPID, "role_id": Score.RoleID},
-			bson.D{
-				{"$set", bson.D{
-					{"song_id", Score.SongID},
-					{"pid", Score.OwnerPID},
-					{"role_id", Score.RoleID},
-					{"score", Score.Score},
-					{"notespct", Score.NotesPercent},
-					{"stars", Score.Stars},
-					{"diff_id", Score.DiffID},
-					{"boi", Score.BOI},
-					{"instrument_mask", Score.InstrumentMask},
-				}},
-			},
-			options.Update().SetUpsert(true),
-		)
-	}
+		// Retrieve the existing score
+		var existingScore models.Score
+		err := scoresCollection.FindOne(context.TODO(), bson.M{"song_id": req.SongID, "pid": Score.OwnerPID, "role_id": Score.RoleID}).Decode(&existingScore)
 
-	// instarank documentation
-	// part_1:
-	// a - top rank percent (%X)
-	// b - exact rank (#X)
-	// c - previous best X (#X)
-	// d - score | rank "Get SCORE more points to reach %RANK on the band leaderboard"
-	// e - score | rank "Get SCORE more points to reach #RANK on the band leaderboard"
-	// part_2
-	// f - You didn't beat any friends (doesn't work? or maybe this is just to hide the second label)
-	// g - band name "You beat BAND NAME'S score"
-	// h - rival name | num beat "You beat the scores of BAND and NUM other bands"
-	// i - score | rival name "Get SCORE more points to beat RIVAL NAME"
+		isNewScoreHigher := err == mongo.ErrNoDocuments || Score.Score > existingScore.Score
+		scoreHigher = append(scoreHigher, isNewScoreHigher)
+
+		// Only update if the new score is higher
+		if isNewScoreHigher {
+			_, err = scoresCollection.UpdateOne(
+				nil,
+				bson.M{"song_id": req.SongID, "pid": Score.OwnerPID, "role_id": Score.RoleID},
+				bson.D{
+					{"$set", bson.D{
+						{"song_id", Score.SongID},
+						{"pid", Score.OwnerPID},
+						{"role_id", Score.RoleID},
+						{"score", Score.Score},
+						{"notespct", Score.NotesPercent},
+						{"stars", Score.Stars},
+						{"diff_id", Score.DiffID},
+						{"boi", Score.BOI},
+						{"instrument_mask", Score.InstrumentMask},
+					}},
+				},
+				options.Update().SetUpsert(true),
+			)
+
+			currentScore = append(currentScore, Score.Score)
+		} else {
+			currentScore = append(currentScore, existingScore.Score)
+		}
+	}
 
 	res := []ScoreRecordResponse{}
 
@@ -138,33 +154,60 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 	for i := 0; i < (numPids / 2); i++ {
 		playerScoreIdx, _ := scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleIDs[i], "score": bson.M{"$gt": req.Scores[i]}})
 
-		instarank := ScoreRecordResponse{
-			req.SongID,
-			0,
-			int(playerScoreIdx + 1),
-			0,
-			"b",
-			"f",
-			req.Slots[i+(numPids/2)],
-		}
+		if scoreHigher[i] {
+			instarank := ScoreRecordResponse{
+				req.SongID,
+				0,
+				int(playerScoreIdx + 1),
+				0,
+				"b",
+				"f",
+				req.Slots[i+(numPids/2)],
+			}
 
-		res = append(res, instarank)
+			res = append(res, instarank)
+		} else {
+			instarank := ScoreRecordResponse{
+				req.SongID,
+				0,
+				int(playerScoreIdx + 1),
+				0,
+				"c|" + strconv.Itoa(currentScore[i]),
+				"f",
+				req.Slots[i+(numPids/2)],
+			}
+			res = append(res, instarank)
+		}
 	}
 
 	for i := numPids / 2; i < numPids; i++ {
 		playerScoreIdx, _ := scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleIDs[i], "score": bson.M{"$gt": req.Scores[i]}})
 
-		instarank := ScoreRecordResponse{
-			req.SongID,
-			1,
-			int(playerScoreIdx + 1),
-			0,
-			"b",
-			"f",
-			req.Slots[i],
-		}
+		if scoreHigher[i] {
+			instarank := ScoreRecordResponse{
+				req.SongID,
+				1,
+				int(playerScoreIdx + 1),
+				0,
+				"b",
+				"f",
+				req.Slots[i],
+			}
 
-		res = append(res, instarank)
+			res = append(res, instarank)
+		} else {
+			instarank := ScoreRecordResponse{
+				req.SongID,
+				1,
+				int(playerScoreIdx + 1),
+				0,
+				"c|" + strconv.Itoa(currentScore[i]),
+				"f",
+				req.Slots[i],
+			}
+
+			res = append(res, instarank)
+		}
 	}
 
 	return marshaler.MarshalResponse(service.Path(), res)
