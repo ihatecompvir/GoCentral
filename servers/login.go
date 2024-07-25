@@ -1,6 +1,7 @@
 package servers
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/md5"
 	"encoding/hex"
@@ -95,11 +96,9 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 	if client.Server().AccessKey() == "d52d1e000328fbc724fde65006b88b56" { // xbox 360
 		log.Println("Xbox client connecting")
 		machineType = 0
-		client.Username = "XBOX"
 	} else if client.Server().AccessKey() == "bfa620c57c2d3bcdf4362a6fa6418e58" {
 		log.Println("PS3 client connecting")
 		machineType = 1
-		client.Username = "PS3"
 	} else if client.Server().AccessKey() == "e97dc2ce9904698f84cae429a41b328a" {
 		log.Println("Wii client connecting")
 		machineType = 2
@@ -142,22 +141,69 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 			Config.LastPID++
 
 		}
-		// client.Username = username
 	} else if machineType == 2 {
-		client.Username = "Master User"
-		user.PID = 12345678 // master user PID is currently 12345678 - probably should go with 0 or something since it is a special account
-		client.WiiFC = res[1]
-		log.Printf("Wii client detected, friend code %v\n", client.WiiFC)
+		// check if the machine ID is already in the DB
+		machinesCollection := database.GocentralDatabase.Collection("machines")
+
+		var machine models.Machine
+
+		// try to find the machine via the Wii friend code (res[1])
+		_ = machinesCollection.FindOne(context.TODO(), bson.M{"wii_friend_code": res[1]}).Decode(&machine)
+
+		if machine.MachineID == 0 {
+			log.Printf("Wii with friend code %v has never connected before - create DB entry\n", res[1])
+
+			var config models.Config
+			configCollection := database.GocentralDatabase.Collection("config")
+			err = configCollection.FindOne(context.TODO(), bson.M{}).Decode(&config)
+			if err != nil {
+				log.Printf("Could not get config %v\n", err)
+			}
+
+			_, err = configCollection.UpdateOne(
+				context.TODO(),
+				bson.M{},
+				bson.D{
+					{Key: "$set", Value: bson.D{{"last_machine_id", Config.LastMachineID + 1}}},
+				},
+			)
+
+			if err != nil {
+				log.Println("Could not update config in database: ", err)
+			}
+
+			_, err = machinesCollection.InsertOne(context.TODO(), bson.D{
+				{Key: "wii_friend_code", Value: res[1]},
+				{Key: "console_type", Value: 2},
+				{Key: "machine_id", Value: Config.LastMachineID + 1},
+				{Key: "status", Value: ""},
+			})
+
+			if err != nil {
+				log.Printf("Could not create Wii with friend code %v: %s\n", res[1], err)
+				SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, 0x00010001)
+				return
+			}
+
+			Config.LastMachineID++
+		} else {
+			user.PID = uint32(machine.MachineID)
+			client.WiiFC = machine.WiiFriendCode
+			log.Printf("Wii client detected with friend code %v, pid %v, username %v %v\n", client.WiiFC, user.PID, username, client.Username)
+		}
 	}
 
-	log.Printf("%s requesting log in, has PID %v\n", username, user.PID)
+	client.Username = username
+
 	var encryptedTicket []byte
 	var kerberosKey []byte
 
 	client.SetPlayerID(user.PID)
 
+	log.Printf("%s requesting log in, has PID %v\n", username, user.PID)
+
 	// generate the ticket and pass the friend code as the pwd on Wii, or use static password on PS3
-	if client.Username == "Master User" {
+	if machineType == 2 {
 		encryptedTicket, kerberosKey = generateKerberosTicket(user.PID, uint32(serverPID), 16, client.WiiFC)
 	} else {
 		encryptedTicket, kerberosKey = generateKerberosTicket(user.PID, uint32(serverPID), 16, "")

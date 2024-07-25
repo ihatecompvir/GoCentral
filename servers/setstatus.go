@@ -1,6 +1,7 @@
 package servers
 
 import (
+	"context"
 	"log"
 	"rb3server/database"
 
@@ -12,21 +13,22 @@ import (
 func SetStatus(err error, client *nex.Client, callID uint32, status string) {
 
 	if client.PlayerID() == 0 {
-		log.Println("Client is attempting to update their status without a valid server-assigned PID, rejecting call")
+		log.Println("Machine is attempting to update its status without a valid server-assigned machine ID, rejecting call")
 		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
 		return
 	}
-	usersCollection := database.GocentralDatabase.Collection("users")
-	_, err = usersCollection.UpdateOne(
-		nil,
-		bson.M{"username": client.Username},
+
+	machinesCollection := database.GocentralDatabase.Collection("machines")
+	_, err = machinesCollection.UpdateOne(
+		context.TODO(),
+		bson.M{"machine_id": client.PlayerID()},
 		bson.D{
 			{"$set", bson.D{{"status", status}}},
 		},
 	)
 
 	if err != nil {
-		log.Printf("Could not update status for user %s: %s\n", client.Username, err)
+		log.Printf("Could not update status for machine %s: %s\n", client.Username, err)
 		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
 		return
 	}

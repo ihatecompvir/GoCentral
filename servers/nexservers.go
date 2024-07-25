@@ -1,6 +1,7 @@
 package servers
 
 import (
+	"context"
 	"crypto/rc4"
 	"log"
 	"os"
@@ -46,10 +47,24 @@ func OnConnection(packet *nex.PacketV0) {
 
 	// Get username for client from PID. This avoids having to grab it from the ticket
 	// On Wii, the ticket does not contain the username so this is a platform-agnostic solution
+
+	// first check for it in the users db
 	var user models.User
 	users := database.GocentralDatabase.Collection("users")
 	users.FindOne(nil, bson.M{"pid": userPid}).Decode(&user)
 	packet.Sender().Username = user.Username
+
+	// if this fails, check for it in the machines db since this will be a machine login
+	if user.Username == "" {
+		machines := database.GocentralDatabase.Collection("machines")
+
+		var machine models.Machine
+		machines.FindOne(context.TODO(), bson.M{"machine_id": userPid}).Decode(&machine)
+		packet.Sender().Username = "Master User (" + machine.WiiFriendCode + ")"
+		packet.Sender().WiiFC = machine.WiiFriendCode
+		packet.Sender().SetPlatform(2)
+		packet.Sender().SetMachineID(machine.MachineID)
+	}
 
 	_ = requestDataStream.ReadU32LENext(1)[0]
 	responseCheck := requestDataStream.ReadU32LENext(1)[0]
@@ -177,6 +192,7 @@ func StartSecureServer() {
 
 	accountManagementProtocol.NintendoCreateAccount(NintendoCreateAccount)
 	accountManagementProtocol.SetStatus(SetStatus)
+	accountManagementProtocol.DeleteAccount(DeleteAccount)
 
 	rbBinaryDataProtocol.GetBinaryData(GetBinaryData)
 	rbBinaryDataProtocol.SaveBinaryData(SaveBinaryData)

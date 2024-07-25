@@ -24,7 +24,6 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 	var ctype int // 0 = xbox360, 1= ps3, 2 = wii
 
 	// Look for 'DummyNintendo' in the email address, if we find it, its a Wii console
-	log.Printf("Email : '%s'", email)
 	var rgx = regexp.MustCompile(`DummyNintendo`)
 	res := rgx.FindStringSubmatch(email)
 
@@ -43,7 +42,7 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 			{Key: "pid", Value: Config.LastPID + 1},
 			{Key: "console_type", Value: ctype},
 			{Key: "guid", Value: guid},
-			// TODO: look into if the key that is passed here is per-profile, could use it as form of auth if so
+			{Key: "created_by_machine_id", Value: client.PlayerID()},
 		})
 
 		if err != nil {

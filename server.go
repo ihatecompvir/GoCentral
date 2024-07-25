@@ -62,6 +62,7 @@ func main() {
 			{Key: "last_setlist_id", Value: 0},
 			{Key: "profanity_list", Value: []string{}},
 			{Key: "battle_limit", Value: 5},
+			{Key: "last_machine_id", Value: 1000000000},
 		})
 
 		servers.Config.LastPID = 500

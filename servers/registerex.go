@@ -14,13 +14,20 @@ import (
 
 func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []string, className string, ticketData []byte) {
 	users := database.GocentralDatabase.Collection("users")
+	machines := database.GocentralDatabase.Collection("machines")
 
 	var user models.User
+	var machine models.Machine
 
 	if err = users.FindOne(nil, bson.M{"username": client.Username}).Decode(&user); err != nil {
-		log.Println("User " + client.Username + " did not exist in database, could not register")
-		SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, 0x00010001)
-		return
+		err = machines.FindOne(nil, bson.M{"wii_friend_code": client.WiiFC}).Decode(&machine)
+
+		if err != nil {
+			log.Println("User or machine " + client.Username + " did not exist in database, could not register")
+			SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, 0x00010001)
+			return
+		}
+
 	}
 
 	newRVCID := uint32(AuthServer.ConnectionIDCounter().Increment())
@@ -33,7 +40,11 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 	rmcResponseStream.WriteU16LENext([]uint16{0x01})     // same as above
 	rmcResponseStream.WriteU32LENext([]uint32{newRVCID}) // RVCID
 
-	client.SetPlayerID(user.PID)
+	if user.PID != 0 {
+		client.SetPlayerID(user.PID)
+	} else {
+		client.SetPlayerID(uint32(machine.MachineID))
+	}
 
 	// check if the PID is not the master PID. if it is the master PID, do not update the station URLs
 	if user.PID != 12345678 && len(stationUrls) != 0 {

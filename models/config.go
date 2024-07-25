@@ -10,4 +10,5 @@ type Config struct {
 	LastSetlistID   int                `json:"last_setlist_id" bson:"last_setlist_id"`
 	ProfanityList   []string           `json:"profanity_list" bson:"profanity_list"`
 	BattleLimit     int                `json:"battle_limit" bson:"battle_limit"`
+	LastMachineID   int                `json:"last_machine_id" bson:"last_machine_id"`
 }

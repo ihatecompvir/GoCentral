@@ -10,4 +10,7 @@ type User struct {
 	IntStationURL string             `json:"int_station_url" bson:"int_station_url"`
 	ConsoleType   int                `json:"console_type" bson:"console_type"`
 	GUID          string             `json:"guid" bson:"guid"`
+
+	// machine stuff
+	CreatedByMachineID int `json:"created_by_machine_id" bson:"created_by_machine_id"`
 }
