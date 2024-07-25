@@ -1,6 +1,7 @@
 package scores
 
 import (
+	"context"
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
@@ -52,6 +53,7 @@ type ScoreRecordResponse struct {
 	IsPercentile int    `json:"is_percentile"`
 	Part1        string `json:"part_1"`
 	Part2        string `json:"part_2"`
+	Slot         int    `json:"slot"`
 }
 
 type ScoreRecordService struct {
@@ -116,14 +118,54 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		)
 	}
 
-	res := []ScoreRecordResponse{{
-		req.SongID,
-		0,
-		1,
-		0,
-		"",
-		"",
-	}}
+	// instarank documentation
+	// part_1:
+	// a - top rank percent (%X)
+	// b - exact rank (#X)
+	// c - previous best X (#X)
+	// d - score | rank "Get SCORE more points to reach %RANK on the band leaderboard"
+	// e - score | rank "Get SCORE more points to reach #RANK on the band leaderboard"
+	// part_2
+	// f - You didn't beat any friends (doesn't work? or maybe this is just to hide the second label)
+	// g - band name "You beat BAND NAME'S score"
+	// h - rival name | num beat "You beat the scores of BAND and NUM other bands"
+	// i - score | rival name "Get SCORE more points to beat RIVAL NAME"
+
+	res := []ScoreRecordResponse{}
+
+	numPids := len(req.PIDs)
+
+	for i := 0; i < (numPids / 2); i++ {
+		playerScoreIdx, _ := scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleIDs[i], "score": bson.M{"$gt": req.Scores[i]}})
+
+		instarank := ScoreRecordResponse{
+			req.SongID,
+			0,
+			int(playerScoreIdx + 1),
+			0,
+			"b",
+			"f",
+			req.Slots[i+(numPids/2)],
+		}
+
+		res = append(res, instarank)
+	}
+
+	for i := numPids / 2; i < numPids; i++ {
+		playerScoreIdx, _ := scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleIDs[i], "score": bson.M{"$gt": req.Scores[i]}})
+
+		instarank := ScoreRecordResponse{
+			req.SongID,
+			1,
+			int(playerScoreIdx + 1),
+			0,
+			"b",
+			"f",
+			req.Slots[i],
+		}
+
+		res = append(res, instarank)
+	}
 
 	return marshaler.MarshalResponse(service.Path(), res)
 }

@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"sort"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
@@ -18,9 +19,9 @@ type BattleScoreRecordRequest struct {
 	SystemMS    int    `json:"system_ms"`
 	MachineID   string `json:"machine_id"`
 	SessionGUID string `json:"session_guid"`
-	PID         []int  `json:"pidXXX"`
+	PIDs        []int  `json:"pidXXX"`
 	BattleID    int    `json:"battle_id"`
-	Slot        []int  `json:"slotXXX"`
+	Slots       []int  `json:"slotXXX"`
 }
 
 type BattleScoreRecordResponse struct {
@@ -47,7 +48,7 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 		return "", err
 	}
 
-	if req.PID[0] != int(client.PlayerID()) {
+	if req.PIDs[0] != int(client.PlayerID()) {
 		log.Println("Client-supplied PID did not match server-assigned PID, rejecting setlist update")
 		return "", err
 	}
@@ -64,12 +65,12 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 
 	var score models.BattleScoreEntry
 	score.Score = req.Score
-	score.PID = req.PID[0]
+	score.PID = req.PIDs[0]
 
 	// Try to update the existing score for the PID
 	filter := bson.M{
 		"setlist_id":        req.BattleID,
-		"battle_scores.pid": req.PID[0],
+		"battle_scores.pid": req.PIDs[0],
 	}
 	update := bson.M{
 		"$set": bson.M{"battle_scores.$.score": req.Score},
@@ -77,7 +78,7 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 	result, err := setlistCollection.UpdateOne(context.TODO(), filter, update)
 
 	if err != nil {
-		log.Printf("Error updating score for PID %d in battle ID %d: %v", req.PID[0], req.BattleID, err)
+		log.Printf("Error updating score for PID %d in battle ID %d: %v", req.PIDs[0], req.BattleID, err)
 		return "[]", nil
 	}
 
@@ -94,21 +95,58 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 		}
 	}
 
-	// if there are more than one PID, it is a band, otherwise solo
-	var isBOI int = 0
+	res := []BattleScoreRecordResponse{}
 
-	if len(req.PID) > 1 {
-		isBOI = 1
+	err = setlistCollection.FindOne(context.TODO(), bson.M{"setlist_id": req.BattleID}).Decode(&setlist)
+
+	// sort battle scores by score
+	sort.Slice(setlist.BattleScores, func(i, j int) bool {
+		return setlist.BattleScores[i].Score > setlist.BattleScores[j].Score
+	})
+
+	numPids := len(req.PIDs)
+
+	for i := 0; i < (numPids / 2); i++ {
+		playerScoreIdx := 0
+		for idx, score := range setlist.BattleScores {
+			if score.PID == req.PIDs[i] {
+				playerScoreIdx = idx
+				break
+			}
+		}
+
+		instarank := BattleScoreRecordResponse{
+			req.BattleID,
+			0,
+			int(playerScoreIdx + 1),
+			0,
+			"b",
+			"f",
+		}
+
+		res = append(res, instarank)
 	}
 
-	res := []BattleScoreRecordResponse{{
-		req.BattleID,
-		isBOI,
-		1,
-		0,
-		"",
-		"",
-	}}
+	for i := numPids / 2; i < numPids; i++ {
+		playerScoreIdx := 0
+		for idx, score := range setlist.BattleScores {
+			if score.PID == req.PIDs[i] {
+				playerScoreIdx = idx
+				break
+			}
+		}
+
+		instarank := BattleScoreRecordResponse{
+			req.BattleID,
+			1,
+			int(playerScoreIdx + 1),
+			0,
+			"b",
+			"f",
+		}
+
+		res = append(res, instarank)
+	}
 
 	return marshaler.MarshalResponse(service.Path(), res)
 }
