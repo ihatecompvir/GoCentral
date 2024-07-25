@@ -54,7 +54,7 @@ func DeleteAccount(err error, client *nex.Client, callID uint32, pid uint32) {
 	rmcResponseBody := rmcResponseStream.Bytes()
 
 	rmcResponse := nex.NewRMCResponse(nexproto.AccountManagementProtocolID, callID)
-	rmcResponse.SetSuccess(nexproto.SetStatus, rmcResponseBody)
+	rmcResponse.SetSuccess(nexproto.DeleteAccount, rmcResponseBody)
 
 	responsePacket, _ := nex.NewPacketV0(client, nil)
 
