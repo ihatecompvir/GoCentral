@@ -28,5 +28,5 @@ COMING SOON
 
 ## Special Thanks
 The following users made contributions to GoCentral, but aren't listed in the Contributors tab on GitHub, so they are listed here instead.
-- @knvtva
-- @li1lypad
+- [@knvtva](https://github.com/knvtva)
+- [@li1lypad](https://github.com/li1lypad)
