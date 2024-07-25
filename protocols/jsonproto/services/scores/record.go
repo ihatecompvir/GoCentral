@@ -52,6 +52,7 @@ type ScoreRecordResponse struct {
 	IsPercentile int    `json:"is_percentile"`
 	Part1        string `json:"part_1"`
 	Part2        string `json:"part_2"`
+	Slot         int    `json:"slot"`
 }
 
 type ScoreRecordService struct {
@@ -123,6 +124,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		0,
 		"",
 		"",
+		req.Slots[0],
 	}}
 
 	return marshaler.MarshalResponse(service.Path(), res)

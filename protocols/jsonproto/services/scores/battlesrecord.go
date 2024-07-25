@@ -30,6 +30,7 @@ type BattleScoreRecordResponse struct {
 	IsPercentile int    `json:"is_percentile"`
 	Part1        string `json:"part_1"`
 	Part2        string `json:"part_2"`
+	Slot         int    `json:"slot"`
 }
 
 type BattleScoreRecordService struct {
@@ -108,6 +109,7 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 		0,
 		"",
 		"",
+		req.Slot[0],
 	}}
 
 	return marshaler.MarshalResponse(service.Path(), res)
