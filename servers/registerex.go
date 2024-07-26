@@ -11,6 +11,7 @@ import (
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []string, className string, ticketData []byte) {
@@ -47,7 +48,7 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 	}
 
 	// check if the PID is not the master PID. if it is the master PID, do not update the station URLs
-	if user.PID != 12345678 && len(stationUrls) != 0 {
+	if len(stationUrls) != 0 {
 
 		var stationURL string = "prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(newRVCID)
 
@@ -85,15 +86,28 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 		}
 
 		// update station URLs and current console type
-		result, err := users.UpdateOne(
-			nil,
-			bson.M{"username": client.Username},
-			bson.D{
-				{"$set", bson.D{{"station_url", stationURL}}},
-				{"$set", bson.D{{"int_station_url", internalStationURL}}},
-				{"$set", bson.D{{"console_type", consoleType}}},
-			},
-		)
+
+		var result *mongo.UpdateResult = nil
+
+		if client.PlayerID() != uint32(machine.MachineID) {
+			result, _ = users.UpdateOne(
+				nil,
+				bson.M{"username": client.Username},
+				bson.D{
+					{"$set", bson.D{{"station_url", stationURL}}},
+					{"$set", bson.D{{"int_station_url", internalStationURL}}},
+					{"$set", bson.D{{"console_type", consoleType}}},
+				},
+			)
+		} else {
+			result, _ = machines.UpdateOne(
+				nil,
+				bson.M{"machine_id": machine.MachineID},
+				bson.D{
+					{"$set", bson.D{{"station_url", stationURL}}},
+				},
+			)
+		}
 
 		client.SetPlatform(consoleType)
 		client.SetExternalStationURL(stationURL)
@@ -105,10 +119,18 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 			return
 		}
 
-		if result.ModifiedCount > 1 || result.ModifiedCount == 0 {
-			log.Printf("Updated %v station URLs for %s \n", result.ModifiedCount, client.Username)
+		if client.PlayerID() != uint32(machine.MachineID) {
+			if result.ModifiedCount > 1 || result.ModifiedCount == 0 {
+				log.Printf("Updated %v station URLs for %s \n", result.ModifiedCount, client.Username)
+			} else {
+				log.Printf("Updated %v station URL for %s \n", result.ModifiedCount, client.Username)
+			}
 		} else {
-			log.Printf("Updated %v station URL for %s \n", result.ModifiedCount, client.Username)
+			if result.ModifiedCount > 1 || result.ModifiedCount == 0 {
+				log.Printf("Updated %v station URLs for machine ID %v \n", result.ModifiedCount, client.MachineID())
+			} else {
+				log.Printf("Updated %v station URL for machine ID %v \n", result.ModifiedCount, client.MachineID())
+			}
 		}
 	}
 

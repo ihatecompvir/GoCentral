@@ -21,11 +21,6 @@ func RegisterGathering(err error, client *nex.Client, callID uint32, gathering [
 		return
 	}
 
-	if client.Username == "Master User" {
-		log.Printf("Ignoring RegisterGathering for unauthenticated %s\n", client.WiiFC)
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
-		return
-	}
 	log.Println("Registering gathering...")
 
 	// delete old gatherings, and create a new gathering
