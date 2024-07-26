@@ -165,7 +165,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		}, options.FindOne().SetSort(bson.D{{"score", 1}})).Decode(&nextHighestScore)
 
 		if scoreHigher[i] {
-			instaRankString := "b"
+			instaRankString := "f"
 			var name string
 			if err != mongo.ErrNoDocuments {
 				name = db.GetUsernameForPID(nextHighestScore.OwnerPID)
@@ -211,7 +211,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		}, options.FindOne().SetSort(bson.D{{"score", 1}})).Decode(&nextHighestScore)
 
 		if scoreHigher[i] {
-			instaRankString := "b"
+			instaRankString := "f"
 			var name string
 			if err != mongo.ErrNoDocuments {
 				name = db.GetUsernameForPID(nextHighestScore.OwnerPID)
