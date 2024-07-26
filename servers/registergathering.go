@@ -56,6 +56,7 @@ func RegisterGathering(err error, client *nex.Client, callID uint32, gathering [
 		{Key: "last_updated", Value: time.Now().Unix()},
 		{Key: "state", Value: 0},
 		{Key: "public", Value: 0},
+		{Key: "console_type", Value: client.Platform()},
 	})
 
 	if err != nil {

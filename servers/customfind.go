@@ -31,7 +31,7 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 	usersCollection := database.GocentralDatabase.Collection("users")
 
 	// attempt to get a random gathering and deserialize it
-	// any gatherings that havent been updated in 15 minutes are ignored
+	// any gatherings that havent been updated in 5 minutes are ignored
 	// this should prevent endless loops of trying to join old/stale gatherings that are still in the DB
 	// but any UI state change or playing a song will update the gathering
 	cur, err := gatheringCollection.Aggregate(nil, []bson.M{
@@ -41,10 +41,10 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 				Key:   "creator",
 				Value: bson.D{{Key: "$ne", Value: client.Username}},
 			},
-			// only look for gatherings updated in the last 15 minutes
+			// only look for gatherings updated in the last 5 minutes
 			{
 				Key:   "last_updated",
-				Value: bson.D{{Key: "$gt", Value: (time.Now().Unix()) - (15 * 60)}},
+				Value: bson.D{{Key: "$gt", Value: (time.Now().Unix()) - (5 * 60)}},
 			},
 			// dont look for gatherings in the "in song" state
 			{
@@ -60,6 +60,11 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 			{
 				Key:   "public",
 				Value: bson.D{{Key: "$eq", Value: 1}},
+			},
+			// only look for gatherings created by the current console type
+			{
+				Key:   "console_type",
+				Value: bson.D{{Key: "$eq", Value: client.Platform()}},
 			},
 		}},
 		bson.M{"$sample": bson.M{"size": 10}},

@@ -34,16 +34,16 @@ func GetConsolePrefixedUsernameForPID(pid int) string {
 	if user.Username != "" {
 		switch user.ConsoleType {
 		case 0:
-			return "[Xbox 360] " + user.Username
+			return user.Username + " [360]"
 		case 1:
-			return "[PS3] " + user.Username
+			return user.Username + " [PS3]"
 		case 2:
-			return "[Wii] " + user.Username
+			return user.Username + " [Wii]"
 		default:
 			return user.Username
 		}
 	} else {
-		return "Player"
+		return "Unnamed Player"
 	}
 }
 

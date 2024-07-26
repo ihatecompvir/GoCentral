@@ -66,16 +66,37 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 			log.Printf("Client with PID %v did not have internal station URL, using empty string\n", user.PID)
 		}
 
-		// update station URLs
+		// className is "XboxUserInfo" if the console is an Xbox
+		// className is "NintendoToken" if the console is a Wii
+		// className is "SonyNPTicket" if the console is a PS3
+
+		consoleType := 0
+
+		switch className {
+		case "XboxUserInfo":
+			consoleType = 0
+		case "SonyNPTicket":
+			consoleType = 1
+		case "NintendoToken":
+			consoleType = 2
+		default:
+			log.Println("Invalid ticket presented, could not determine console type")
+			SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, quazal.InvalidArgument)
+			return
+		}
+
+		// update station URLs and current console type
 		result, err := users.UpdateOne(
 			nil,
 			bson.M{"username": client.Username},
 			bson.D{
 				{"$set", bson.D{{"station_url", stationURL}}},
 				{"$set", bson.D{{"int_station_url", internalStationURL}}},
+				{"$set", bson.D{{"console_type", consoleType}}},
 			},
 		)
 
+		client.SetPlatform(consoleType)
 		client.SetExternalStationURL(stationURL)
 		client.SetConnectionID(uint32(newRVCID))
 
