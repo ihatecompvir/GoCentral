@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/database"
 	"rb3server/models"
+	"rb3server/quazal"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -15,7 +16,7 @@ func DeleteAccount(err error, client *nex.Client, callID uint32, pid uint32) {
 
 	if client.MachineID() == 0 {
 		log.Println("Client is attempting to delete account without valid server-assigned Machine ID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 
@@ -26,21 +27,21 @@ func DeleteAccount(err error, client *nex.Client, callID uint32, pid uint32) {
 	if err = usersCollection.FindOne(context.TODO(),
 		bson.M{"pid": pid}).Decode(&user); err != nil {
 		log.Printf("Could not find user with PID %d: %+v\n", pid, err)
-		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.InvalidPID)
 		return
 	}
 
 	// make sure the machine ID who created the user matches the one trying to delete it
 	if user.CreatedByMachineID != client.MachineID() {
 		log.Printf("Client with machine ID %d is trying to delete account with PID %d, but it was created by machine ID %d\n", client.MachineID(), pid, user.CreatedByMachineID)
-		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.AccessDenied)
 		return
 	}
 
 	// delete the user
 	if _, err = usersCollection.DeleteOne(nil, bson.M{"pid": pid}); err != nil {
 		log.Printf("Could not delete user with PID %d: %+v\n", pid, err)
-		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
 		return
 	}
 

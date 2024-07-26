@@ -6,6 +6,7 @@ import (
 	"log"
 	"rb3server/database"
 	"rb3server/models"
+	"rb3server/quazal"
 	"regexp"
 
 	"github.com/ihatecompvir/nex-go"
@@ -30,7 +31,7 @@ func FindByNameLike(err error, client *nex.Client, callID uint32, uiGroups uint3
 
 			if err = machines.FindOne(context.TODO(), bson.M{"wii_friend_code": res[1]}).Decode(&machine); err != nil {
 				log.Println("Could not find machine with friend code " + fmt.Sprint(res[1]) + " in database")
-				SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+				SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.UnknownError)
 				return
 			}
 
@@ -38,7 +39,7 @@ func FindByNameLike(err error, client *nex.Client, callID uint32, uiGroups uint3
 			user.PID = uint32(machine.MachineID)
 		} else {
 			log.Println("Could not find user or machine with name " + fmt.Sprint(name) + " in database")
-			SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.UnknownError)
 			return
 		}
 	}

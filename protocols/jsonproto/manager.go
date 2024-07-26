@@ -2,6 +2,7 @@ package jsonproto
 
 import (
 	"fmt"
+	"log"
 	"rb3server/database"
 	"rb3server/protocols/jsonproto/marshaler"
 	"rb3server/protocols/jsonproto/services/accomplishment"
@@ -12,6 +13,7 @@ import (
 	"rb3server/protocols/jsonproto/services/entities/band"
 	"rb3server/protocols/jsonproto/services/entities/character"
 	leaderboard "rb3server/protocols/jsonproto/services/leaderboards"
+	"rb3server/protocols/jsonproto/services/misc"
 	"rb3server/protocols/jsonproto/services/performance"
 	"rb3server/protocols/jsonproto/services/scores"
 	"rb3server/protocols/jsonproto/services/setlists"
@@ -102,6 +104,9 @@ func (mgr *ServicesManager) registerAll() {
 	// stats
 	mgr.register(stats.StatsPadService{})
 
+	// misc
+	mgr.register(misc.MiscSyncAvailableSongsService{})
+
 }
 
 // register a single service
@@ -120,6 +125,8 @@ func (mgr ServicesManager) Handle(jsonStr string, client *nex.Client) (string, e
 	// check service is implemented
 	service, exists := mgr.services[methodPath]
 	if !exists {
+		log.Printf("Unimplemented JSON service for path: %s\n", methodPath)
+		log.Printf("Request: %s\n", jsonStr)
 		return "", fmt.Errorf("unimplemented service for path:%s\n", methodPath)
 	}
 

@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"rb3server/protocols/jsonproto"
+	"rb3server/quazal"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -15,14 +16,14 @@ func JSONRequest(err error, client *nex.Client, callID uint32, rawJson string) {
 
 	if client.PlayerID() == 0 {
 		log.Println("Client is attempting to call JSON method without valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.JsonProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.JsonProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 
 	// the JSON server will handle the request depending on what needs to be returned
 	res, err := jsonMgr.Handle(rawJson, client)
 	if err != nil {
-		SendErrorCode(SecureServer, client, nexproto.JsonProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.JsonProtocolID, callID, quazal.UnknownError)
 		return
 	}
 
@@ -57,13 +58,13 @@ func JSONRequest2(err error, client *nex.Client, callID uint32, rawJson string) 
 	// I believe the second request method never returns a payload
 	if client.PlayerID() == 0 {
 		log.Println("Client is attempting to call JSON method without valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.JsonProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.JsonProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 
 	_, err = jsonMgr.Handle(rawJson, client)
 	if err != nil {
-		SendErrorCode(SecureServer, client, nexproto.JsonProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.JsonProtocolID, callID, quazal.UnknownError)
 		return
 	}
 

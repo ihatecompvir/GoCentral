@@ -4,6 +4,7 @@ import (
 	"log"
 	"rb3server/database"
 	"rb3server/models"
+	"rb3server/quazal"
 
 	"time"
 
@@ -16,7 +17,7 @@ func SetState(err error, client *nex.Client, callID uint32, gatheringID uint32, 
 
 	if client.PlayerID() == 0 {
 		log.Println("Client is attempting to set the state of a gathering without a valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 
@@ -32,7 +33,7 @@ func SetState(err error, client *nex.Client, callID uint32, gatheringID uint32, 
 
 	if err != nil {
 		log.Printf("Could not find gathering %v to set the state on: %v\n", gatheringID, err)
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.OperationError)
 		return
 	} else {
 		// TODO: Replace with something better
@@ -47,7 +48,7 @@ func SetState(err error, client *nex.Client, callID uint32, gatheringID uint32, 
 		_, err = gatherings.ReplaceOne(nil, bson.M{"gathering_id": gatheringID}, gathering)
 		if err != nil {
 			log.Printf("Could not set state for gathering %v: %v\n", gatheringID, err)
-			SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.OperationError)
 			return
 		} else {
 			rmcResponseStream.WriteUInt8(1)

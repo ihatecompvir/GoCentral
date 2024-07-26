@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"rb3server/database"
+	"rb3server/quazal"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -14,7 +15,7 @@ func SetStatus(err error, client *nex.Client, callID uint32, status string) {
 
 	if client.PlayerID() == 0 {
 		log.Println("Machine is attempting to update its status without a valid server-assigned machine ID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 
@@ -29,7 +30,7 @@ func SetStatus(err error, client *nex.Client, callID uint32, status string) {
 
 	if err != nil {
 		log.Printf("Could not update status for machine %s: %s\n", client.Username, err)
-		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
 		return
 	}
 

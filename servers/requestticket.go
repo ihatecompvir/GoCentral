@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/md5"
 	"log"
+	"rb3server/quazal"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -13,7 +14,7 @@ func RequestTicket(err error, client *nex.Client, callID uint32, userPID uint32,
 
 	if userPID != client.PlayerID() {
 		log.Printf("Requested ticket for PID %v does not match server-assigned PID %v\n", userPID, client.PlayerID())
-		SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, 0x0003006B) // invalid PID error
+		SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.InvalidPID) // invalid PID error
 		return
 	}
 

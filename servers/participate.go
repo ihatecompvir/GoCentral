@@ -2,6 +2,7 @@ package servers
 
 import (
 	"log"
+	"rb3server/quazal"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -11,7 +12,7 @@ func Participate(err error, client *nex.Client, callID uint32, gatheringID uint3
 
 	if client.PlayerID() == 0 {
 		log.Println("Client is participate in a gathering without a valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 

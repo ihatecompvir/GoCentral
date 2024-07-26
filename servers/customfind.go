@@ -4,6 +4,7 @@ import (
 	"log"
 	"rb3server/database"
 	"rb3server/models"
+	"rb3server/quazal"
 	"time"
 
 	"github.com/ihatecompvir/nex-go"
@@ -15,13 +16,13 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 
 	if client.PlayerID() == 0 {
 		log.Println("Client is attempting to check for gatherings without a valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 
 	if client.Username == "Master User" {
 		log.Printf("Ignoring CheckForGatherings for unauthenticated Wii master user with friend code %s\n", client.WiiFC)
-		SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 	log.Printf("Checking for available gatherings for %s...\n", client.Username)
@@ -65,7 +66,7 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 	})
 	if err != nil {
 		log.Printf("Could not get a random gathering: %s\n", err)
-		SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, quazal.OperationError)
 		return
 	}
 	var gatherings = make([]models.Gathering, 0)
@@ -74,7 +75,7 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 		err = cur.Decode(&g)
 		if err != nil {
 			log.Printf("Error decoding gathering: %+v\n", err)
-			SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, quazal.OperationError)
 			return
 		}
 		gatherings = append(gatherings, g)
@@ -96,7 +97,7 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 
 			if err = usersCollection.FindOne(nil, bson.M{"username": gathering.Creator}).Decode(&user); err != nil {
 				log.Printf("Could not find creator %s of gathering: %+v\n", gathering.Creator, err)
-				SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, 0x00010001)
+				SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, quazal.OperationError)
 				return
 			}
 			rmcResponseStream.WriteBufferString("HarmonixGathering")

@@ -2,6 +2,7 @@ package servers
 
 import (
 	"log"
+	"rb3server/quazal"
 	"strconv"
 
 	"github.com/ihatecompvir/nex-go"
@@ -12,7 +13,7 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 
 	if client.PlayerID() == 0 {
 		log.Println("Client is attempting to initiate a NAT probe without a valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 
@@ -23,7 +24,7 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 	// so 8 should be a sufficient cap
 	if len(stationURLs) > 4 {
 		log.Println("Client is attempting to probe more than 8 servers, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.InvalidArgument)
 		return
 	}
 
@@ -63,7 +64,7 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 		// sanity check on station URL length
 		if len(target) > 256 {
 			log.Println("Station URL is too long, rejecting call")
-			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.InvalidArgument)
 			return
 		}
 
@@ -88,7 +89,7 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 			SecureServer.Send(messagePacket)
 		} else {
 			log.Printf("Could not find active client with RVCID %v\n", targetRvcID)
-			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.OperationError)
 			return
 		}
 	}

@@ -11,6 +11,7 @@ import (
 	"os"
 	"rb3server/database"
 	"rb3server/models"
+	"rb3server/quazal"
 	"regexp"
 	"strings"
 
@@ -104,7 +105,7 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 		machineType = 2
 	} else {
 		log.Println("Unknown machine connecting --- ABORT") // Basically it doesn't fall into this category
-		SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, 0x00010001)
+		SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.InvalidArgument)
 		return
 	}
 
@@ -129,7 +130,7 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 
 			if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
 				log.Printf("Could not find newly-created user %s: %s\n", username, err)
-				SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, 0x00010001)
+				SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.OperationError)
 				return
 			}
 
@@ -191,7 +192,7 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 
 			if err != nil {
 				log.Printf("Could not create Wii with friend code %v: %s\n", res[1], err)
-				SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, 0x00010001)
+				SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.OperationError)
 				return
 			}
 
@@ -228,7 +229,7 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 
 	if addr == "" {
 		log.Println("ADDRESS is not set, clients will be unable to connect to the secure server. Please set the ADDRESS environment variable and restart GoCentral")
-		SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, 0x00010001)
+		SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.AccessDenied)
 		return
 	}
 

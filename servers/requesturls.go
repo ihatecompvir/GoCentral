@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/database"
 	"rb3server/models"
+	"rb3server/quazal"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -23,7 +24,7 @@ func RequestURLs(err error, client *nex.Client, callID uint32, stationCID uint32
 
 	if err = users.FindOne(nil, bson.M{"pid": stationPID}).Decode(&user); err != nil {
 		log.Println("Could not find user with PID " + fmt.Sprint(stationPID) + " in database")
-		SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, quazal.InvalidPID)
 		return
 	}
 

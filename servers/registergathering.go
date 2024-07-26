@@ -4,6 +4,7 @@ import (
 	"log"
 	"math/rand"
 	"rb3server/database"
+	"rb3server/quazal"
 
 	"time"
 
@@ -16,13 +17,13 @@ func RegisterGathering(err error, client *nex.Client, callID uint32, gathering [
 
 	if client.PlayerID() == 0 {
 		log.Println("Client is attempting to register a gathering without a valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 
 	if client.Username == "Master User" {
 		log.Printf("Ignoring RegisterGathering for unauthenticated %s\n", client.WiiFC)
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 	log.Println("Registering gathering...")

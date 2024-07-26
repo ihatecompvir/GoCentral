@@ -6,6 +6,7 @@ import (
 	"log"
 	"rb3server/database"
 	"rb3server/models"
+	"rb3server/quazal"
 	"regexp"
 
 	"github.com/ihatecompvir/nex-go"
@@ -54,7 +55,7 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 
 		if err != nil {
 			log.Printf("Could not create Nintendo user %s: %s\n", username, err)
-			SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
 			return
 		}
 
@@ -67,7 +68,7 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 		)
 		if err != nil {
 			log.Println("Could not update config in database: ", err)
-			SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
 			return
 		}
 
@@ -84,7 +85,7 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 
 			if err != nil {
 				log.Printf("Could not find newly created Nintendo user: %s\n", err)
-				SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+				SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
 				return
 			}
 		}
@@ -115,7 +116,7 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 
 	if err != nil {
 		log.Printf("Could not update station URLs for Nintendo user %s: %s\n", username, err)
-		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
 		return
 	}
 

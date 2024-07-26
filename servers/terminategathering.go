@@ -3,6 +3,7 @@ package servers
 import (
 	"log"
 	"rb3server/database"
+	"rb3server/quazal"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -13,13 +14,13 @@ func TerminateGathering(err error, client *nex.Client, callID uint32, gatheringI
 
 	if client.PlayerID() == 0 {
 		log.Println("Client is attempting to terminate a gathering without a valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 
 	if client.Username == "Master User" {
 		log.Printf("Ignoring TerminateGathering for unauthenticated %s\n", client.WiiFC)
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 	log.Printf("Terminating gathering for %s...\n", client.Username)
@@ -34,7 +35,7 @@ func TerminateGathering(err error, client *nex.Client, callID uint32, gatheringI
 
 	if err != nil {
 		log.Printf("Could not terminate gathering: %s\n", err)
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.OperationError)
 		return
 	}
 

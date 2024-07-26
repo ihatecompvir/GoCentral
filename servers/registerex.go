@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/database"
 	"rb3server/models"
+	"rb3server/quazal"
 	"regexp"
 
 	"github.com/ihatecompvir/nex-go"
@@ -24,7 +25,7 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 
 		if err != nil {
 			log.Println("User or machine " + client.Username + " did not exist in database, could not register")
-			SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, quazal.OperationError)
 			return
 		}
 
@@ -80,7 +81,7 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 
 		if err != nil {
 			log.Printf("Could not update station URLs for %s\n", result.ModifiedCount, client.Username)
-			SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, quazal.OperationError)
 			return
 		}
 

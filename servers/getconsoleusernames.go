@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/database"
 	"rb3server/models"
+	"rb3server/quazal"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -15,7 +16,7 @@ func GetConsoleUsernames(err error, client *nex.Client, callID uint32, friendCod
 
 	if client.MachineID() == 0 {
 		log.Println("Client is trying to get console usernames without a valid server-assigned machine ID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
 
@@ -31,7 +32,7 @@ func GetConsoleUsernames(err error, client *nex.Client, callID uint32, friendCod
 	// if the machine ID is 0, it doesn't exist
 	if machine.MachineID == 0 {
 		log.Printf("Machine with friend code %v does not exist\n", friendCode)
-		SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, quazal.UnknownError)
 		return
 	}
 
@@ -44,7 +45,7 @@ func GetConsoleUsernames(err error, client *nex.Client, callID uint32, friendCod
 
 	if err != nil {
 		log.Printf("Could not find users for machine %v: %v\n", machine.MachineID, err)
-		SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, quazal.UnknownError)
 		return
 	}
 
@@ -54,7 +55,7 @@ func GetConsoleUsernames(err error, client *nex.Client, callID uint32, friendCod
 		err := cur.Decode(&user)
 		if err != nil {
 			log.Printf("Could not decode user: %v\n", err)
-			SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, quazal.UnknownError)
 			return
 		}
 		users = append(users, user)

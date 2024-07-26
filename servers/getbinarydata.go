@@ -3,6 +3,7 @@ package servers
 import (
 	"encoding/json"
 	"log"
+	"rb3server/quazal"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -21,7 +22,7 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 	if err != nil {
 		log.Println("Error parsing metadata: ", err)
-		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
 		return
 	}
 
@@ -30,7 +31,7 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 	if !ok {
 		log.Println("Error parsing type from requested metadata")
-		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
 		return
 	}
 
@@ -42,7 +43,7 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 		if !ok {
 			log.Println("Error parsing setlist_guid from requested metadata")
-			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
 			return
 		}
 
@@ -51,7 +52,7 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 		if !ok {
 			log.Println("Error parsing revision from requested metadata")
-			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
 			return
 		}
 
@@ -66,7 +67,7 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 		if !ok {
 			log.Println("Error parsing revision from requested metadata")
-			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
 			return
 		}
 
@@ -84,7 +85,7 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 		if !ok {
 			log.Println("Error parsing band_id from requested metadata")
-			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
 			return
 		}
 
@@ -96,7 +97,7 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 		if !ok {
 			log.Println("Error parsing revision from requested metadata")
-			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, 0x00010001)
+			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
 			return
 		}
 
@@ -107,7 +108,7 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 	default:
 		log.Println("Unsupported type %s in requested metadata", dataType)
-		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
 		return
 	}
 
@@ -115,7 +116,7 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 	if err != nil {
 		log.Println("Error reading test.png_ps3: ", err)
-		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, 0x00010001)
+		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
 		return
 	}
 
