@@ -60,7 +60,6 @@ func UpdateGathering(err error, client *nex.Client, callID uint32, gathering []b
 	log.Printf("Updated %v gatherings\n", result.ModifiedCount)
 
 	rmcResponseStream := nex.NewStream()
-	rmcResponseStream.Grow(4)
 
 	rmcResponseStream.WriteUInt8(1)
 

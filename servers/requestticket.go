@@ -29,7 +29,7 @@ func RequestTicket(err error, client *nex.Client, callID uint32, userPID uint32,
 	rmcResponseStream := nex.NewStream()
 	rmcResponseStream.Grow(int64(4 + 4 + len(encryptedTicket) + 0x10))
 
-	rmcResponseStream.WriteU32LENext([]uint32{0x10001}) // success
+	rmcResponseStream.WriteUInt32LE(0x10001) // success
 	rmcResponseStream.WriteBuffer(append(encryptedTicket[:], calculatedHmac[:]...))
 
 	rmcResponseBody := rmcResponseStream.Bytes()

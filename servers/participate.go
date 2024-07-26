@@ -17,10 +17,9 @@ func Participate(err error, client *nex.Client, callID uint32, gatheringID uint3
 	}
 
 	rmcResponseStream := nex.NewStream()
-	rmcResponseStream.Grow(4)
 
 	// i am not 100% sure what this method is for exactly
-	rmcResponseStream.WriteUInt8(1) // response code
+	rmcResponseStream.WriteUInt32LE(1) // response code
 
 	rmcResponseBody := rmcResponseStream.Bytes()
 

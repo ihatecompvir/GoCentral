@@ -87,16 +87,15 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 	}
 
 	rmcResponseStream := nex.NewStream()
-	rmcResponseStream.Grow(50)
 
 	// if there are no availble gatherings, tell the client to check again.
 	// otherwise, pass the available gathering to the client
 	if len(gatherings) == 0 {
 		log.Println("There are no active gatherings. Tell client to keep checking")
-		rmcResponseStream.WriteU32LENext([]uint32{0})
+		rmcResponseStream.WriteUInt32LE(0)
 	} else {
 		log.Printf("Found %d gatherings - telling client to attempt joining", len(gatherings))
-		rmcResponseStream.WriteU32LENext([]uint32{uint32(len(gatherings))})
+		rmcResponseStream.WriteUInt32LE(uint32(len(gatherings)))
 		for _, gathering := range gatherings {
 			var user models.User
 

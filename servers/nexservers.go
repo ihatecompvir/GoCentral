@@ -158,7 +158,7 @@ func StartSecureServer() {
 	SecureServer.UsePacketCompression(false)
 	SecureServer.SetFlagsVersion(0)
 	SecureServer.SetAccessKey(os.Getenv("ACCESSKEY"))
-	SecureServer.SetFragmentSize(750)
+	SecureServer.SetFragmentSize(900)
 
 	secureProtocol := nexproto.NewSecureProtocol(SecureServer)
 	jsonProtocol := nexproto.NewJsonProtocol(SecureServer)

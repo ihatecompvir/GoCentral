@@ -18,7 +18,6 @@ func FindBySingleID(err error, client *nex.Client, callID uint32, gatheringID ui
 	var gathering models.Gathering
 
 	rmcResponseStream := nex.NewStream()
-	rmcResponseStream.Grow(50)
 
 	if err = gatheringCollection.FindOne(nil, bson.M{"gathering_id": gatheringID}).Decode(&gathering); err != nil {
 		log.Printf("Could not find gatheringID %s of gathering: %+v\n", gatheringID, err)

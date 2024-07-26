@@ -48,9 +48,7 @@ func DeleteAccount(err error, client *nex.Client, callID uint32, pid uint32) {
 	// just respond with nothing for now
 	rmcResponseStream := nex.NewStream()
 
-	rmcResponseStream.Grow(10)
-
-	rmcResponseStream.WriteU32LENext([]uint32{0})
+	rmcResponseStream.WriteUInt32LE(0)
 
 	rmcResponseBody := rmcResponseStream.Bytes()
 

@@ -42,7 +42,6 @@ func TerminateGathering(err error, client *nex.Client, callID uint32, gatheringI
 	log.Printf("Terminated %v gathering\n", result.DeletedCount)
 
 	rmcResponseStream := nex.NewStream()
-	rmcResponseStream.Grow(4)
 
 	rmcResponseStream.WriteUInt8(1)
 

@@ -64,9 +64,8 @@ func RegisterGathering(err error, client *nex.Client, callID uint32, gathering [
 	}
 
 	rmcResponseStream := nex.NewStream()
-	rmcResponseStream.Grow(4)
 
-	rmcResponseStream.WriteU32LENext([]uint32{uint32(gatheringID)}) // client expects the new gathering ID in the response
+	rmcResponseStream.WriteUInt32LE(uint32(gatheringID)) // client expects the new gathering ID in the response
 
 	rmcResponseBody := rmcResponseStream.Bytes()
 

@@ -120,8 +120,6 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 		return
 	}
 
-	rmcResponseStream.Grow(10)
-
 	// TODO: implement loading binary data from disk
 	rmcResponseStream.WriteBuffer([]byte{0x00})
 	rmcResponseStream.WriteBufferString("{}") // the game doesn't really care what we send here so just send empty json

@@ -35,11 +35,10 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 
 	// Build the response body
 	rmcResponseStream := nex.NewStream()
-	rmcResponseStream.Grow(200)
 
-	rmcResponseStream.WriteU16LENext([]uint16{0x01})     // likely a response code of sorts
-	rmcResponseStream.WriteU16LENext([]uint16{0x01})     // same as above
-	rmcResponseStream.WriteU32LENext([]uint32{newRVCID}) // RVCID
+	rmcResponseStream.WriteUInt16LE(0x01)     // likely a response code of sorts
+	rmcResponseStream.WriteUInt16LE(0x01)     // same as above
+	rmcResponseStream.WriteUInt32LE(newRVCID) // RVCID
 
 	if user.PID != 0 {
 		client.SetPlayerID(user.PID)

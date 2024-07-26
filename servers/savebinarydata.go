@@ -110,8 +110,6 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 
 	rmcResponseStream := nex.NewStream()
 
-	rmcResponseStream.Grow(10)
-
 	rmcResponseStream.WriteBufferString("{}") // the game doesn't really care what we send here so just send empty json
 	rmcResponseStream.WriteUInt8(0)
 

@@ -45,11 +45,10 @@ func FindByNameLike(err error, client *nex.Client, callID uint32, uiGroups uint3
 	}
 
 	rmcResponseStream := nex.NewStream()
-	rmcResponseStream.Grow(50)
 
-	rmcResponseStream.WriteU32LENext([]uint32{1})
+	rmcResponseStream.WriteUInt32LE(1)
 
-	rmcResponseStream.WriteU32LENext([]uint32{user.PID})
+	rmcResponseStream.WriteUInt32LE(user.PID)
 	rmcResponseStream.WriteBufferString(user.Username)
 
 	rmcResponseBody := rmcResponseStream.Bytes()

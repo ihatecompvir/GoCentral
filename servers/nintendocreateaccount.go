@@ -122,9 +122,7 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 
 	log.Printf("Updated %v station URL for %s \n", result.ModifiedCount, client.Username)
 
-	rmcResponseStream.Grow(19)
-	rmcResponseStream.WriteU32LENext([]uint32{user.PID})
-	rmcResponseStream.WriteBufferString("FAKE-HMAC") // not 100% sure what this is supposed to be legitimately but the game doesn't complain if its not there
+	rmcResponseStream.WriteUInt32LE(user.PID)
 
 	rmcResponseBody := rmcResponseStream.Bytes()
 

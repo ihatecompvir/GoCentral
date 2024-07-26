@@ -17,7 +17,6 @@ func CancelParticipation(err error, client *nex.Client, callID uint32, gathering
 	}
 
 	rmcResponseStream := nex.NewStream()
-	rmcResponseStream.Grow(4)
 
 	// i am not 100% sure what this method is for, but it is the inverse of participate
 	rmcResponseStream.WriteUInt8(1)

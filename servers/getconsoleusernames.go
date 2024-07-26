@@ -63,9 +63,8 @@ func GetConsoleUsernames(err error, client *nex.Client, callID uint32, friendCod
 
 	// create a stream to hold the response
 	rmcResponseStream := nex.NewStream()
-	rmcResponseStream.Grow(10)
 
-	rmcResponseStream.WriteU32LENext([]uint32{uint32(len(users) + 1)})
+	rmcResponseStream.WriteUInt32LE(uint32(len(users) + 1))
 
 	rmcResponseStream.WriteBufferString("Master User (" + friendCode + ")")
 
