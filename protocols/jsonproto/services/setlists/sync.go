@@ -13,7 +13,7 @@ type SetlistSyncRequest struct {
 	SystemMS    int    `json:"system_ms"`
 	MachineID   string `json:"machine_id"`
 	SessionGUID string `json:"session_guid"`
-	PID         int    `json:"pid000"`
+	PIDs        []int  `json:"pidXXX"`
 }
 
 type SetlistSyncResponse struct {
@@ -35,13 +35,17 @@ func (service SetlistSyncService) Handle(data string, database *mongo.Database, 
 		return "", err
 	}
 
-	if req.PID != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting setlist synchronization")
+	if req.PIDs[0] == 0 {
+		// it is a machine, not a player, so just respond with a blank response
+		return marshaler.MarshalResponse(service.Path(), []SetlistSyncResponse{{0, 0}})
+	}
+	if req.PIDs[0] != int(client.PlayerID()) {
+		log.Printf("Client-supplied PID %v did not match server-assigned PID %v, rejecting setlist synchronization", req.PIDs[0], client.PlayerID())
 		return "", err
 	}
 
 	res := []SetlistSyncResponse{{
-		req.PID,
+		req.PIDs[0],
 		0,
 	}}
 

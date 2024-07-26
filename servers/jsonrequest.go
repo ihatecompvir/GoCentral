@@ -55,18 +55,9 @@ func JSONRequest(err error, client *nex.Client, callID uint32, rawJson string) {
 
 func JSONRequest2(err error, client *nex.Client, callID uint32, rawJson string) {
 
-	// I believe the second request method never returns a payload
-	if client.PlayerID() == 0 {
-		log.Println("Client is attempting to call JSON method without valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.JsonProtocolID, callID, quazal.NotAuthenticated)
-		return
-	}
-
-	_, err = jsonMgr.Handle(rawJson, client)
-	if err != nil {
-		SendErrorCode(SecureServer, client, nexproto.JsonProtocolID, callID, quazal.UnknownError)
-		return
-	}
+	// we don't need to actually respond with any JSON here, the official servers just sent an empty response
+	// this method was exclusively for telemetry
+	_, _ = jsonMgr.Handle(rawJson, client)
 
 	rmcResponseStream := nex.NewStream()
 

@@ -37,8 +37,13 @@ func (service MiscSyncAvailableSongsService) Handle(data string, database *mongo
 		return "", err
 	}
 
+	if req.PIDs[0] == 0 {
+		// it is a machine, not a player, so just respond with a blank response
+		return marshaler.MarshalResponse(service.Path(), []MiscSyncAvailableSongsResponse{{0}})
+	}
+
 	if req.PIDs[0] != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting songlist sync")
+		log.Printf("Client-supplied PID %v did not match server-assigned PID %v, rejecting available song sync", req.PIDs[0], client.PlayerID())
 		return "", err
 	}
 
