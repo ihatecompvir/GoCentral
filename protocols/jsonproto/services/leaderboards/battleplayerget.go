@@ -5,13 +5,13 @@ import (
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
-	"sort"
 
 	db "rb3server/database"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type BattlePlayerGetRequest struct {
@@ -52,66 +52,97 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
-		return "", err
-	}
-
-	if req.PID000 != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for battle leaderboards")
-		return "", err
-	}
-
-	if req.LBMode == 1 {
-		// friends leaderboard not supported
 		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
-	setlistsCollection := database.Collection("setlists")
+	if req.PID000 != int(client.PlayerID()) {
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for battle player leaderboards")
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+	}
 
-	// FindOne the setlist from the DB with the associated battle ID
-	var setlist models.Setlist
-	err = setlistsCollection.FindOne(context.TODO(), bson.M{"setlist_id": req.BattleID}).Decode(&setlist)
+	scoresCollection := database.Collection("scores")
+
+	var playerScore models.Score
+	err = scoresCollection.FindOne(context.TODO(), bson.M{"battle_id": req.BattleID, "pid": req.PID000}).Decode(&playerScore)
+	if err != nil && err != mongo.ErrNoDocuments {
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+	}
+
+	if err == mongo.ErrNoDocuments {
+		err = scoresCollection.FindOne(context.TODO(), bson.M{"battle_id": req.BattleID}, &options.FindOneOptions{
+			Sort: bson.M{"score": -1},
+		}).Decode(&playerScore)
+		if err != nil && err != mongo.ErrNoDocuments {
+			return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+		}
+	}
+
+	playerScoreIdx, err := scoresCollection.CountDocuments(context.TODO(), bson.M{"battle_id": req.BattleID, "score": bson.M{"$gt": playerScore.Score}})
+	if err != nil {
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+	}
+
+	startRank := playerScoreIdx - (playerScoreIdx % 19)
+	endRank := startRank + 19
+
+	cursor, err := scoresCollection.Find(context.TODO(), bson.M{"battle_id": req.BattleID}, &options.FindOptions{
+		Skip:  &startRank,
+		Limit: &endRank,
+		Sort:  bson.M{"score": -1},
+	})
 
 	if err != nil {
 		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
-	res := []BattlePlayerGetResponse{}
+	var res []BattlePlayerGetResponse
 
-	// sort battle scores by score
-	sort.Slice(setlist.BattleScores, func(i, j int) bool {
-		return setlist.BattleScores[i].Score > setlist.BattleScores[j].Score
-	})
+	var idx int64 = startRank + 1
 
-	// find the player's score idx in the sorted list
-	// if the player has no scores, just start with the first score
-	playerScoreIdx := 0
-	for idx, score := range setlist.BattleScores {
-		if score.PID == req.PID000 {
-			playerScoreIdx = idx
-			break
+	for cursor.Next(context.Background()) {
+		var score models.Score
+		err := cursor.Decode(&score)
+
+		if err != nil {
+			log.Println("Failed to decode score:", err)
+			continue
 		}
-	}
 
-	// start and end idx must be in a window size of 20 otherwise the UI will act a bit buggy
-	startIdx := (playerScoreIdx / 20) * 20
-	endIdx := min(len(setlist.BattleScores), startIdx+20)
+		isBandScore := score.RoleID == 10
 
-	for i := startIdx; i < endIdx; i++ {
-		score := setlist.BattleScores[i]
-		res = append(res, BattlePlayerGetResponse{
-			PID:          score.PID,
-			Score:        score.Score,
-			DiffID:       0,
-			Name:         db.GetConsolePrefixedUsernameForPID(score.PID),
-			IsPercentile: 0,
-			IsFriend:     0,
-			InstMask:     0,
-			NotesPct:     0,
-			UnnamedBand:  0,
-			PGUID:        "",
-			Rank:         i + 1,
-			ORank:        i + 1,
-		})
+		if isBandScore {
+			res = append(res, BattlePlayerGetResponse{
+				PID:          score.OwnerPID,
+				Name:         db.GetBandNameForBandID(score.OwnerPID),
+				DiffID:       score.DiffID,
+				Rank:         int(idx),
+				Score:        score.Score,
+				IsPercentile: 0,
+				InstMask:     score.InstrumentMask,
+				NotesPct:     score.NotesPercent,
+				IsFriend:     0,
+				UnnamedBand:  0,
+				PGUID:        "",
+				ORank:        int(idx),
+			})
+		} else {
+			res = append(res, BattlePlayerGetResponse{
+				PID:          score.OwnerPID,
+				Name:         db.GetConsolePrefixedUsernameForPID(score.OwnerPID),
+				DiffID:       score.DiffID,
+				Rank:         int(idx),
+				Score:        score.Score,
+				IsPercentile: 0,
+				InstMask:     score.InstrumentMask,
+				NotesPct:     score.NotesPercent,
+				IsFriend:     0,
+				UnnamedBand:  0,
+				PGUID:        "",
+				ORank:        int(idx),
+			})
+		}
+
+		idx++
 	}
 
 	if len(res) == 0 {

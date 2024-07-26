@@ -3,7 +3,6 @@ package leaderboard
 import (
 	"context"
 	"log"
-	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
 	"github.com/ihatecompvir/nex-go"
@@ -33,32 +32,27 @@ func (service BattleMaxrankGetService) Path() string {
 
 func (service BattleMaxrankGetService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
 	var req BattleMaxrankGetRequest
-
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
 		return "", err
 	}
 
 	if req.PID000 != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for accomplishment leaderboards")
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for battle maxrank")
 		return "", err
 	}
 
-	setlistsCollection := database.Collection("setlists")
+	scoresCollection := database.Collection("scores")
 
-	// first verify that the setlist with the req.BattleID exists
-	var setlist models.Setlist
-	err = setlistsCollection.FindOne(context.TODO(), bson.M{"setlist_id": req.BattleID}).Decode(&setlist)
-
+	numScores, err := scoresCollection.CountDocuments(context.TODO(), bson.M{"battle_id": req.BattleID})
 	if err != nil {
 		return marshaler.MarshalResponse(service.Path(), []BattleMaxrankGetResponse{{
 			0,
 		}})
 	}
 
-	// return the number of scores, aka the "max rank"
 	res := []BattleMaxrankGetResponse{{
-		len(setlist.BattleScores),
+		int(numScores),
 	}}
 
 	return marshaler.MarshalResponse(service.Path(), res)

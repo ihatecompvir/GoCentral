@@ -11,6 +11,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	db "rb3server/database"
 )
 
 var instrumentMap = map[int]int{
@@ -154,14 +156,31 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 	for i := 0; i < (numPids / 2); i++ {
 		playerScoreIdx, _ := scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleIDs[i], "score": bson.M{"$gt": req.Scores[i]}})
 
+		// Find the next highest score
+		var nextHighestScore models.Score
+		err = scoresCollection.FindOne(context.TODO(), bson.M{
+			"song_id": req.SongID,
+			"role_id": req.RoleIDs[i],
+			"score":   bson.M{"$gt": req.Scores[i], "$ne": req.Scores[i]},
+		}, options.FindOne().SetSort(bson.D{{"score", 1}})).Decode(&nextHighestScore)
+
 		if scoreHigher[i] {
+			instaRankString := "b"
+			var name string
+			if err != mongo.ErrNoDocuments {
+				name = db.GetUsernameForPID(nextHighestScore.OwnerPID)
+				if nextHighestScore.Score-req.Scores[i] < 2000 {
+					instaRankString = "i|" + strconv.Itoa(nextHighestScore.Score-req.Scores[i]) + "|" + name
+				}
+			}
+
 			instarank := ScoreRecordResponse{
 				req.SongID,
-				0,
+				1,
 				int(playerScoreIdx + 1),
 				0,
 				"b",
-				"f",
+				instaRankString,
 				req.Slots[i+(numPids/2)],
 			}
 
@@ -169,7 +188,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		} else {
 			instarank := ScoreRecordResponse{
 				req.SongID,
-				0,
+				1,
 				int(playerScoreIdx + 1),
 				0,
 				"c|" + strconv.Itoa(currentScore[i]),
@@ -183,14 +202,31 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 	for i := numPids / 2; i < numPids; i++ {
 		playerScoreIdx, _ := scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleIDs[i], "score": bson.M{"$gt": req.Scores[i]}})
 
+		// Find the next highest score
+		var nextHighestScore models.Score
+		err = scoresCollection.FindOne(context.TODO(), bson.M{
+			"song_id": req.SongID,
+			"role_id": req.RoleIDs[i],
+			"score":   bson.M{"$gt": req.Scores[i], "$ne": req.Scores[i]},
+		}, options.FindOne().SetSort(bson.D{{"score", 1}})).Decode(&nextHighestScore)
+
 		if scoreHigher[i] {
+			instaRankString := "b"
+			var name string
+			if err != mongo.ErrNoDocuments {
+				name = db.GetUsernameForPID(nextHighestScore.OwnerPID)
+				if nextHighestScore.Score-req.Scores[i] < 2000 {
+					instaRankString = "i|" + strconv.Itoa(nextHighestScore.Score-req.Scores[i]) + "|" + name
+				}
+			}
+
 			instarank := ScoreRecordResponse{
 				req.SongID,
-				1,
+				0,
 				int(playerScoreIdx + 1),
 				0,
 				"b",
-				"f",
+				instaRankString,
 				req.Slots[i],
 			}
 
@@ -198,7 +234,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		} else {
 			instarank := ScoreRecordResponse{
 				req.SongID,
-				1,
+				0,
 				int(playerScoreIdx + 1),
 				0,
 				"c|" + strconv.Itoa(currentScore[i]),

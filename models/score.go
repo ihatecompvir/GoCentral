@@ -10,4 +10,5 @@ type Score struct {
 	DiffID         int `bson:"diff_id"`
 	BOI            int `bson:"boi"`
 	InstrumentMask int `bson:"instrument_mask"`
+	BattleID       int `bson:"battle_id"`
 }

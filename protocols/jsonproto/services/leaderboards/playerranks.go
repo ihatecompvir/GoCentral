@@ -44,7 +44,7 @@ func (service PlayerranksGetService) Handle(data string, database *mongo.Databas
 	}
 
 	if req.PID != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for leaderboards")
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for player rank range leaderboards")
 		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 

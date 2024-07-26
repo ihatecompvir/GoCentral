@@ -1,7 +1,6 @@
 package setlists
 
 import (
-	"log"
 	"rb3server/protocols/jsonproto/marshaler"
 
 	"github.com/ihatecompvir/nex-go"
@@ -29,25 +28,5 @@ func (service SetlistSyncService) Path() string {
 }
 
 func (service SetlistSyncService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
-	var req SetlistSyncRequest
-	err := marshaler.UnmarshalRequest(data, &req)
-	if err != nil {
-		return "", err
-	}
-
-	if req.PIDs[0] == 0 {
-		// it is a machine, not a player, so just respond with a blank response
-		return marshaler.MarshalResponse(service.Path(), []SetlistSyncResponse{{0, 0}})
-	}
-	if req.PIDs[0] != int(client.PlayerID()) {
-		log.Printf("Client-supplied PID %v did not match server-assigned PID %v, rejecting setlist synchronization", req.PIDs[0], client.PlayerID())
-		return "", err
-	}
-
-	res := []SetlistSyncResponse{{
-		req.PIDs[0],
-		0,
-	}}
-
-	return marshaler.MarshalResponse(service.Path(), res)
+	return marshaler.GenerateEmptyJSONResponse("setlists/sync"), nil
 }

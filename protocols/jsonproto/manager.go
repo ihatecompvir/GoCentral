@@ -126,7 +126,6 @@ func (mgr ServicesManager) Handle(jsonStr string, client *nex.Client) (string, e
 	service, exists := mgr.services[methodPath]
 	if !exists {
 		log.Printf("Unimplemented JSON service for path: %s\n", methodPath)
-		log.Printf("Request: %s\n", jsonStr)
 		return "", fmt.Errorf("unimplemented service for path:%s\n", methodPath)
 	}
 

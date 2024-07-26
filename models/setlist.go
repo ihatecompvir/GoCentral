@@ -24,9 +24,8 @@ type Setlist struct {
 	SongNames []string `bson:"s_names"`
 
 	// battle fields
-	TimeEndVal   int                `bson:"time_end_val"`
-	TimeEndUnits string             `bson:"time_end_units"`
-	Flags        int                `bson:"flags"`
-	Instrument   int                `bson:"instrument"`
-	BattleScores []BattleScoreEntry `bson:"battle_scores"`
+	TimeEndVal   int    `bson:"time_end_val"`
+	TimeEndUnits string `bson:"time_end_units"`
+	Flags        int    `bson:"flags"`
+	Instrument   int    `bson:"instrument"`
 }

@@ -5,13 +5,13 @@ import (
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
-	"sort"
 
 	db "rb3server/database"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type BattleRankRangeGetRequest struct {
@@ -52,52 +52,80 @@ func (service BattleRankRangeGetService) Handle(data string, database *mongo.Dat
 
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
-		return "", err
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
 	if req.PID000 != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for battle leaderboards")
-		return "", err
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for battle rank range leaderboards")
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
-	setlistsCollection := database.Collection("setlists")
+	scoresCollection := database.Collection("scores")
 
-	// FindOne the setlist from the DB with the associated battle ID
-	var setlist models.Setlist
-	err = setlistsCollection.FindOne(context.TODO(), bson.M{"setlist_id": req.BattleID}).Decode(&setlist)
+	startRank := int64(req.StartRank - 1)
+	endRank := int64((req.EndRank - req.StartRank) - 1)
+
+	// get cursor of scores filtered by song_id and role_id, with starting and ending ranks as indices (like scores[start_rank:end_rank]), sorted by biggest to smallest
+	// so if start_rank is 1 and end_rank is 10, we get the top 10 scores
+	cursor, err := scoresCollection.Find(context.TODO(), bson.M{"battle_id": req.BattleID}, &options.FindOptions{
+		Skip:  &startRank,
+		Limit: &endRank,
+		Sort:  bson.M{"score": -1},
+	})
 
 	if err != nil {
 		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
-	res := []BattleRankRangeGetResponse{}
+	var res []BattleRankRangeGetResponse
 
-	// sort battle scores by score
-	sort.Slice(setlist.BattleScores, func(i, j int) bool {
-		return setlist.BattleScores[i].Score > setlist.BattleScores[j].Score
-	})
+	var idx int = req.StartRank
 
-	// get the scores in the range, and append them to the response
-	for i := req.StartRank - 1; i < req.EndRank-1; i++ {
-		if i >= len(setlist.BattleScores) {
-			break
+	// iterate through the cursor and append each score to the response
+	for cursor.Next(context.Background()) {
+		var score models.Score
+		err := cursor.Decode(&score)
+
+		if err != nil {
+			log.Println("Failed to decode score:", err)
+			return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 		}
 
-		score := setlist.BattleScores[i]
-		res = append(res, BattleRankRangeGetResponse{
-			PID:          score.PID,
-			Name:         db.GetConsolePrefixedUsernameForPID(score.PID),
-			DiffID:       0,
-			Rank:         i + 1,
-			Score:        score.Score,
-			IsPercentile: 0,
-			InstMask:     0,
-			NotesPct:     0,
-			IsFriend:     0,
-			UnnamedBand:  0,
-			PGUID:        "",
-			ORank:        i + 1,
-		})
+		isBandScore := score.RoleID == 10
+
+		if isBandScore {
+			res = append(res, BattleRankRangeGetResponse{
+				PID:          score.OwnerPID,
+				Name:         db.GetBandNameForBandID(score.OwnerPID),
+				DiffID:       score.DiffID,
+				Rank:         idx,
+				Score:        score.Score,
+				IsPercentile: 0,
+				InstMask:     score.InstrumentMask,
+				NotesPct:     score.NotesPercent,
+				IsFriend:     0,
+				UnnamedBand:  0,
+				PGUID:        "",
+				ORank:        idx,
+			})
+		} else {
+			res = append(res, BattleRankRangeGetResponse{
+				PID:          score.OwnerPID,
+				Name:         db.GetConsolePrefixedUsernameForPID(score.OwnerPID),
+				DiffID:       score.DiffID,
+				Rank:         idx,
+				Score:        score.Score,
+				IsPercentile: 0,
+				InstMask:     score.InstrumentMask,
+				NotesPct:     score.NotesPercent,
+				IsFriend:     0,
+				UnnamedBand:  0,
+				PGUID:        "",
+				ORank:        idx,
+			})
+		}
+
+		idx++
 	}
 
 	if len(res) == 0 {

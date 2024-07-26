@@ -3,9 +3,9 @@ package scores
 import (
 	"context"
 	"log"
+	db "rb3server/database"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
-	"sort"
 	"strconv"
 
 	"github.com/ihatecompvir/nex-go"
@@ -54,65 +54,38 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 		return "", err
 	}
 
-	setlistCollection := database.Collection("setlists")
-
-	// Find the setlist with the equivalent battle ID to make sure it exists
-	var setlist models.Setlist
-	err = setlistCollection.FindOne(context.TODO(), bson.M{"setlist_id": req.BattleID}).Decode(&setlist)
-	if err != nil {
-		log.Printf("Could not find setlist with battle ID %d: %v", req.BattleID, err)
-		return "[]", nil
-	}
-
-	var score models.BattleScoreEntry
-	score.Score = req.Score
-	score.PID = req.PIDs[0]
+	scoresCollection := database.Collection("scores")
 
 	scoreHigher := []bool{}
 	currentScore := []int{}
 
-	// Retrieve the existing score for the PID
 	for _, pid := range req.PIDs {
-		found := false
-		var existingScore models.BattleScoreEntry
-		for _, battleScore := range setlist.BattleScores {
-			if battleScore.PID == pid {
-				existingScore = battleScore
-				found = true
-				break
-			}
-		}
+		var score models.Score
+		score.OwnerPID = pid
+		score.BattleID = req.BattleID
+		score.Score = req.Score
 
-		isNewScoreHigher := !found || score.Score > existingScore.Score
+		// Retrieve the existing score
+		var existingScore models.Score
+		err := scoresCollection.FindOne(context.TODO(), bson.M{"battle_id": req.BattleID, "pid": score.OwnerPID}).Decode(&existingScore)
+
+		isNewScoreHigher := err == mongo.ErrNoDocuments || score.Score > existingScore.Score
 		scoreHigher = append(scoreHigher, isNewScoreHigher)
 
+		// Only update if the new score is higher
 		if isNewScoreHigher {
-			filter := bson.M{
-				"setlist_id":        req.BattleID,
-				"battle_scores.pid": pid,
-			}
-			update := bson.M{
-				"$set": bson.M{"battle_scores.$.score": score.Score},
-			}
-			result, err := setlistCollection.UpdateOne(context.TODO(), filter, update)
-
-			if err != nil {
-				log.Printf("Error updating score for PID %d in battle ID %d: %v", pid, req.BattleID, err)
-				return "[]", nil
-			}
-
-			// If no score was updated, push the new score
-			if result.MatchedCount == 0 {
-				filter = bson.M{"setlist_id": req.BattleID}
-				update = bson.M{
-					"$push": bson.M{"battle_scores": score},
-				}
-				_, err = setlistCollection.UpdateOne(context.TODO(), filter, update, options.Update().SetUpsert(true))
-				if err != nil {
-					log.Printf("Could not update setlist with battle ID %d: %v", req.BattleID, err)
-					return "[]", nil
-				}
-			}
+			_, err = scoresCollection.UpdateOne(
+				nil,
+				bson.M{"battle_id": req.BattleID, "pid": score.OwnerPID},
+				bson.D{
+					{"$set", bson.D{
+						{"battle_id", score.BattleID},
+						{"pid", score.OwnerPID},
+						{"score", score.Score},
+					}},
+				},
+				options.Update().SetUpsert(true),
+			)
 
 			currentScore = append(currentScore, score.Score)
 		} else {
@@ -122,38 +95,42 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 
 	res := []BattleScoreRecordResponse{}
 
-	err = setlistCollection.FindOne(context.TODO(), bson.M{"setlist_id": req.BattleID}).Decode(&setlist)
-
-	// Sort battle scores by score
-	sort.Slice(setlist.BattleScores, func(i, j int) bool {
-		return setlist.BattleScores[i].Score > setlist.BattleScores[j].Score
-	})
-
 	numPids := len(req.PIDs)
 
 	for i := 0; i < (numPids / 2); i++ {
-		playerScoreIdx := 0
-		for idx, score := range setlist.BattleScores {
-			if score.PID == req.PIDs[i] {
-				playerScoreIdx = idx
-				break
-			}
-		}
+		playerScoreIdx, _ := scoresCollection.CountDocuments(context.TODO(), bson.M{"battle_id": req.BattleID, "score": bson.M{"$gt": req.Score}})
+
+		// Find the next highest score
+		var nextHighestScore models.Score
+		err = scoresCollection.FindOne(context.TODO(), bson.M{
+			"battle_id": req.BattleID,
+			"score":     bson.M{"$gt": req.Score},
+		}, options.FindOne().SetSort(bson.D{{"score", 1}})).Decode(&nextHighestScore)
 
 		if scoreHigher[i] {
+			instaRankString := "b"
+
+			// Get the name of the player who has the next highest score
+			var name string = db.GetUsernameForPID(nextHighestScore.OwnerPID)
+
+			if nextHighestScore.Score-req.Score < 2000 {
+				instaRankString = "i|" + strconv.Itoa(nextHighestScore.Score-req.Score) + "|" + name
+			}
+
 			instarank := BattleScoreRecordResponse{
 				req.BattleID,
-				0,
+				1,
 				int(playerScoreIdx + 1),
 				0,
 				"b",
-				"f",
+				instaRankString,
 			}
+
 			res = append(res, instarank)
 		} else {
 			instarank := BattleScoreRecordResponse{
 				req.BattleID,
-				0,
+				1,
 				int(playerScoreIdx + 1),
 				0,
 				"c|" + strconv.Itoa(currentScore[i]),
@@ -164,33 +141,44 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 	}
 
 	for i := numPids / 2; i < numPids; i++ {
-		playerScoreIdx := 0
-		for idx, score := range setlist.BattleScores {
-			if score.PID == req.PIDs[i] {
-				playerScoreIdx = idx
-				break
-			}
-		}
+		playerScoreIdx, _ := scoresCollection.CountDocuments(context.TODO(), bson.M{"battle_id": req.BattleID, "score": bson.M{"$gt": req.Score}})
+
+		// Find the next highest score
+		var nextHighestScore models.Score
+		err = scoresCollection.FindOne(context.TODO(), bson.M{
+			"battle_id": req.BattleID,
+			"score":     bson.M{"$gt": req.Score},
+		}, options.FindOne().SetSort(bson.D{{"score", 1}})).Decode(&nextHighestScore)
 
 		if scoreHigher[i] {
+			instaRankString := "b"
+
+			// Get the name of the player who has the next highest score
+			var name string = db.GetUsernameForPID(nextHighestScore.OwnerPID)
+
+			if nextHighestScore.Score-req.Score < 2000 {
+				instaRankString = "i|" + strconv.Itoa(nextHighestScore.Score-req.Score) + "|" + name
+			}
+
 			instarank := BattleScoreRecordResponse{
 				req.BattleID,
-				1,
+				0,
 				int(playerScoreIdx + 1),
 				0,
 				"b",
-				"f",
+				instaRankString,
 			}
 			res = append(res, instarank)
 		} else {
 			instarank := BattleScoreRecordResponse{
 				req.BattleID,
-				1,
+				0,
 				int(playerScoreIdx + 1),
 				0,
 				"c|" + strconv.Itoa(currentScore[i]),
 				"f",
 			}
+
 			res = append(res, instarank)
 		}
 	}
