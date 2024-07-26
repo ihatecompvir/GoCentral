@@ -69,6 +69,7 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 		// className is "XboxUserInfo" if the console is an Xbox
 		// className is "NintendoToken" if the console is a Wii
 		// className is "SonyNPTicket" if the console is a PS3
+		// className is "RPCN" if the emulator is RPCS3
 
 		consoleType := 0
 
@@ -79,6 +80,8 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 			consoleType = 1
 		case "NintendoToken":
 			consoleType = 2
+		case "RPCN":
+			consoleType = 3
 		default:
 			log.Println("Invalid ticket presented, could not determine console type")
 			SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, quazal.InvalidArgument)
