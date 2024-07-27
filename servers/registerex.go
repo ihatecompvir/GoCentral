@@ -1,6 +1,7 @@
 package servers
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"rb3server/database"
@@ -77,11 +78,17 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 		case "XboxUserInfo":
 			consoleType = 0
 		case "SonyNPTicket":
-			consoleType = 1
+			rpcn := []byte("RPCN")
+			isRPCN := bytes.Contains(ticketData, rpcn)
+
+			if isRPCN {
+				consoleType = 3
+			} else {
+				consoleType = 1
+			}
 		case "NintendoToken":
 			consoleType = 2
-		case "RPCN":
-			consoleType = 3
+
 		default:
 			log.Println("Invalid ticket presented, could not determine console type")
 			SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, quazal.InvalidArgument)
