@@ -33,12 +33,12 @@ func FindBySingleID(err error, client *nex.Client, callID uint32, gatheringID ui
 			rmcResponseStream.WriteUInt8(1)
 
 			rmcResponseStream.WriteBufferString("HarmonixGathering")
-			rmcResponseStream.WriteU32LENext([]uint32{uint32(len(gathering.Contents) + 4)})
-			rmcResponseStream.WriteU32LENext([]uint32{uint32(len(gathering.Contents))})
+			rmcResponseStream.WriteUInt32LE(uint32(len(gathering.Contents) + 4))
+			rmcResponseStream.WriteUInt32LE(uint32(len(gathering.Contents)))
 			rmcResponseStream.Grow(int64(len(gathering.Contents)))
 			rmcResponseStream.WriteBytesNext(gathering.Contents[0:4])
-			rmcResponseStream.WriteU32LENext([]uint32{user.PID})
-			rmcResponseStream.WriteU32LENext([]uint32{user.PID})
+			rmcResponseStream.WriteUInt32LE(user.PID)
+			rmcResponseStream.WriteUInt32LE(user.PID)
 			rmcResponseStream.WriteBytesNext(gathering.Contents[12:])
 		}
 	}

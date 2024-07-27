@@ -1,7 +1,10 @@
 package database
 
 import (
+	"math/rand"
 	"rb3server/models"
+	"strconv"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -67,4 +70,76 @@ func GetBandNameForBandID(pid int) string {
 			return "Unnamed Band"
 		}
 	}
+}
+
+func GetCoolFact() string {
+	// generate a random number between 0-3
+	var num int = rand.Intn(4)
+
+	// check if local date is March 31
+	if time.Now().Month() == time.March && time.Now().Day() == 31 {
+		return "GoCentral's first commit was made on March 31, 2021. Happy birthday GoCentral!"
+	}
+
+	pluralize := func(count int64, singular string, plural string) string {
+		if count == 1 {
+			return singular
+		}
+		return plural
+	}
+
+	switch num {
+	case 0:
+		scoresCollection := GocentralDatabase.Collection("scores")
+
+		// aggregate all scores and get the cumulative number of stars
+		cursor, err := scoresCollection.Aggregate(nil, bson.A{
+			bson.M{"$group": bson.M{"_id": nil, "total": bson.M{"$sum": "$stars"}}},
+		})
+
+		if err != nil {
+			return "Players on this server have earned an unknown number of stars because something broke trying to calculate it!"
+		}
+
+		var result []bson.M
+		if err = cursor.All(nil, &result); err != nil {
+			return "Players on this server have earned an unknown number of stars because something broke trying to calculate it!"
+		}
+
+		stars := result[0]["total"].(int32)
+		return "Players on this server have earned a cumulative " + strconv.Itoa(int(stars)) + " " + pluralize(int64(stars), "star", "stars") + "!"
+	case 1:
+		scoresCollection := GocentralDatabase.Collection("scores")
+
+		// get number of scores
+		count, err := scoresCollection.CountDocuments(nil, bson.M{})
+		if err != nil {
+			return "There are an unknown number of scores on this server because something broke trying to calculate it!"
+		}
+
+		return "There " + pluralize(count, "is", "are") + " " + strconv.FormatInt(count, 10) + " " + pluralize(count, "score", "scores") + " on this server!"
+	case 2:
+		charactersCollection := GocentralDatabase.Collection("characters")
+
+		// get number of characters
+		count, err := charactersCollection.CountDocuments(nil, bson.M{})
+		if err != nil {
+			return "There are an unknown number of characters on this server because something broke trying to calculate it!"
+		}
+
+		return "Players on this server have created " + strconv.FormatInt(count, 10) + " " + pluralize(count, "character", "characters") + "!"
+	case 3:
+		bandsCollection := GocentralDatabase.Collection("bands")
+
+		// get number of bands
+		count, err := bandsCollection.CountDocuments(nil, bson.M{})
+		if err != nil {
+			return "There are an unknown number of bands on this server because something broke trying to calculate it!"
+		}
+
+		return "Players on this server have named " + strconv.FormatInt(count, 10) + " " + pluralize(count, "band", "bands") + "!"
+	}
+
+	// this should never happen
+	return "Rock Band 3 is a game released by Harmonix in 2010. It is the third main game in the Rock Band series."
 }

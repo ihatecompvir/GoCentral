@@ -9,6 +9,8 @@ import (
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+
+	db "rb3server/database"
 )
 
 type TickerInfoRequest struct {
@@ -136,7 +138,7 @@ func (service TickerInfoService) Handle(data string, database *mongo.Database, c
 	// Spoof account linking status, 12345 pid
 	res := []TickerInfoResponse{{
 		req.PID,
-		"",
+		db.GetCoolFact(),
 		int(battleCount),
 		req.RoleID,
 		roleRank,
