@@ -39,6 +39,8 @@ func GetConsolePrefixedUsernameForPID(pid int) string {
 			return user.Username + " [PS3]"
 		case 2:
 			return user.Username + " [Wii]"
+		case 3:
+			return user.Username + " [RPCS3]"
 		default:
 			return user.Username
 		}
