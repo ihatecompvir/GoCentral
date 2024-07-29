@@ -67,6 +67,7 @@ func CleanupDuplicateScores() {
 }
 
 func PruneOldSessions() {
+
 	gatherings := GocentralDatabase.Collection("gatherings")
 
 	// find any gatherings which haven't had their "updated" field updated in the last hour and delete them
@@ -77,7 +78,7 @@ func PruneOldSessions() {
 	// Calculate the Unix time for 1 hour ago
 	cutoff := time.Now().Add(-1 * time.Hour).Unix()
 
-	_, err := gatherings.DeleteMany(ctx, bson.M{"updated": bson.M{"$lt": cutoff}})
+	_, err := gatherings.DeleteMany(ctx, bson.M{"last_updated": bson.M{"$lt": cutoff}})
 	if err != nil {
 		log.Println("Could not delete old gatherings: ", err)
 	}
