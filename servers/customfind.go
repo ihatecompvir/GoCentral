@@ -1,6 +1,7 @@
 package servers
 
 import (
+	"context"
 	"log"
 	"rb3server/database"
 	"rb3server/models"
@@ -34,9 +35,9 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 	// any gatherings that havent been updated in 5 minutes are ignored
 	// this should prevent endless loops of trying to join old/stale gatherings that are still in the DB
 	// but any UI state change or playing a song will update the gathering
-	cur, err := gatheringCollection.Aggregate(nil, []bson.M{
-		bson.M{"$match": bson.D{
-			// dont find our own gathering
+	cur, err := gatheringCollection.Aggregate(context.TODO(), []bson.M{
+		{"$match": bson.D{
+			// don't find our own gathering
 			{
 				Key:   "creator",
 				Value: bson.D{{Key: "$ne", Value: client.Username}},
@@ -46,12 +47,12 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 				Key:   "last_updated",
 				Value: bson.D{{Key: "$gt", Value: (time.Now().Unix()) - (5 * 60)}},
 			},
-			// dont look for gatherings in the "in song" state
+			// don't look for gatherings in the "in song" state
 			{
 				Key:   "state",
 				Value: bson.D{{Key: "$ne", Value: 2}},
 			},
-			// dont look for gatherings in the "on song select" state
+			// don't look for gatherings in the "on song select" state
 			{
 				Key:   "state",
 				Value: bson.D{{Key: "$ne", Value: 6}},
@@ -62,12 +63,23 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 				Value: bson.D{{Key: "$eq", Value: 1}},
 			},
 			// only look for gatherings created by the current console type
+			// with an additional match so RPCN can join real PS3 h/w gatherings
 			{
-				Key:   "console_type",
-				Value: bson.D{{Key: "$eq", Value: client.Platform()}},
+				Key: "console_type",
+				Value: bson.D{{
+					Key: "$in",
+					Value: func() []int {
+						switch client.Platform() {
+						case 1, 3:
+							return []int{1, 3}
+						default:
+							return []int{client.Platform()}
+						}
+					}(),
+				}},
 			},
 		}},
-		bson.M{"$sample": bson.M{"size": 10}},
+		{"$sample": bson.M{"size": 10}},
 	})
 	if err != nil {
 		log.Printf("Could not get a random gathering: %s\n", err)
