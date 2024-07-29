@@ -83,6 +83,24 @@ func main() {
 	go servers.StartAuthServer()
 	go servers.StartSecureServer()
 
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	quit := make(chan struct{})
+
+	// automatically run some housekeeping tasks
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				database.CleanupDuplicateScores()
+				database.PruneOldSessions()
+			case <-quit:
+				return
+			}
+		}
+	}()
+
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	s := <-sig
