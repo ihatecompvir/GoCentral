@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"math/rand"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/joho/godotenv"
+	"github.com/natefinch/lumberjack"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -23,6 +26,28 @@ import (
 )
 
 func main() {
+
+	envFile := flag.String("env", ".env", "specify the .env file to load")
+	flag.Parse()
+
+	err := godotenv.Load(*envFile)
+	if err != nil {
+		log.Println("Error loading .env file, using environment variables instead")
+	}
+
+	// if the user has set a log path, log there, otherwise log to stdout
+	logPath := os.Getenv("LOGPATH")
+
+	if logPath != "" {
+		log.SetOutput(&lumberjack.Logger{
+			Filename:   logPath,
+			MaxSize:    10,   // Max size in MB before rotation
+			MaxBackups: 3,    // Max number of old log files to retain
+			MaxAge:     28,   // Max number of days to retain old log files
+			Compress:   true, // Compress/zip old log files
+		})
+	}
+
 	uri := os.Getenv("MONGOCONNECTIONSTRING")
 
 	if uri == "" {
