@@ -27,6 +27,27 @@ func GetUsernameForPID(pid int) string {
 	}
 }
 
+// returns the pid for a given username
+func GetPIDForUsername(username string) int {
+	var user models.User
+
+	usersCollection := GocentralDatabase.Collection("users")
+
+	res := usersCollection.FindOne(nil, bson.M{"username": username})
+
+	if res.Err() != nil {
+		return 0
+	}
+
+	err := res.Decode(&user)
+
+	if err != nil {
+		return 0
+	}
+
+	return int(user.PID)
+}
+
 func GetConsolePrefixedUsernameForPID(pid int) string {
 	var user models.User
 
@@ -142,4 +163,14 @@ func GetCoolFact() string {
 
 	// this should never happen
 	return "Rock Band 3 is a game released by Harmonix in 2010. It is the third main game in the Rock Band series."
+}
+
+const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+func GenerateLinkCode(length int) string {
+	linkCode := make([]byte, length)
+	for i := range linkCode {
+		linkCode[i] = charset[rand.Intn(len(charset))]
+	}
+	return string(linkCode)
 }

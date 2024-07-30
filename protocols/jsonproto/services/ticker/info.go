@@ -135,7 +135,6 @@ func (service TickerInfoService) Handle(data string, database *mongo.Database, c
 		roleRank = len(roleResults) + 1
 	}
 
-	// Spoof account linking status, 12345 pid
 	res := []TickerInfoResponse{{
 		req.PID,
 		db.GetCoolFact(),

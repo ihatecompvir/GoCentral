@@ -126,6 +126,7 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 				{Key: "pid", Value: config.LastPID + 1},
 				{Key: "console_type", Value: machineType},
 				{Key: "guid", Value: guid},
+				{Key: "link_code", Value: database.GenerateLinkCode(10)},
 			})
 
 			if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
@@ -151,6 +152,16 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 			Config.LastSetlistID = config.LastSetlistID
 			Config.LastCharacterID = config.LastCharacterID
 
+		} else if user.LinkCode == "" {
+			linkCode := database.GenerateLinkCode(10)
+			_, err = users.UpdateOne(context.TODO(), bson.M{"username": username}, bson.D{
+				{"$set", bson.D{{"link_code", linkCode}}},
+			})
+			if err != nil {
+				log.Printf("Could not update link code for %s: %s\n", username, err)
+				SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.OperationError)
+				return
+			}
 		}
 	} else if machineType == 2 {
 		// check if the machine ID is already in the DB

@@ -155,7 +155,6 @@ func (service PerformanceRecordService) Handle(data string, database *mongo.Data
 	//	return "", err
 	//}
 
-	// Spoof account linking status, 12345 pid
 	res := []PerformanceRecordResponse{{
 		1,
 	}}

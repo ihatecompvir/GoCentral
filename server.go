@@ -4,17 +4,21 @@ import (
 	"context"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 
 	database "rb3server/database"
+	"rb3server/restapi"
 	"rb3server/servers"
 )
 
@@ -83,6 +87,47 @@ func main() {
 	go servers.StartAuthServer()
 	go servers.StartSecureServer()
 
+	// Start HTTP server using Chi
+	enableRESTAPI := os.Getenv("ENABLERESTAPI")
+
+	httpServer := &http.Server{}
+
+	if enableRESTAPI == "1" {
+		r := chi.NewRouter()
+		r.Use(middleware.Logger)
+
+		// used to check if the server is up
+		r.Get("/health", restapi.HealthHandler)
+
+		// some basic stats about how many chars/bands/scores/etc are in the DB
+		// does not include any user-specific information
+		r.Get("/stats", restapi.StatsHandler)
+
+		// used to get the current MOTD
+		r.Get("/motd", restapi.MotdHandler)
+
+		httpPort := os.Getenv("HTTPPORT")
+
+		if httpPort == "" {
+			log.Printf("REST API enabled but HTTP port, not set, please set an HTTP port using the HTTPPORT environment variable!")
+			return
+		}
+
+		httpServer = &http.Server{
+			Addr:    ":" + httpPort,
+			Handler: r,
+		}
+
+		go func() {
+			if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("Could not listen on :%v: %v\n", httpPort, err)
+			}
+		}()
+		log.Println("GoCentral REST API HTTP server started on:" + httpPort)
+	}
+
+	log.Printf("Starting housekeeping tasks...\n")
+
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
@@ -105,4 +150,13 @@ func main() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	s := <-sig
 	log.Printf("Signal (%s) received, stopping\n", s)
+
+	if enableRESTAPI == "true" {
+		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(ctx); err != nil {
+			log.Fatalf("HTTP server Shutdown: %v", err)
+		}
+	}
+	close(quit)
 }

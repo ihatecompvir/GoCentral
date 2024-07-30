@@ -40,7 +40,6 @@ func (service AccountLinkService) Handle(data string, database *mongo.Database, 
 		return "", err
 	}
 
-	// Spoof account linking status, 12345 pid
 	res := []AccountLinkResponse{{
 		req.PID,
 		1,
