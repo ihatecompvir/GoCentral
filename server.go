@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 	"github.com/natefinch/lumberjack"
 	"go.mongodb.org/mongo-driver/bson"
@@ -119,7 +118,6 @@ func main() {
 
 	if enableRESTAPI == "1" {
 		r := chi.NewRouter()
-		r.Use(middleware.Logger)
 
 		// used to check if the server is up
 		r.Get("/health", restapi.HealthHandler)
