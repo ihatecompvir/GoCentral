@@ -106,8 +106,8 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			continue
 		}
 
-		// if diffID is greater than 3, the score is invalid
-		if req.DiffIDs[idx] > 3 {
+		// if diffID is greater than 4, the score is invalid
+		if req.DiffIDs[idx] > 4 {
 			log.Println("Client-supplied score has invalid difficulty, rejecting score record")
 			continue
 		}

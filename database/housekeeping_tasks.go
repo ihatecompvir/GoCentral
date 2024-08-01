@@ -125,8 +125,9 @@ func CleanupInvalidScores() {
 
 	deletedCount += int(result.DeletedCount)
 
-	// delete any scores where the diff ID is greater than 3
-	result, err = scoresCollection.DeleteMany(ctx, bson.M{"diff_id": bson.M{"$gt": 3}})
+	// delete any scores where the diff ID is greater than 4
+	// DIFFICULTIES ARE 1-INDEXED, DON'T CHANGE THIS
+	result, err = scoresCollection.DeleteMany(ctx, bson.M{"diff_id": bson.M{"$gt": 4}})
 	if err != nil {
 		log.Println("Could not delete invalid scores: ", err)
 	}
