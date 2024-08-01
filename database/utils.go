@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"math/rand"
 	"rb3server/models"
 	"strconv"
@@ -48,6 +49,8 @@ func GetPIDForUsername(username string) int {
 	return int(user.PID)
 }
 
+// gets the username of the user with a console specific prefix
+// e.g. "Player [360]"
 func GetConsolePrefixedUsernameForPID(pid int) string {
 	var user models.User
 
@@ -93,6 +96,7 @@ func GetBandNameForBandID(pid int) string {
 	}
 }
 
+// gets a random fact about the DB
 func GetCoolFact() string {
 	// generate a random number between 0-3
 	var num int = rand.Intn(4)
@@ -167,10 +171,24 @@ func GetCoolFact() string {
 
 const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
+// generates a 10 digit alphanumeric link code
 func GenerateLinkCode(length int) string {
 	linkCode := make([]byte, length)
 	for i := range linkCode {
 		linkCode[i] = charset[rand.Intn(len(charset))]
 	}
 	return string(linkCode)
+}
+
+// checks if a particular PID is a friend of another
+func IsPIDAFriendOfPID(pid int, friendPID int) (bool, error) {
+	usersCollection := GocentralDatabase.Collection("users")
+
+	// check if the friendPID is in the friend list of the user
+	count, err := usersCollection.CountDocuments(context.TODO(), bson.M{"pid": pid, "friends": friendPID})
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
 }

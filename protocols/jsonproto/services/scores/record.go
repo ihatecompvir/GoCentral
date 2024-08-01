@@ -89,7 +89,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 
 	if req.PIDs[0] != int(client.PlayerID()) {
 		log.Println("Client-supplied PID did not match server-assigned PID, rejecting setlist update")
-		return "", err
+		return "", nil
 	}
 
 	scoresCollection := database.Collection("scores")
@@ -98,6 +98,33 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 	currentScore := []int{}
 
 	for idx, pid := range req.PIDs {
+		// do sanity checks on the scores
+
+		// if stars are greater than 6, the score is invalid
+		if req.Stars[idx] > 6 {
+			log.Println("Client-supplied score has invalid star count, rejecting score record")
+			return "", nil
+		}
+
+		// if diffID is greater than 3, the score is invalid
+		if req.DiffIDs[idx] > 3 {
+			log.Println("Client-supplied score has invalid difficulty, rejecting score record")
+			return "", nil
+		}
+
+		// if the score is less than or equal to 0, the score is invalid
+		// we don't really want scores with 0 points on the leaderboards and I believe the original server also rejected these
+		if req.Scores[idx] <= 0 {
+			log.Println("Client-supplied score is less than or equal to 0, rejecting score record")
+			return "", nil
+		}
+
+		// if the role ID is greater than 10, the score is invalid
+		if req.RoleIDs[idx] > 10 {
+			log.Println("Client-supplied score has invalid role ID, rejecting score record")
+			return "", nil
+		}
+
 		var Score models.Score
 		Score.OwnerPID = pid
 		Score.SongID = req.SongID

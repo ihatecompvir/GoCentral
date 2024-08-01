@@ -25,8 +25,9 @@ type Stats struct {
 
 func AddStandardHeaders(writer http.ResponseWriter) {
 	headers := map[string]string{
-		"Server":            "GoCentral",
-		"X-Clacks-Overhead": "GNU maxton",
+		"Server":                      "GoCentral",
+		"X-Clacks-Overhead":           "GNU maxton",
+		"Access-Control-Allow-Origin": "*",
 	}
 
 	for key, value := range headers {
@@ -96,6 +97,48 @@ func StatsHandler(w http.ResponseWriter, r *http.Request) {
 	AddStandardHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(stats)
+}
+
+func SongListHandler(w http.ResponseWriter, r *http.Request) {
+
+	scoresCollection := database.GocentralDatabase.Collection("scores")
+
+	// Aggregate pipeline to group by song_id to get unique song ids
+	pipeline := mongo.Pipeline{
+		{{"$group", bson.D{{"_id", "$song_id"}}}},
+	}
+
+	cursor, err := scoresCollection.Aggregate(context.TODO(), pipeline)
+	if err != nil {
+		AddStandardHeaders(w)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	defer cursor.Close(context.TODO())
+
+	var songs []int
+	for cursor.Next(context.TODO()) {
+		var result struct {
+			ID int `bson:"_id"`
+		}
+		if err := cursor.Decode(&result); err != nil {
+			AddStandardHeaders(w)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		songs = append(songs, result.ID)
+	}
+
+	if err := cursor.Err(); err != nil {
+		AddStandardHeaders(w)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	AddStandardHeaders(w)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string][]int{"songs": songs})
 }
 
 func MotdHandler(w http.ResponseWriter, r *http.Request) {

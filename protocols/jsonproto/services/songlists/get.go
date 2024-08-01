@@ -10,6 +10,8 @@ import (
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+
+	db "rb3server/database"
 )
 
 type GetSonglistsRequest struct {
@@ -73,7 +75,7 @@ func (service GetSonglistsService) Handle(data string, database *mongo.Database,
 
 	setlistCollection := database.Collection("setlists")
 
-	setlistCursor, err := setlistCollection.Find(context.TODO(), bson.D{{"shared", "t"}, {"pid", bson.D{{"$ne", req.PID000}}}})
+	setlistCursor, err := setlistCollection.Find(context.TODO(), bson.D{{"shared", "t"}})
 
 	if err != nil {
 		log.Printf("Error getting songlists: %s", err)
@@ -88,6 +90,21 @@ func (service GetSonglistsService) Handle(data string, database *mongo.Database,
 
 		// normal setlist
 		if setlistToCopy.Type == 1 || setlistToCopy.Type == 2 || setlistToCopy.Type == 0 {
+
+			// always show "Harmonix Recommends" aka server-provided setlists which are intended to be global for all players
+			if setlistToCopy.Type != 2 {
+				// make sure we only get setlists created by our friends
+				isFriendCreated, err := db.IsPIDAFriendOfPID(req.PID000, setlistToCopy.PID)
+
+				if err != nil {
+					continue
+				}
+
+				if !isFriendCreated {
+					continue
+				}
+			}
+
 			var setlist GetSonglistResponse
 			setlist.ArtURL = setlistToCopy.ArtURL
 			setlist.Desc = setlistToCopy.Desc
@@ -108,6 +125,21 @@ func (service GetSonglistsService) Handle(data string, database *mongo.Database,
 
 		// battle setlist
 		if setlistToCopy.Type == 1000 || setlistToCopy.Type == 1001 || setlistToCopy.Type == 1002 {
+
+			// always show server-provided battles
+			if setlistToCopy.Type != 1002 {
+				// make sure we only get battles created by our friends
+				isFriendCreated, err := db.IsPIDAFriendOfPID(req.PID000, setlistToCopy.PID)
+
+				if err != nil {
+					continue
+				}
+
+				if !isFriendCreated {
+					continue
+				}
+			}
+
 			var battle GetBattleSonglistResponse
 			battle.ArtURL = setlistToCopy.ArtURL
 			battle.Desc = setlistToCopy.Desc

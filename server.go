@@ -129,6 +129,8 @@ func main() {
 		// used to get the current MOTD
 		r.Get("/motd", restapi.MotdHandler)
 
+		r.Get("/song_list", restapi.SongListHandler)
+
 		httpPort := os.Getenv("HTTPPORT")
 
 		if httpPort == "" {
