@@ -125,6 +125,12 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 			return "", nil
 		}
 
+		// if the score has a percentage greater than 100 or less than or equal to 0, the score is invalid
+		if req.Percents[idx] > 100 || req.Percents[idx] <= 0 {
+			log.Println("Client-supplied score has invalid percentage, rejecting score record")
+			return "", nil
+		}
+
 		var Score models.Score
 		Score.OwnerPID = pid
 		Score.SongID = req.SongID

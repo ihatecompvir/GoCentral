@@ -83,3 +83,66 @@ func PruneOldSessions() {
 		log.Println("Could not delete old gatherings: ", err)
 	}
 }
+
+func CleanupInvalidScores() {
+	scoresCollection := GocentralDatabase.Collection("scores")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	deletedCount := 0
+
+	// Delete any scores where the song ID is 0 (invalid)
+	// some customs might have song ID 0, but the scores on such a leaderboard are not going to be right anyway since it will be *every* custom with an invalid song ID
+	result, err := scoresCollection.DeleteMany(ctx, bson.M{"song_id": 0})
+
+	deletedCount += int(result.DeletedCount)
+
+	if err != nil {
+		log.Println("Could not delete invalid scores: ", err)
+	}
+
+	// Delete any scores where the role ID is greater than 10
+	result, err = scoresCollection.DeleteMany(ctx, bson.M{"role_id": bson.M{"$gt": 10}})
+	if err != nil {
+		log.Println("Could not delete invalid scores: ", err)
+	}
+
+	deletedCount += int(result.DeletedCount)
+
+	// delete any scores where the score is less than or equal to 0
+	result, err = scoresCollection.DeleteMany(ctx, bson.M{"score": bson.M{"$lte": 0}})
+	if err != nil {
+		log.Println("Could not delete invalid scores: ", err)
+	}
+
+	deletedCount += int(result.DeletedCount)
+
+	// delete any scores where the stars are greater than 6
+	result, err = scoresCollection.DeleteMany(ctx, bson.M{"stars": bson.M{"$gt": 6}})
+	if err != nil {
+		log.Println("Could not delete invalid scores: ", err)
+	}
+
+	deletedCount += int(result.DeletedCount)
+
+	// delete any scores where the diff ID is greater than 3
+	result, err = scoresCollection.DeleteMany(ctx, bson.M{"diff_id": bson.M{"$gt": 3}})
+	if err != nil {
+		log.Println("Could not delete invalid scores: ", err)
+	}
+
+	deletedCount += int(result.DeletedCount)
+
+	// delete any scores where the percentage is greater than 100
+	result, err = scoresCollection.DeleteMany(ctx, bson.M{"notespct": bson.M{"$gt": 100}})
+	if err != nil {
+		log.Println("Could not delete invalid scores: ", err)
+	}
+
+	deletedCount += int(result.DeletedCount)
+
+	if deletedCount != 0 {
+		log.Printf("Deleted %d invalid scores.\n", deletedCount)
+	}
+
+}

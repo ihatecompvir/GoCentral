@@ -165,6 +165,7 @@ func main() {
 			case <-ticker.C:
 				database.CleanupDuplicateScores()
 				database.PruneOldSessions()
+				database.CleanupInvalidScores()
 			case <-quit:
 				return
 			}
