@@ -103,32 +103,32 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		// if stars are greater than 6, the score is invalid
 		if req.Stars[idx] > 6 {
 			log.Println("Client-supplied score has invalid star count, rejecting score record")
-			return "", nil
+			continue
 		}
 
 		// if diffID is greater than 3, the score is invalid
 		if req.DiffIDs[idx] > 3 {
 			log.Println("Client-supplied score has invalid difficulty, rejecting score record")
-			return "", nil
+			continue
 		}
 
 		// if the score is less than or equal to 0, the score is invalid
 		// we don't really want scores with 0 points on the leaderboards and I believe the original server also rejected these
 		if req.Scores[idx] <= 0 {
 			log.Println("Client-supplied score is less than or equal to 0, rejecting score record")
-			return "", nil
+			continue
 		}
 
 		// if the role ID is greater than 10, the score is invalid
 		if req.RoleIDs[idx] > 10 {
 			log.Println("Client-supplied score has invalid role ID, rejecting score record")
-			return "", nil
+			continue
 		}
 
 		// if the score has a percentage greater than 100 or less than or equal to 0, the score is invalid
 		if req.Percents[idx] > 100 || req.Percents[idx] <= 0 {
 			log.Println("Client-supplied score has invalid percentage, rejecting score record")
-			return "", nil
+			continue
 		}
 
 		var Score models.Score
