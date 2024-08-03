@@ -95,7 +95,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 	scoresCollection := database.Collection("scores")
 
 	scoreHigher := make([]bool, len(req.PIDs))
-	currentScore := []int{}
+	currentScore := make([]int, len(req.PIDs))
 
 	for idx, pid := range req.PIDs {
 		// do sanity checks on the scores
@@ -176,9 +176,9 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 				options.Update().SetUpsert(true),
 			)
 
-			currentScore = append(currentScore, Score.Score)
+			currentScore[idx] = Score.Score
 		} else {
-			currentScore = append(currentScore, existingScore.Score)
+			currentScore[idx] = existingScore.Score
 		}
 	}
 
