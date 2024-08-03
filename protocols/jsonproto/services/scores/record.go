@@ -94,7 +94,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 
 	scoresCollection := database.Collection("scores")
 
-	scoreHigher := []bool{}
+	scoreHigher := make([]bool, len(req.PIDs))
 	currentScore := []int{}
 
 	for idx, pid := range req.PIDs {
@@ -153,7 +153,7 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		err := scoresCollection.FindOne(context.TODO(), bson.M{"song_id": req.SongID, "pid": Score.OwnerPID, "role_id": Score.RoleID}).Decode(&existingScore)
 
 		isNewScoreHigher := err == mongo.ErrNoDocuments || Score.Score > existingScore.Score
-		scoreHigher = append(scoreHigher, isNewScoreHigher)
+		scoreHigher[idx] = isNewScoreHigher
 
 		// Only update if the new score is higher
 		if isNewScoreHigher {
