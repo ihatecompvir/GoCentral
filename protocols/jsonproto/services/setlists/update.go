@@ -150,10 +150,7 @@ func (service SetlistUpdateService) Handle(data string, database *mongo.Database
 		setlist.Created = time.Now().Unix()
 	}
 
-	// Create song names that are just empty strings for now
-	for i := 0; i < len(req.SongIDs); i++ {
-		setlist.SongNames = append(setlist.SongNames, "")
-	}
+	setlist.SongNames = make([]string, len(req.SongIDs))
 
 	filter := bson.M{"guid": req.ListGUID}
 	update := bson.M{
