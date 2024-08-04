@@ -49,7 +49,7 @@ func (service BattleCreateService) Handle(data string, database *mongo.Database,
 	}
 
 	if req.PID != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting setlist update")
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting battle creation")
 		return "", err
 	}
 
@@ -140,10 +140,8 @@ func (service BattleCreateService) Handle(data string, database *mongo.Database,
 
 	// create song names that are just empty strings for now
 	// TODO: create a song ID DB so we can store the proper names
-	// perhaps there is some way we can automatically create this
-	for i := 0; i < len(req.SongIDs); i++ {
-		setlist.SongNames = append(setlist.SongNames, "")
-	}
+	// perhaps there is some way we can automatically create this, but I don't think the game ever sends song names
+	setlist.SongNames = make([]string, len(req.SongIDs))
 
 	update := bson.D{
 		{Key: "art_url", Value: setlist.ArtURL},

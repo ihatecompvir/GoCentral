@@ -87,8 +87,14 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		return "", err
 	}
 
+	// make sure the pids array is not empty
+	if len(req.PIDs) == 0 {
+		log.Println("PID array is empty, rejecting score record")
+		return "", err
+	}
+
 	if req.PIDs[0] != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting setlist update")
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting score record")
 		return "", nil
 	}
 

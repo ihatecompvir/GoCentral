@@ -49,8 +49,14 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 		return "", err
 	}
 
+	// make sure the pids array is not empty
+	if len(req.PIDs) == 0 {
+		log.Println("PID array is empty, rejecting battle score record")
+		return "", err
+	}
+
 	if req.PIDs[0] != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting setlist update")
+		log.Println("Client-supplied PID did not match server-assigned PID, rejecting battle score record")
 		return "", err
 	}
 

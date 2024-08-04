@@ -37,6 +37,12 @@ func (service MiscSyncAvailableSongsService) Handle(data string, database *mongo
 		return "", err
 	}
 
+	// make sure the pids array is not empty
+	if len(req.PIDs) == 0 {
+		log.Println("PID array is empty, rejecting available song sync")
+		return "", err
+	}
+
 	if req.PIDs[0] == 0 {
 		// it is a machine, not a player, so just respond with a blank response
 		return marshaler.MarshalResponse(service.Path(), []MiscSyncAvailableSongsResponse{{0}})
