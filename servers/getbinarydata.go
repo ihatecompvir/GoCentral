@@ -1,25 +1,28 @@
 package servers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"rb3server/database"
 	"rb3server/models"
 	"rb3server/quazal"
 	"strings"
+	"time"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func SanitizePath(path string) string {
-	// check for any invalid characters in the path
-	// if any are found, replace them with an underscore
-	invalidChars := []string{"\\", "/", ":", "*", "?", "\"", "<", ">", "|", "\\r", "\\n", "\x0a", "\x0d", ".", "\x00"}
+	// List of invalid characters except the path separators and drive letter colon
+	invalidChars := []string{"*", "?", "\"", "<", ">", "|", "\r", "\n", "\x0a", "\x0d", "\x00", "."}
 
 	for _, char := range invalidChars {
 		path = strings.ReplaceAll(path, char, "_")
@@ -54,6 +57,13 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 		return
 	}
 
+	// try to get base path from environment variables
+	basePath := os.Getenv("BASEBINARYDATAPATH")
+
+	if basePath == "" {
+		basePath = "binary_data"
+	}
+
 	var filePath string
 
 	var platformExtension string
@@ -63,8 +73,7 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 	switch client.Platform() {
 	case 0:
 		platformExtension = "png_xbox"
-	case 1:
-	case 3:
+	case 1, 3:
 		platformExtension = "png_ps3"
 	case 2:
 		platformExtension = "png_wii"
@@ -88,10 +97,17 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 		setlistsCollection := database.GocentralDatabase.Collection("setlists")
 
 		var setlist models.Setlist
-		err = setlistsCollection.FindOne(nil, bson.M{"guid": setlistGUID}).Decode(&setlist)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err = setlistsCollection.FindOne(ctx, bson.M{"guid": setlistGUID}).Decode(&setlist)
 
 		if err != nil {
-			log.Println("Error finding setlist with GUID ", setlistGUID)
+			if err == mongo.ErrNoDocuments {
+				log.Println("Setlist not found with GUID ", setlistGUID)
+			} else {
+				log.Println("Error finding setlist with GUID ", setlistGUID, ": ", err)
+			}
 			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
 			return
 		}
@@ -106,15 +122,8 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 		revision := int64(revisionFloat)
 
-		filePath = fmt.Sprintf("binary_data/setlist_art/%s/%d."+platformExtension, setlistGUID, revision)
-
-		filePath = filepath.Clean(SanitizePath(filePath))
-
-		if !strings.HasPrefix(filePath, "binary_data") {
-			log.Println("Invalid path: ", filePath)
-			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
-			return
-		}
+		filePath = filepath.Join(basePath, "setlist_art", setlistGUID, fmt.Sprintf("%d.%s", revision, platformExtension))
+		filePath = SanitizePath(filePath)
 
 	case "battle_art":
 		revisionFloat, ok := metadataMap["revision"].(float64)
@@ -127,30 +136,30 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 		revision := int64(revisionFloat)
 
-		// battle_art can optionally have battle_id; try to get it, but dont fail if it cant be found
+		// battle_art can optionally have battle_id; try to get it, but don't fail if it can't be found
 		battleID, _ := metadataMap["battle_id"].(float64)
 
 		// make sure the setlist with the specified battle ID actually exists
 		setlistsCollection := database.GocentralDatabase.Collection("setlists")
 
 		var setlist models.Setlist
-		err = setlistsCollection.FindOne(nil, bson.M{"setlist_id": battleID}).Decode(&setlist)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err = setlistsCollection.FindOne(ctx, bson.M{"setlist_id": battleID}).Decode(&setlist)
 
 		if err != nil {
-			log.Println("Error finding battle with battle ID ", battleID)
+			if err == mongo.ErrNoDocuments {
+				log.Println("Battle not found with battle ID ", battleID)
+			} else {
+				log.Println("Error finding battle with battle ID ", battleID, ": ", err)
+			}
 			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
 			return
 		}
 
-		filePath = fmt.Sprintf("binary_data/battle_art/%d/%d."+platformExtension, int64(battleID), revision)
-
-		filePath = filepath.Clean(SanitizePath(filePath))
-
-		if !strings.HasPrefix(filePath, "binary_data") {
-			log.Println("Invalid path: ", filePath)
-			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
-			return
-		}
+		filePath = filepath.Join(basePath, "battle_art", fmt.Sprintf("%d", int64(battleID)), fmt.Sprintf("%d.%s", revision, platformExtension))
+		filePath = SanitizePath(filePath)
 
 	case "band_logo":
 		bandIDFloat, ok := metadataMap["band_id"].(float64)
@@ -173,24 +182,27 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 		revision := int64(revisionFloat)
 
-		filePath = fmt.Sprintf("binary_data/band_logo/%d/%d."+platformExtension, bandID, revision)
-
-		filePath = filepath.Clean(SanitizePath(filePath))
-
-		if !strings.HasPrefix(filePath, "binary_data") {
-			log.Println("Invalid path: ", filePath)
-			SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
-			return
-		}
+		filePath = filepath.Join(basePath, "band_logo", fmt.Sprintf("%d", bandID), fmt.Sprintf("%d.%s", revision, platformExtension))
+		filePath = SanitizePath(filePath)
 
 	default:
-		log.Println("Unsupported type %s in requested metadata", dataType)
+		log.Println("Unsupported type ", dataType, " in requested metadata")
+		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
+		return
+	}
+
+	// Check if the path is still valid and under basePath
+	cleanBasePath := filepath.Clean(basePath)
+	cleanFilePath := filepath.Clean(filePath)
+
+	if !strings.HasPrefix(cleanFilePath, cleanBasePath) {
+		log.Println("Invalid path: ", cleanFilePath)
 		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)
 		return
 	}
 
 	// Read the file from disk
-	data, err := ioutil.ReadFile(filePath)
+	data, err := ioutil.ReadFile(cleanFilePath)
 	if err != nil {
 		log.Println("Error reading file from disk: ", err)
 		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.UnknownError)

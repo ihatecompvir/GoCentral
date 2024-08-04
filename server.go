@@ -166,6 +166,7 @@ func main() {
 				database.CleanupDuplicateScores()
 				database.PruneOldSessions()
 				database.CleanupInvalidScores()
+				database.DeleteExpiredBattles()
 			case <-quit:
 				return
 			}

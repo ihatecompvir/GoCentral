@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"log"
+	"rb3server/models"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -144,6 +145,68 @@ func CleanupInvalidScores() {
 
 	if deletedCount != 0 {
 		log.Printf("Deleted %d invalid scores.\n", deletedCount)
+	}
+
+}
+
+func DeleteExpiredBattles() {
+	setlistsCollection := GocentralDatabase.Collection("setlists")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cursor, err := setlistsCollection.Find(ctx, bson.M{"type": bson.M{"$in": []int{1000, 1001, 1002}}})
+	if err != nil {
+		log.Println("Could not get setlists for deletion: ", err)
+		return
+	}
+	defer cursor.Close(ctx)
+
+	deletedCount := 0
+
+	for cursor.Next(ctx) {
+		var setlist models.Setlist
+		cursor.Decode(&setlist)
+
+		createdTime := time.Unix(setlist.Created, 0)
+
+		var expiredTime time.Time
+
+		switch setlist.TimeEndUnits {
+		case "seconds":
+			expiredTime = createdTime.Add(time.Second * time.Duration(setlist.TimeEndVal))
+		case "minutes":
+			expiredTime = createdTime.Add(time.Minute * time.Duration(setlist.TimeEndVal))
+		case "hours":
+			expiredTime = createdTime.Add(time.Hour * time.Duration(setlist.TimeEndVal))
+		case "days":
+			expiredTime = createdTime.Add(time.Hour * 24 * time.Duration(setlist.TimeEndVal))
+		}
+
+		// allow players 3 days to view the leaderboards of the setlist before it is nuked
+		// the game itself should prevent recording scores at this time, but we should add a check for this in the battle score record too
+		expiredTime = expiredTime.Add(time.Hour * 24 * 3)
+
+		if time.Now().After(expiredTime) {
+			_, err := setlistsCollection.DeleteOne(ctx, bson.M{"setlist_id": setlist.SetlistID})
+			if err != nil {
+				log.Println("Could not delete expired battle: ", err)
+			} else {
+				deletedCount++
+			}
+
+			// delete all scores associated with this setlist
+			scoresCollection := GocentralDatabase.Collection("scores")
+			_, err = scoresCollection.DeleteMany(ctx, bson.M{"setlist_id": setlist.SetlistID})
+
+			if err != nil {
+				log.Println("Could not delete scores associated with expired battle: ", err)
+			}
+		}
+	}
+
+	if deletedCount != 0 {
+		log.Printf("Deleted %d expired battles.\n", deletedCount)
 	}
 
 }

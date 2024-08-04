@@ -192,3 +192,32 @@ func IsPIDAFriendOfPID(pid int, friendPID int) (bool, error) {
 
 	return count > 0, nil
 }
+
+func IsBattleExpired(battleID int) (bool, *time.Time) {
+	setlistsCollection := GocentralDatabase.Collection("setlists")
+
+	var battle models.Setlist
+
+	_ = setlistsCollection.FindOne(context.TODO(), bson.M{"setlist_id": battleID}).Decode(&battle)
+
+	createdTime := time.Unix(battle.Created, 0)
+
+	var expiredTime time.Time
+
+	switch battle.TimeEndUnits {
+	case "seconds":
+		expiredTime = createdTime.Add(time.Second * time.Duration(battle.TimeEndVal))
+	case "minutes":
+		expiredTime = createdTime.Add(time.Minute * time.Duration(battle.TimeEndVal))
+	case "hours":
+		expiredTime = createdTime.Add(time.Hour * time.Duration(battle.TimeEndVal))
+	case "days":
+		expiredTime = createdTime.Add(time.Hour * 24 * time.Duration(battle.TimeEndVal))
+	}
+
+	if time.Now().After(expiredTime) {
+		return true, &expiredTime
+	}
+
+	return false, nil
+}
