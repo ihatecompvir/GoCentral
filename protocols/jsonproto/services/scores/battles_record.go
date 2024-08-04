@@ -60,6 +60,13 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 		return "", err
 	}
 
+	// make sure the player is not trying to submit a score for a battle that is expired
+	isExpired, _ := db.GetBattleExpiryInfo(req.BattleID)
+	if isExpired {
+		log.Println("Battle", req.BattleID, "is expired, rejecting battle score record")
+		return "", err
+	}
+
 	scoresCollection := database.Collection("scores")
 
 	scoreHigher := []bool{}
@@ -118,9 +125,17 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 
 			// Get the name of the player who has the next highest score
 			var name string = db.GetUsernameForPID(nextHighestScore.OwnerPID)
+			var nextScoreDiff int
+			if err == mongo.ErrNoDocuments {
+				name = "N/A"
+				nextScoreDiff = 0 // No higher score exists
+			} else {
+				name = db.GetUsernameForPID(nextHighestScore.OwnerPID)
+				nextScoreDiff = nextHighestScore.Score - req.Score
+			}
 
-			if nextHighestScore.Score-req.Score < 2000 {
-				instaRankString = "i|" + strconv.Itoa(nextHighestScore.Score-req.Score) + "|" + name
+			if nextScoreDiff < 2000 && nextScoreDiff > 0 {
+				instaRankString = "i|" + strconv.Itoa(nextScoreDiff) + "|" + name
 			}
 
 			instarank := BattleScoreRecordResponse{
@@ -161,9 +176,17 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 
 			// Get the name of the player who has the next highest score
 			var name string = db.GetUsernameForPID(nextHighestScore.OwnerPID)
+			var nextScoreDiff int
+			if err == mongo.ErrNoDocuments {
+				name = "N/A"
+				nextScoreDiff = 0 // No higher score exists
+			} else {
+				name = db.GetUsernameForPID(nextHighestScore.OwnerPID)
+				nextScoreDiff = nextHighestScore.Score - req.Score
+			}
 
-			if nextHighestScore.Score-req.Score < 2000 {
-				instaRankString = "i|" + strconv.Itoa(nextHighestScore.Score-req.Score) + "|" + name
+			if nextScoreDiff < 2000 && nextScoreDiff > 0 {
+				instaRankString = "i|" + strconv.Itoa(nextScoreDiff) + "|" + name
 			}
 
 			instarank := BattleScoreRecordResponse{

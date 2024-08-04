@@ -14,6 +14,7 @@ import (
 	"rb3server/protocols/jsonproto/services/entities/character"
 	leaderboard "rb3server/protocols/jsonproto/services/leaderboards"
 	"rb3server/protocols/jsonproto/services/misc"
+	"rb3server/protocols/jsonproto/services/music_library"
 	"rb3server/protocols/jsonproto/services/performance"
 	"rb3server/protocols/jsonproto/services/scores"
 	"rb3server/protocols/jsonproto/services/setlists"
@@ -56,7 +57,6 @@ func (mgr *ServicesManager) registerAll() {
 	mgr.register(config.ConfigService{})
 
 	// setlist creation
-	mgr.register(setlists.SetlistCreationService{})
 	mgr.register(setlists.SetlistSyncService{})
 	mgr.register(setlists.SetlistUpdateService{})
 
@@ -107,6 +107,10 @@ func (mgr *ServicesManager) registerAll() {
 
 	// misc
 	mgr.register(misc.MiscSyncAvailableSongsService{})
+	mgr.register(misc.SetlistCreationStatusService{})
+
+	// music_library
+	mgr.register(music_library.SortAndFiltersService{})
 
 }
 

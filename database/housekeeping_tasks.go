@@ -168,39 +168,28 @@ func DeleteExpiredBattles() {
 		var setlist models.Setlist
 		cursor.Decode(&setlist)
 
-		createdTime := time.Unix(setlist.Created, 0)
+		isExpired, expiryTime := GetBattleExpiryInfo(setlist.SetlistID)
 
-		var expiredTime time.Time
+		if isExpired {
+			// allow players 3 days to view the leaderboards of the setlist before it is nuked
+			// the game itself should prevent recording scores at this time, but we should add a check for this in the battle score record too
+			expiredTime := expiryTime.Add(3 * 24 * time.Hour)
 
-		switch setlist.TimeEndUnits {
-		case "seconds":
-			expiredTime = createdTime.Add(time.Second * time.Duration(setlist.TimeEndVal))
-		case "minutes":
-			expiredTime = createdTime.Add(time.Minute * time.Duration(setlist.TimeEndVal))
-		case "hours":
-			expiredTime = createdTime.Add(time.Hour * time.Duration(setlist.TimeEndVal))
-		case "days":
-			expiredTime = createdTime.Add(time.Hour * 24 * time.Duration(setlist.TimeEndVal))
-		}
+			if time.Now().After(expiredTime) {
+				_, err := setlistsCollection.DeleteOne(ctx, bson.M{"setlist_id": setlist.SetlistID})
+				if err != nil {
+					log.Println("Could not delete expired battle: ", err)
+				} else {
+					deletedCount++
+				}
 
-		// allow players 3 days to view the leaderboards of the setlist before it is nuked
-		// the game itself should prevent recording scores at this time, but we should add a check for this in the battle score record too
-		expiredTime = expiredTime.Add(time.Hour * 24 * 3)
+				// delete all scores associated with this setlist
+				scoresCollection := GocentralDatabase.Collection("scores")
+				_, err = scoresCollection.DeleteMany(ctx, bson.M{"setlist_id": setlist.SetlistID})
 
-		if time.Now().After(expiredTime) {
-			_, err := setlistsCollection.DeleteOne(ctx, bson.M{"setlist_id": setlist.SetlistID})
-			if err != nil {
-				log.Println("Could not delete expired battle: ", err)
-			} else {
-				deletedCount++
-			}
-
-			// delete all scores associated with this setlist
-			scoresCollection := GocentralDatabase.Collection("scores")
-			_, err = scoresCollection.DeleteMany(ctx, bson.M{"setlist_id": setlist.SetlistID})
-
-			if err != nil {
-				log.Println("Could not delete scores associated with expired battle: ", err)
+				if err != nil {
+					log.Println("Could not delete scores associated with expired battle: ", err)
+				}
 			}
 		}
 	}

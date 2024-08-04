@@ -5,7 +5,8 @@ import (
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
-	"time"
+
+	db "rb3server/database"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
@@ -84,22 +85,10 @@ func (service GetBattlesClosedService) Handle(data string, database *mongo.Datab
 			battle.SongIDs = append(battle.SongIDs, setlistToCopy.SongIDs...)
 			battle.SongNames = append(battle.SongNames, setlistToCopy.SongNames...)
 
-			// get unix time of created, along with time_end_val and time_end_units, and determine if the battle is closed
-			createdTime := time.Unix(setlistToCopy.Created, 0)
-
-			switch setlistToCopy.TimeEndUnits {
-			case "seconds":
-				createdTime = createdTime.Add(time.Second * time.Duration(setlistToCopy.TimeEndVal))
-			case "minutes":
-				createdTime = createdTime.Add(time.Minute * time.Duration(setlistToCopy.TimeEndVal))
-			case "hours":
-				createdTime = createdTime.Add(time.Hour * time.Duration(setlistToCopy.TimeEndVal))
-			case "days":
-				createdTime = createdTime.AddDate(0, 0, setlistToCopy.TimeEndVal)
-			}
+			isExpired, _ := db.GetBattleExpiryInfo(setlistToCopy.SetlistID)
 
 			// if the battle is closed, add it, otherwise skip
-			if time.Now().After(createdTime) {
+			if isExpired {
 				resString, _ := marshaler.MarshalResponse(service.Path(), []GetBattlesClosedResponse{battle})
 
 				jsonStrings = append(jsonStrings, resString)

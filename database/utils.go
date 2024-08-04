@@ -193,7 +193,9 @@ func IsPIDAFriendOfPID(pid int, friendPID int) (bool, error) {
 	return count > 0, nil
 }
 
-func IsBattleExpired(battleID int) (bool, *time.Time) {
+// gets the expiry info about a battle, namely whether it is currently expired and when it will/did expire
+// does NOT include the grace period time that the housekeeping task uses
+func GetBattleExpiryInfo(battleID int) (bool, time.Time) {
 	setlistsCollection := GocentralDatabase.Collection("setlists")
 
 	var battle models.Setlist
@@ -216,8 +218,8 @@ func IsBattleExpired(battleID int) (bool, *time.Time) {
 	}
 
 	if time.Now().After(expiredTime) {
-		return true, &expiredTime
+		return true, expiredTime
 	}
 
-	return false, nil
+	return false, expiredTime
 }

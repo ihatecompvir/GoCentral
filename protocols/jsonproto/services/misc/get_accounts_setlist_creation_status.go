@@ -1,4 +1,4 @@
-package setlists
+package misc
 
 import (
 	"log"
@@ -8,7 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-type SetlistCreationRequest struct {
+type SetlistCreationStatusRequest struct {
 	Region      string `json:"region"`
 	SystemMS    int    `json:"system_ms"`
 	MachineID   string `json:"machine_id"`
@@ -16,20 +16,20 @@ type SetlistCreationRequest struct {
 	PID         int    `json:"pid"`
 }
 
-type SetlistCreationResponse struct {
+type SetlistCreationStatusResponse struct {
 	PID     int `json:"pid"`
 	Creator int `json:"creator"`
 }
 
-type SetlistCreationService struct {
+type SetlistCreationStatusService struct {
 }
 
-func (service SetlistCreationService) Path() string {
+func (service SetlistCreationStatusService) Path() string {
 	return "misc/get_accounts_setlist_creation_status"
 }
 
-func (service SetlistCreationService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
-	var req SetlistCreationRequest
+func (service SetlistCreationStatusService) Handle(data string, database *mongo.Database, client *nex.Client) (string, error) {
+	var req SetlistCreationStatusRequest
 	err := marshaler.UnmarshalRequest(data, &req)
 	if err != nil {
 		return "", err
@@ -40,7 +40,7 @@ func (service SetlistCreationService) Handle(data string, database *mongo.Databa
 		return "", err
 	}
 
-	res := []SetlistCreationResponse{{
+	res := []SetlistCreationStatusResponse{{
 		req.PID,
 		0,
 	}}
