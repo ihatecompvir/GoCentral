@@ -6,6 +6,8 @@ import (
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 
+	db "rb3server/database"
+
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -57,6 +59,12 @@ func (service LimitCheckService) Handle(data string, database *mongo.Database, c
 	if err != nil {
 		log.Printf("Could not find user with PID %d, could not check limit", req.PID)
 		return marshaler.MarshalResponse(service.Path(), []LimitCheckResponse{{0x16}})
+	}
+
+	if db.IsPIDInGroup(req.PID, "battle_admin") {
+		// if the user is a battle administrator, they can create as many battles as they want
+		// so do not check the limit
+		return marshaler.MarshalResponse(service.Path(), []LimitCheckResponse{{0}})
 	}
 
 	// find how many battles this user has created

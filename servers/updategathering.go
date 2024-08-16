@@ -1,8 +1,10 @@
 package servers
 
 import (
+	"context"
 	"log"
 	"rb3server/database"
+	"rb3server/models"
 	"rb3server/quazal"
 
 	serialization "rb3server/serialization/gathering"
@@ -11,6 +13,8 @@ import (
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
 	"go.mongodb.org/mongo-driver/bson"
+
+	db "rb3server/database"
 )
 
 func UpdateGathering(err error, client *nex.Client, callID uint32, gathering []byte, gatheringID uint32) {
@@ -30,24 +34,43 @@ func UpdateGathering(err error, client *nex.Client, callID uint32, gathering []b
 		return
 	}
 
-	if client.Username == "Master User" {
-		log.Printf("Ignoring UpdateGathering for unauthenticated %s\n", client.WiiFC)
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
-		return
-	}
-	log.Printf("Updating gathering for %s\n", client.Username)
+	log.Printf("Updating gathering ID %v for %s\n", gatheringID, client.Username)
 
 	gatherings := database.GocentralDatabase.Collection("gatherings")
+
+	// get and deserialize the gathering from the DB
+	var dbGathering models.Gathering
+
+	err = gatherings.FindOne(context.TODO(), bson.M{"gathering_id": gatheringID}).Decode(&dbGathering)
+
+	if err != nil {
+		log.Println("Could not find gathering ID for " + client.Username)
+		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.OperationError)
+		return
+	}
+
+	// make sure the client's PID matches the creator of the gathering
+	if dbGathering.Creator != db.GetUsernameForPID(int(client.PlayerID())) {
+		// check if the creator of the gathering was created by the machine's master user
+		machineID := db.GetMachineIDFromUsername(dbGathering.Creator)
+
+		if machineID != client.MachineID() || machineID == 0 {
+			log.Printf("Client %s is not the creator of gathering %v\n", client.Username, gatheringID)
+			SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
+			return
+		}
+	}
 
 	// the client sends the entire gathering again, so update it in the DB
 
 	result, err := gatherings.UpdateOne(
-		nil,
+		context.TODO(),
 		bson.M{"gathering_id": gatheringID},
 		bson.D{
 			{"$set", bson.D{{"contents", gathering}}},
 			{"$set", bson.D{{"public", g.HarmonixGathering.Public}}},
 			{"$set", bson.D{{"last_updated", time.Now().Unix()}}},
+			{"$set", bson.D{{"creator", client.Username}}},
 		},
 	)
 

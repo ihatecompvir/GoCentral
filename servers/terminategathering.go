@@ -23,7 +23,7 @@ func TerminateGathering(err error, client *nex.Client, callID uint32, gatheringI
 		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
 		return
 	}
-	log.Printf("Terminating gathering for %s...\n", client.Username)
+	log.Printf("Terminating gathering ID %v for %s...\n", gatheringID, client.Username)
 
 	gatherings := database.GocentralDatabase.Collection("gatherings")
 

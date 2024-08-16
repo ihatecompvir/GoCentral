@@ -3,6 +3,7 @@ package battles
 import (
 	"context"
 	"log"
+	db "rb3server/database"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 	"strings"
@@ -137,6 +138,11 @@ func (service BattleCreateService) Handle(data string, database *mongo.Database,
 	setlist.Instrument = req.Instrument
 
 	setlist.Created = time.Now().Unix()
+
+	// if user is a battles admin, they will create Harmonix battles
+	if db.IsPIDInGroup(req.PID, "battle_admin") {
+		setlist.Type = 1002
+	}
 
 	// create song names that are just empty strings for now
 	// TODO: create a song ID DB so we can store the proper names

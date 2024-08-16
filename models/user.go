@@ -12,6 +12,7 @@ type User struct {
 	GUID          string             `json:"guid" bson:"guid"`
 	LinkCode      string             `json:"link_code" bson:"link_code"`
 	Friends       []int              `json:"friends" bson:"friends"`
+	Groups        []string           `json:"groups" bson:"groups"`
 
 	// machine stuff
 	CreatedByMachineID int `json:"created_by_machine_id" bson:"created_by_machine_id"`

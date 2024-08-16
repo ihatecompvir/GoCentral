@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/rand"
 	"rb3server/models"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -222,4 +223,92 @@ func GetBattleExpiryInfo(battleID int) (bool, time.Time) {
 	}
 
 	return false, expiredTime
+}
+
+// TODO: might rework or revisit this system when the web app and REST API become more fleshed out
+// whether or not a PID has a certain role
+func IsPIDInGroup(pid int, groupID string) bool {
+	usersCollection := GocentralDatabase.Collection("users")
+
+	// sanity checks
+	if pid == 0 || groupID == "" {
+		return false
+	}
+
+	// find user by pid
+	var user models.User
+	_ = usersCollection.FindOne(context.TODO(), bson.M{"pid": pid}).Decode(&user)
+
+	// failed to find user
+	if user.Username == "" {
+		return false
+	}
+
+	// check if user is in the group
+	for _, group := range user.Groups {
+		if group == groupID {
+			return true
+		}
+	}
+
+	return false
+}
+
+// checks if a PID is a master user
+func IsPIDAMasterUser(pid int) bool {
+	usersCollection := GocentralDatabase.Collection("users")
+
+	var user models.User
+	err := usersCollection.FindOne(context.TODO(), bson.M{"pid": pid}).Decode(&user)
+
+	if err != nil || user.Username == "" {
+		return false
+	}
+
+	masterUserPattern := `^Master User \(\d+\)$`
+	matched, err := regexp.MatchString(masterUserPattern, user.Username)
+
+	if err != nil || !matched {
+		return false
+	}
+
+	return true
+}
+
+// checks if a username is a master user
+func IsUsernameAMasterUser(username string) bool {
+	masterUserPattern := `^Master User \(\d+\)$`
+
+	matched, err := regexp.MatchString(masterUserPattern, username)
+
+	return err == nil && matched
+}
+
+// gets the Wii friend code from the Master User username, looks up the machine associated with it, and returns its machine ID
+func GetMachineIDFromUsername(username string) int {
+	machinesCollection := GocentralDatabase.Collection("machines")
+
+	// Define the pattern to capture the digits inside the parentheses
+	masterUserPattern := `^Master User \((\d+)\)$`
+
+	// Compile the regex
+	re := regexp.MustCompile(masterUserPattern)
+
+	// Find the first match and extract the captured group (the digits)
+	matches := re.FindStringSubmatch(username)
+
+	// Check if we have a match
+	if len(matches) == 2 {
+		var machine models.Machine
+		machinesCollection.FindOne(context.TODO(), bson.M{"wii_friend_code": matches[1]}).Decode(&machine)
+
+		if machine.MachineID != 0 {
+			return machine.MachineID
+		} else {
+			return 0
+		}
+	} else {
+		return 0
+	}
+
 }

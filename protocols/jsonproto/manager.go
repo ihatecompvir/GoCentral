@@ -108,6 +108,7 @@ func (mgr *ServicesManager) registerAll() {
 	// misc
 	mgr.register(misc.MiscSyncAvailableSongsService{})
 	mgr.register(misc.SetlistCreationStatusService{})
+	mgr.register(misc.OptionDataService{})
 
 	// music_library
 	mgr.register(music_library.SortAndFiltersService{})
