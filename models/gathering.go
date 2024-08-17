@@ -10,4 +10,6 @@ type Gathering struct {
 	Contents    []byte             `json:"contents" bson:"contents"`
 	State       uint32             `json:"state" bson:"state"`
 	LastUpdated int64              `json:"last_updated" bson:"last_updated"`
+	ConsoleType uint32             `json:"console_type" bson:"console_type"`
+	Public      uint32             `json:"public" bson:"public"`
 }
