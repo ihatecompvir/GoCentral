@@ -1,6 +1,7 @@
 package servers
 
 import (
+	"context"
 	"log"
 	"rb3server/database"
 	"rb3server/models"
@@ -34,16 +35,21 @@ func SetState(err error, client *nex.Client, callID uint32, gatheringID uint32, 
 		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.OperationError)
 		return
 	} else {
-		// TODO: Replace with something better
+		// Update the gathering.Contents, State, and LastUpdated fields
 		gathering.Contents[0x1C] = (byte)(state>>(8*0)) & 0xff
 		gathering.Contents[0x1D] = (byte)(state>>(8*1)) & 0xff
 		gathering.Contents[0x1E] = (byte)(state>>(8*2)) & 0xff
 		gathering.Contents[0x1F] = (byte)(state>>(8*3)) & 0xff
 
-		gathering.State = state
-		gathering.LastUpdated = time.Now().Unix()
+		update := bson.M{
+			"$set": bson.M{
+				"contents":     gathering.Contents,
+				"state":        state,
+				"last_updated": time.Now().Unix(),
+			},
+		}
 
-		_, err = gatherings.ReplaceOne(nil, bson.M{"gathering_id": gatheringID}, gathering)
+		_, err = gatherings.UpdateOne(context.TODO(), bson.M{"gathering_id": gatheringID}, update)
 		if err != nil {
 			log.Printf("Could not set state for gathering %v: %v\n", gatheringID, err)
 			SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.OperationError)
