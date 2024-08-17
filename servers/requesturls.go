@@ -27,22 +27,7 @@ func RequestURLs(err error, client *nex.Client, callID uint32, stationCID uint32
 		return
 	}
 
-	if user.CreatedByMachineID != 0 && user.ConsoleType == 2 {
-		// this is a machine, not a user
-		machines := database.GocentralDatabase.Collection("machines")
-
-		var machine models.Machine
-
-		if err = machines.FindOne(nil, bson.M{"machine_id": user.CreatedByMachineID}).Decode(&machine); err != nil {
-			log.Println("Could not find machine with machine ID " + fmt.Sprint(stationPID) + " in database")
-			SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, quazal.InvalidPID)
-			return
-		}
-
-		rmcResponseStream.WriteUInt8(1)                      // response code
-		rmcResponseStream.WriteUInt32LE(1)                   // the number of station urls present
-		rmcResponseStream.WriteBufferString(user.StationURL) // WAN station URL
-	} else if user.IntStationURL != "" {
+	if user.IntStationURL != "" {
 		rmcResponseStream.WriteUInt8(1)                         // response code
 		rmcResponseStream.WriteUInt32LE(2)                      // the number of station urls present
 		rmcResponseStream.WriteBufferString(user.StationURL)    // WAN station URL
