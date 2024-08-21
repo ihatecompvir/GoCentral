@@ -47,6 +47,12 @@ func main() {
 		})
 	}
 
+	ticketVerifierEndpoint := os.Getenv("TICKETVERIFIERENDPOINT")
+
+	if ticketVerifierEndpoint == "" {
+		log.Println("Ticket verification is disabled, GoCentral will have no real authentication! Please do not use this server in a production environment.")
+	}
+
 	uri := os.Getenv("MONGOCONNECTIONSTRING")
 
 	if uri == "" {

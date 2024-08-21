@@ -49,7 +49,7 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 
 	rmcMessage := nex.RMCRequest{}
 	rmcMessage.SetProtocolID(nexproto.NATTraversalProtocolID)
-	rmcMessage.SetCallID(callID)
+	rmcMessage.SetCallID(0xFFFF0000 + callID)
 	rmcMessage.SetMethodID(nexproto.InitiateProbe)
 	rmcRequestStream := nex.NewStreamOut(SecureServer)
 	rmcRequestStream.WriteBufferString(client.ExternalStationURL())
@@ -76,6 +76,8 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 			var messagePacket nex.PacketInterface
 
 			messagePacket, _ = nex.NewPacketV0(targetClient, nil)
+
+			log.Println("Found active client " + targetClient.ExternalStationURL() + " with RVCID " + targetUrl.RVCID() + " and username " + targetClient.Username + " and IP address " + targetClient.Address().IP.String())
 			messagePacket.SetVersion(0)
 
 			messagePacket.SetSource(0x31)

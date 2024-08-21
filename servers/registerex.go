@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"os"
 	"rb3server/database"
 	"rb3server/models"
 	"rb3server/quazal"
 	"regexp"
+
+	"rb3server/authentication"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -48,7 +51,6 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 		client.SetPlayerID(uint32(machine.MachineID))
 	}
 
-	// check if the PID is not the master PID. if it is the master PID, do not update the station URLs
 	if len(stationUrls) != 0 {
 
 		var stationURL string = "prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(newRVCID)
@@ -61,7 +63,7 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 
 		// if there aren't any results, use a blank internal IP URL
 		if len(ipRegexResults) != 0 {
-			internalStationURL = "prudp:/address=" + ipRegexResults[0] + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(newRVCID)
+			internalStationURL = "prudp:/address=" + ipRegexResults[0] + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;RVCID=" + fmt.Sprint(newRVCID)
 		} else {
 			internalStationURL = ""
 			log.Printf("Client with PID %v did not have internal station URL, using empty string\n", user.PID)
@@ -74,10 +76,13 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 
 		consoleType := 0
 
+		var ticketDataToEncode []byte
+
 		switch className {
 		case "XboxUserInfo":
 			consoleType = 0
 		case "SonyNPTicket":
+			ticketDataToEncode = ticketData[8:]
 			rpcn := []byte("RPCN")
 			isRPCN := bytes.Contains(ticketData, rpcn)
 
@@ -87,12 +92,28 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 				consoleType = 1
 			}
 		case "NintendoToken":
+			ticketDataToEncode = ticketData
 			consoleType = 2
 
 		default:
 			log.Println("Invalid ticket presented, could not determine console type")
 			SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, quazal.InvalidArgument)
 			return
+		}
+
+		if os.Getenv("TICKETVERIFIERENDPOINT") != "" {
+			ticketVerifier := &authentication.TicketVerifier{TicketVerifierEndpoint: os.Getenv("TICKETVERIFIERENDPOINT")}
+
+			if !ticketVerifier.VerifyTicket(ticketDataToEncode, consoleType) {
+				log.Println("Invalid ticket presented, could not verify ticket")
+
+				// reject the client and then reset their stuff
+				SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, quazal.AccessDenied)
+				client.Reset()
+				SecureServer.Kick(client)
+				client.SetPlayerID(0)
+				return
+			}
 		}
 
 		// update station URLs and current console type
