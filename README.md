@@ -29,14 +29,14 @@ Note that this only aims to replicate what the game calls "Rock Central", suppor
 1. Set your console's DNS settings to primary 45.33.44.103, secondary 1.1.1.1.
 2. In your loader settings for Rock Band 3, enable the "NoSSL only" option for custom servers.
 If you are using another loader, check with your loader on enabling a NoSSL patch. Will add more instructions later on.
-
-For the most reliable experience, port forward port 9103 (UDP) to your console in your router's settings, or if on RPCS3, enable UPnP.
-
-(Do note that by changing DNS settings, you may be unable to play other games or use other services. Some ISPs may block custom DNS servers.)
 ### Connecting on Xbox 360 (RB3Enhanced)
 1. Make sure RB3Enhanced 0.6 or later is installed. https://rb3e.enhanced.rocks/
 2. Open rb3.ini, either in the folder Rock Band 3 is installed to or the "rb3" folder on your hard drive.
 3. Change GoCentralAddress to `gocentral-xbox.rbenhanced.rocks`, ensuring there is no # at the start of the line.
+
+For the most reliable experience, port forward port 9103 (UDP) to your console in your router's settings, or if on RPCS3, enable UPnP.
+
+(Do note that by changing DNS settings, you may be unable to play other games or use other services. Some ISPs may block custom DNS servers.)
 
 ## Features Implemented
 - Message of the Day
