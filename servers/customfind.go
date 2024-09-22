@@ -31,6 +31,14 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 	gatheringCollection := database.GocentralDatabase.Collection("gatherings")
 	usersCollection := database.GocentralDatabase.Collection("users")
 
+	// get user
+	var user models.User
+	if err = usersCollection.FindOne(nil, bson.M{"username": client.Username}).Decode(&user); err != nil {
+		log.Printf("User %s does not exist in database, could not check for gatherings: %s\n", client.Username, err)
+		SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, quazal.OperationError)
+		return
+	}
+
 	// attempt to get a random gathering and deserialize it
 	// any gatherings that havent been updated in 5 minutes are ignored
 	// this should prevent endless loops of trying to join old/stale gatherings that are still in the DB
@@ -65,11 +73,17 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 			// only look for gatherings created by the current console type
 			// with an additional match so RPCN can join real PS3 h/w gatherings
 			{
-				Key: "console_type",
+				Key: "matchmaking_pool",
 				Value: bson.D{{
 					Key: "$in",
 					Value: func() []int {
 						switch client.Platform() {
+						case 2:
+							if user.CrossplayEnabled {
+								return []int{1, 3}
+							} else {
+								return []int{2}
+							}
 						case 1, 3:
 							return []int{1, 3}
 						default:

@@ -56,6 +56,19 @@ func (service TickerInfoService) Handle(data string, database *mongo.Database, c
 		return "", err
 	}
 
+	// update the users crossplay status
+	if req.Region == "crossplay" {
+		err = db.UpdateCrossplayStatusForPID(req.PID, true)
+		if err != nil {
+			log.Println("Error updating crossplay status for PID", req.PID)
+		}
+	} else {
+		err = db.UpdateCrossplayStatusForPID(req.PID, false)
+		if err != nil {
+			log.Println("Error updating crossplay status for PID", req.PID)
+		}
+	}
+
 	bandsCollection := database.Collection("bands")
 	var band models.Band
 	err = bandsCollection.FindOne(nil, bson.M{"pid": req.PID}).Decode(&band)

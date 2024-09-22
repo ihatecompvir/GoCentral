@@ -12,6 +12,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	db "rb3server/database"
 )
 
 type SetlistUpdateRequest struct {
@@ -50,6 +52,19 @@ func (service SetlistUpdateService) Handle(data string, database *mongo.Database
 	if req.PID != int(client.PlayerID()) {
 		log.Println("Client-supplied PID did not match server-assigned PID, rejecting setlist update")
 		return "", err
+	}
+
+	// update the users crossplay status
+	if req.Region == "crossplay" {
+		err = db.UpdateCrossplayStatusForPID(req.PID, true)
+		if err != nil {
+			log.Println("Error updating crossplay status for PID", req.PID)
+		}
+	} else {
+		err = db.UpdateCrossplayStatusForPID(req.PID, false)
+		if err != nil {
+			log.Println("Error updating crossplay status for PID", req.PID)
+		}
 	}
 
 	// Do a profanity check before updating the setlist

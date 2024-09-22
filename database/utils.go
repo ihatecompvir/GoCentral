@@ -50,6 +50,40 @@ func GetPIDForUsername(username string) int {
 	return int(user.PID)
 }
 
+func GetCrossplayStatusForPID(pid int) bool {
+	var user models.User
+
+	usersCollection := GocentralDatabase.Collection("users")
+
+	_ = usersCollection.FindOne(nil, bson.M{"pid": pid}).Decode(&user)
+
+	return user.CrossplayEnabled
+}
+
+func GetCrossplayStatusForUsername(username string) bool {
+	var user models.User
+
+	usersCollection := GocentralDatabase.Collection("users")
+
+	_ = usersCollection.FindOne(nil, bson.M{"username": username}).Decode(&user)
+
+	return user.CrossplayEnabled
+}
+
+func UpdateCrossplayStatusForPID(pid int, status bool) error {
+	usersCollection := GocentralDatabase.Collection("users")
+
+	_, err := usersCollection.UpdateOne(nil, bson.M{"pid": pid}, bson.M{"$set": bson.M{"crossplay_enabled": status}})
+	return err
+}
+
+func UpdateCrossplayStatusForUsername(username string, status bool) error {
+	usersCollection := GocentralDatabase.Collection("users")
+
+	_, err := usersCollection.UpdateOne(nil, bson.M{"username": username}, bson.M{"$set": bson.M{"crossplay_enabled": status}})
+	return err
+}
+
 // gets the username of the user with a console specific prefix
 // e.g. "Player [360]"
 func GetConsolePrefixedUsernameForPID(pid int) string {

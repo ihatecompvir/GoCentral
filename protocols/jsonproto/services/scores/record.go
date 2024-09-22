@@ -98,6 +98,19 @@ func (service ScoreRecordService) Handle(data string, database *mongo.Database, 
 		return "", nil
 	}
 
+	// update the users crossplay status
+	if req.Region == "crossplay" {
+		err = db.UpdateCrossplayStatusForPID(req.PIDs[0], true)
+		if err != nil {
+			log.Println("Error updating crossplay status for PID", req.PIDs[0])
+		}
+	} else {
+		err = db.UpdateCrossplayStatusForPID(req.PIDs[0], false)
+		if err != nil {
+			log.Println("Error updating crossplay status for PID", req.PIDs[0])
+		}
+	}
+
 	scoresCollection := database.Collection("scores")
 
 	scoreHigher := make([]bool, len(req.PIDs))

@@ -7,6 +7,8 @@ import (
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+
+	db "rb3server/database"
 )
 
 type MiscSyncAvailableSongsRequest struct {
@@ -51,6 +53,19 @@ func (service MiscSyncAvailableSongsService) Handle(data string, database *mongo
 	if req.PIDs[0] != int(client.PlayerID()) {
 		log.Printf("Client-supplied PID %v did not match server-assigned PID %v, rejecting available song sync", req.PIDs[0], client.PlayerID())
 		return "", err
+	}
+
+	// update the users crossplay status
+	if req.Region == "crossplay" {
+		err = db.UpdateCrossplayStatusForPID(req.PIDs[0], true)
+		if err != nil {
+			log.Println("Error updating crossplay status for PID", req.PIDs[0])
+		}
+	} else {
+		err = db.UpdateCrossplayStatusForPID(req.PIDs[0], false)
+		if err != nil {
+			log.Println("Error updating crossplay status for PID", req.PIDs[0])
+		}
 	}
 
 	usersCollection := database.Collection("users")
