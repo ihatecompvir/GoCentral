@@ -27,15 +27,34 @@ func RequestURLs(err error, client *nex.Client, callID uint32, stationCID uint32
 		return
 	}
 
-	if user.IntStationURL != "" {
-		rmcResponseStream.WriteUInt8(1)                         // response code
-		rmcResponseStream.WriteUInt32LE(2)                      // the number of station urls present
-		rmcResponseStream.WriteBufferString(user.StationURL)    // WAN station URL
-		rmcResponseStream.WriteBufferString(user.IntStationURL) // LAN station URL used for connecting to other players on the same LAN
+	// check if the user was created by a machine or not
+	if user.CreatedByMachineID == 0 {
+		if user.IntStationURL != "" {
+			rmcResponseStream.WriteUInt8(1)                         // response code
+			rmcResponseStream.WriteUInt32LE(2)                      // the number of station urls present
+			rmcResponseStream.WriteBufferString(user.StationURL)    // WAN station URL
+			rmcResponseStream.WriteBufferString(user.IntStationURL) // LAN station URL used for connecting to other players on the same LAN
+		} else {
+			rmcResponseStream.WriteUInt8(1)                      // response code
+			rmcResponseStream.WriteUInt32LE(1)                   // the number of station urls present
+			rmcResponseStream.WriteBufferString(user.StationURL) // WAN station URL
+		}
 	} else {
-		rmcResponseStream.WriteUInt8(1)                      // response code
-		rmcResponseStream.WriteUInt32LE(1)                   // the number of station urls present
-		rmcResponseStream.WriteBufferString(user.StationURL) // WAN station URL
+		machines := database.GocentralDatabase.Collection("machines")
+
+		var machine models.Machine
+
+		if err = machines.FindOne(nil, bson.M{"machine_id": user.CreatedByMachineID}).Decode(&machine); err != nil {
+			log.Println("Could not find machine with ID " + fmt.Sprint(user.CreatedByMachineID) + " in database")
+			SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, quazal.OperationError)
+			return
+		}
+
+		if machine.StationURL != "" {
+			rmcResponseStream.WriteUInt8(1)
+			rmcResponseStream.WriteUInt32LE(1)
+			rmcResponseStream.WriteBufferString(machine.StationURL)
+		}
 	}
 
 	rmcResponseBody := rmcResponseStream.Bytes()

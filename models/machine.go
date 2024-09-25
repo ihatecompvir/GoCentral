@@ -5,4 +5,5 @@ type Machine struct {
 	MachineID     int    `json:"machine_id" bson:"machine_id"`
 	Status        string `json:"status" bson:"status"`
 	WiiFriendCode string `json:"wii_friend_code" bson:"wii_friend_code"`
+	StationURL    string `json:"station_url" bson:"station_url"`
 }

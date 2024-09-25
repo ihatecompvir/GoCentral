@@ -55,6 +55,12 @@ func RegisterGathering(err error, client *nex.Client, callID uint32, gathering [
 		return
 	}
 
+	consoleType := client.Platform()
+
+	if user.CrossplayEnabled == true {
+		consoleType = 1
+	}
+
 	// Create a new gathering
 	_, err = gatherings.InsertOne(nil, bson.D{
 		{Key: "gathering_id", Value: gatheringID},
@@ -63,7 +69,7 @@ func RegisterGathering(err error, client *nex.Client, callID uint32, gathering [
 		{Key: "last_updated", Value: time.Now().Unix()},
 		{Key: "state", Value: 0},
 		{Key: "public", Value: 0},
-		{Key: "matchmaking_pool", Value: client.Platform()},
+		{Key: "matchmaking_pool", Value: consoleType},
 	})
 
 	if err != nil {
