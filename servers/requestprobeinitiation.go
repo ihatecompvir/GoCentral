@@ -2,6 +2,7 @@ package servers
 
 import (
 	"log"
+	"net"
 	"rb3server/quazal"
 	"strconv"
 
@@ -49,7 +50,7 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 
 	rmcMessage := nex.RMCRequest{}
 	rmcMessage.SetProtocolID(nexproto.NATTraversalProtocolID)
-	rmcMessage.SetCallID(0xFFFF0000 + callID)
+	rmcMessage.SetCallID(callID)
 	rmcMessage.SetMethodID(nexproto.InitiateProbe)
 	rmcRequestStream := nex.NewStreamOut(SecureServer)
 	rmcRequestStream.WriteBufferString(client.ExternalStationURL())
@@ -69,31 +70,58 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 		}
 
 		targetUrl := nex.NewStationURL(target)
-		log.Println("Sending NAT probe to " + target)
-		targetRvcID, _ := strconv.Atoi(targetUrl.RVCID())
-		targetClient := SecureServer.FindClientFromConnectionID(uint32(targetRvcID))
-		if targetClient != nil {
-			var messagePacket nex.PacketInterface
 
-			messagePacket, _ = nex.NewPacketV0(targetClient, nil)
-
-			log.Println("Found active client " + targetClient.ExternalStationURL() + " with RVCID " + targetUrl.RVCID() + " and username " + targetClient.Username + " and IP address " + targetClient.Address().IP.String())
-			messagePacket.SetVersion(0)
-
-			messagePacket.SetSource(0x31)
-			messagePacket.SetDestination(0x3F)
-			messagePacket.SetType(nex.DataPacket)
-
-			messagePacket.SetPayload(rmcMessageBytes)
-			messagePacket.AddFlag(nex.FlagNeedsAck)
-			messagePacket.AddFlag(nex.FlagReliable)
-
-			SecureServer.Send(messagePacket)
-		} else {
-			log.Printf("Could not find active client with RVCID %v\n", targetRvcID)
-			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.OperationError)
+		// ensure that the station URL has a port, scheme, and URL
+		if targetUrl.Port() == "" || targetUrl.Scheme() == "" || targetUrl.Address() == "" {
+			log.Println("Station URL is missing a port, scheme, or URL, rejecting call")
+			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.InvalidArgument)
 			return
 		}
+
+		targetPort, err := strconv.Atoi(targetUrl.Port())
+		if err != nil {
+			log.Println("Error converting port to int: " + err.Error())
+			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.InvalidArgument)
+			return
+		}
+
+		targetIP := net.ParseIP(targetUrl.Address())
+		if targetIP == nil {
+			log.Println("Invalid IP address: " + targetUrl.Address())
+			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.InvalidArgument)
+			return
+		}
+
+		addr := net.UDPAddr{IP: targetIP, Port: targetPort}
+
+		targetClient := nex.NewClient(&addr, SecureServer)
+		if targetClient == nil {
+			log.Println("Error creating client for target: " + targetUrl.Address())
+			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.UnknownError)
+			return
+		}
+
+		var messagePacket nex.PacketInterface
+
+		messagePacket, err = nex.NewPacketV0(targetClient, nil)
+		if err != nil {
+			log.Println("Error creating packet: " + err.Error())
+			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.UnknownError)
+			return
+		}
+
+		log.Println("Sending NAT probe to " + targetUrl.Address() + ":" + targetUrl.Port())
+		messagePacket.SetVersion(0)
+
+		messagePacket.SetSource(0x31)
+		messagePacket.SetDestination(0x3F)
+		messagePacket.SetType(nex.DataPacket)
+
+		messagePacket.SetPayload(rmcMessageBytes)
+		messagePacket.AddFlag(nex.FlagNeedsAck)
+		messagePacket.AddFlag(nex.FlagReliable)
+
+		SecureServer.Send(messagePacket)
 	}
 
 }
