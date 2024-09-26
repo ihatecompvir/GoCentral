@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -14,13 +15,16 @@ import (
 )
 
 type Stats struct {
-	Scores                    int64 `json:"scores"`
-	Machines                  int64 `json:"machines"`
-	Setlists                  int64 `json:"setlists"`
-	Characters                int64 `json:"characters"`
-	Bands                     int64 `json:"bands"`
-	MostPopularSongID         int   `json:"most_popular_song_id"`
-	MostPopularSongScoreCount int64 `json:"most_popular_song_score_count"`
+	Scores                     int64   `json:"scores"`
+	Machines                   int64   `json:"machines"`
+	Setlists                   int64   `json:"setlists"`
+	Characters                 int64   `json:"characters"`
+	Bands                      int64   `json:"bands"`
+	ActiveGatherings           int64   `json:"active_gatherings"`
+	ActiveGatheringsPS3        int64   `json:"active_gatherings_ps3"`
+	ActiveGatheringsWii        int64   `json:"active_gatherings_wii"`
+	MostPopularSongIDs         []int   `json:"most_popular_song_ids"`
+	MostPopularSongScoreCounts []int64 `json:"most_popular_song_score_counts"`
 }
 
 func AddStandardHeaders(writer http.ResponseWriter) {
@@ -49,12 +53,49 @@ func StatsHandler(w http.ResponseWriter, r *http.Request) {
 	setlists := database.GocentralDatabase.Collection("setlists")
 	characters := database.GocentralDatabase.Collection("characters")
 	bands := database.GocentralDatabase.Collection("bands")
+	gatherings := database.GocentralDatabase.Collection("gatherings")
 
 	scoreCount, _ := scores.CountDocuments(context.Background(), bson.M{})
 	machineCount, _ := machines.CountDocuments(context.Background(), bson.M{})
 	setlistCount, _ := setlists.CountDocuments(context.Background(), bson.M{})
 	characterCount, _ := characters.CountDocuments(context.Background(), bson.M{})
 	bandCount, _ := bands.CountDocuments(context.Background(), bson.M{})
+
+	// count the number of active gatherings
+	activeGatherings := 0
+	activeGatheringsPS3 := 0
+	activeGatheringsWii := 0
+
+	cursor, err := gatherings.Find(context.Background(), bson.M{})
+	if err != nil {
+		AddStandardHeaders(w)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	for cursor.Next(context.Background()) {
+		var gathering models.Gathering
+		cursor.Decode(&gathering)
+
+		// has the gathering been updated in the last 5 minutes?
+		// if not, it's not active
+		var isGatheringActive bool = false
+		if gathering.LastUpdated > time.Now().Unix()-5*60 {
+			isGatheringActive = true
+		}
+
+		if isGatheringActive {
+			activeGatherings++
+			switch gathering.MatchmakingPool {
+			case 1, 3:
+				activeGatheringsPS3++
+			case 2:
+				activeGatheringsWii++
+			default:
+				break
+			}
+		}
+	}
 
 	// find the song with the most scores
 	pipeline := mongo.Pipeline{
@@ -63,34 +104,46 @@ func StatsHandler(w http.ResponseWriter, r *http.Request) {
 			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
 		}}},
 		{{Key: "$sort", Value: bson.D{{Key: "count", Value: -1}}}},
-		{{Key: "$limit", Value: 1}},
+		{{Key: "$limit", Value: 3}},
 	}
-	cursor, err := scores.Aggregate(context.Background(), pipeline)
+	cursor, err = scores.Aggregate(context.Background(), pipeline)
 	if err != nil {
 		AddStandardHeaders(w)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	var mostScoredSong struct {
+	var mostScoredSongs []struct {
 		ID    int   `bson:"_id"`
 		Count int64 `bson:"count"`
 	}
-	if cursor.Next(context.Background()) {
-		cursor.Decode(&mostScoredSong)
-	} else {
-		mostScoredSong.ID = 0
-		mostScoredSong.Count = 0
+
+	err = cursor.All(context.Background(), &mostScoredSongs)
+	if err != nil {
+		AddStandardHeaders(w)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var songIDs []int
+	var songCounts []int64
+
+	for _, song := range mostScoredSongs {
+		songIDs = append(songIDs, song.ID)
+		songCounts = append(songCounts, song.Count)
 	}
 
 	stats := Stats{
-		Scores:                    scoreCount,
-		Machines:                  machineCount,
-		Setlists:                  setlistCount,
-		Characters:                characterCount,
-		Bands:                     bandCount,
-		MostPopularSongID:         mostScoredSong.ID,
-		MostPopularSongScoreCount: mostScoredSong.Count,
+		Scores:                     scoreCount,
+		Machines:                   machineCount,
+		Setlists:                   setlistCount,
+		Characters:                 characterCount,
+		Bands:                      bandCount,
+		ActiveGatherings:           int64(activeGatherings),
+		ActiveGatheringsPS3:        int64(activeGatheringsPS3),
+		ActiveGatheringsWii:        int64(activeGatheringsWii),
+		MostPopularSongIDs:         songIDs,
+		MostPopularSongScoreCounts: songCounts,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
