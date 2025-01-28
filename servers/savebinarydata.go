@@ -13,6 +13,12 @@ import (
 
 func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata string, data []byte) {
 
+	res, _ := ValidateClientPID(SecureServer, client, callID, nexproto.RBBinaryDataProtocolID)
+
+	if !res {
+		return
+	}
+
 	var metadataMap map[string]interface{}
 	err = json.Unmarshal([]byte(metadata), &metadataMap)
 

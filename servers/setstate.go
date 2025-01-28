@@ -16,9 +16,9 @@ import (
 
 func SetState(err error, client *nex.Client, callID uint32, gatheringID uint32, state uint32) {
 
-	if client.PlayerID() == 0 {
-		log.Println("Client is attempting to set the state of a gathering without a valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
+	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+
+	if !res {
 		return
 	}
 

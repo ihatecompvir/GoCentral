@@ -13,6 +13,12 @@ import (
 )
 
 func RequestURLs(err error, client *nex.Client, callID uint32, stationCID uint32, stationPID uint32) {
+	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.SecureProtocolID)
+
+	if !res {
+		return
+	}
+
 	rmcResponseStream := nex.NewStream()
 
 	log.Printf("Requesting station URL for %v\n", stationPID)

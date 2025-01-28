@@ -13,9 +13,9 @@ import (
 
 func SetStatus(err error, client *nex.Client, callID uint32, status string) {
 
-	if client.PlayerID() == 0 {
-		log.Println("Machine is attempting to update its status without a valid server-assigned machine ID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.NotAuthenticated)
+	res, _ := ValidateClientPID(SecureServer, client, callID, nexproto.AccountManagementProtocolID)
+
+	if !res {
 		return
 	}
 

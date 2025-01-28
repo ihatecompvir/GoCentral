@@ -12,9 +12,9 @@ import (
 
 func RequestProbeInitiation(err error, client *nex.Client, callID uint32, stationURLs []string) {
 
-	if client.PlayerID() == 0 {
-		log.Println("Client is attempting to initiate a NAT probe without a valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.NotAuthenticated)
+	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.NATTraversalProtocolID)
+
+	if !res {
 		return
 	}
 

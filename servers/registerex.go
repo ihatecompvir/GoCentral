@@ -8,6 +8,7 @@ import (
 	"rb3server/database"
 	"rb3server/models"
 	"rb3server/quazal"
+	"rb3server/utils"
 	"regexp"
 
 	"rb3server/authentication"
@@ -47,8 +48,12 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 
 	if user.PID != 0 {
 		client.SetPlayerID(user.PID)
+		utils.GetClientStoreSingleton().AddClient(client.Address().String())
+		utils.GetClientStoreSingleton().PushPID(client.Address().String(), client.PlayerID())
 	} else {
 		client.SetPlayerID(uint32(machine.MachineID))
+		utils.GetClientStoreSingleton().AddClient(client.Address().String())
+		utils.GetClientStoreSingleton().PushPID(client.Address().String(), client.PlayerID())
 	}
 
 	if len(stationUrls) != 0 {

@@ -1,8 +1,6 @@
 package servers
 
 import (
-	"log"
-
 	"rb3server/protocols/jsonproto"
 	"rb3server/quazal"
 
@@ -14,9 +12,9 @@ var jsonMgr = jsonproto.NewServicesManager()
 
 func JSONRequest(err error, client *nex.Client, callID uint32, rawJson string) {
 
-	if client.PlayerID() == 0 {
-		log.Println("Client is attempting to call JSON method without valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.JsonProtocolID, callID, quazal.NotAuthenticated)
+	validationRes, _ := ValidateClientPID(SecureServer, client, callID, nexproto.JsonProtocolID)
+
+	if !validationRes {
 		return
 	}
 

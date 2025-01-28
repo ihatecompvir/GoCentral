@@ -14,9 +14,9 @@ import (
 
 func DeleteAccount(err error, client *nex.Client, callID uint32, pid uint32) {
 
-	if client.MachineID() == 0 {
-		log.Println("Client is attempting to delete account without valid server-assigned Machine ID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.NotAuthenticated)
+	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.AccountManagementProtocolID)
+
+	if !res {
 		return
 	}
 

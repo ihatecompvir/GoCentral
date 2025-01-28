@@ -12,17 +12,12 @@ import (
 
 func TerminateGathering(err error, client *nex.Client, callID uint32, gatheringID uint32) {
 
-	if client.PlayerID() == 0 {
-		log.Println("Client is attempting to terminate a gathering without a valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
+	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+
+	if !res {
 		return
 	}
 
-	if client.Username == "Master User" {
-		log.Printf("Ignoring TerminateGathering for unauthenticated %s\n", client.WiiFC)
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
-		return
-	}
 	log.Printf("Terminating gathering ID %v for %s...\n", gatheringID, client.Username)
 
 	gatherings := database.GocentralDatabase.Collection("gatherings")

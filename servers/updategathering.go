@@ -21,9 +21,9 @@ func UpdateGathering(err error, client *nex.Client, callID uint32, gathering []b
 
 	var deserializer serialization.GatheringDeserializer
 
-	if client.PlayerID() == 0 {
-		log.Println("Client is attempting to update a gathering without a valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
+	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+
+	if !res {
 		return
 	}
 

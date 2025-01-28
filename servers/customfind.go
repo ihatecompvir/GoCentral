@@ -15,17 +15,12 @@ import (
 
 func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 
-	if client.PlayerID() == 0 {
-		log.Println("Client is attempting to check for gatherings without a valid server-assigned PID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, quazal.NotAuthenticated)
+	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.CustomMatchmakingProtocolID)
+
+	if !res {
 		return
 	}
 
-	if client.Username == "Master User" {
-		log.Printf("Ignoring CheckForGatherings for unauthenticated Wii master user with friend code %s\n", client.WiiFC)
-		SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, quazal.NotAuthenticated)
-		return
-	}
 	log.Printf("Checking for available gatherings for %s...\n", client.Username)
 
 	gatheringCollection := database.GocentralDatabase.Collection("gatherings")

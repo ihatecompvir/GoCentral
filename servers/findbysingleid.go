@@ -17,6 +17,12 @@ func FindBySingleID(err error, client *nex.Client, callID uint32, gatheringID ui
 	var user models.User
 	var gathering models.Gathering
 
+	res, _ := ValidateClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+
+	if !res {
+		return
+	}
+
 	rmcResponseStream := nex.NewStream()
 
 	if err = gatheringCollection.FindOne(nil, bson.M{"gathering_id": gatheringID}).Decode(&gathering); err != nil {

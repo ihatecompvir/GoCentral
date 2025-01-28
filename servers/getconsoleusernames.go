@@ -14,9 +14,9 @@ import (
 
 func GetConsoleUsernames(err error, client *nex.Client, callID uint32, friendCode string) {
 
-	if client.MachineID() == 0 {
-		log.Println("Client is trying to get console usernames without a valid server-assigned machine ID, rejecting call")
-		SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, quazal.NotAuthenticated)
+	res, _ := ValidateClientPID(SecureServer, client, callID, nexproto.NintendoManagementProtocolID)
+
+	if !res {
 		return
 	}
 

@@ -7,6 +7,7 @@ import (
 	"rb3server/database"
 	"rb3server/models"
 	"rb3server/quazal"
+	"rb3server/utils"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -15,6 +16,13 @@ import (
 
 // also handles Xbox 360 account switching
 func NintendoCreateAccount(err error, client *nex.Client, callID uint32, username string, key string, groups uint32, email string) {
+
+	// don't allow users who have not logged in as a master user to create/lookup accounts
+	res, _ := ValidateClientPID(SecureServer, client, callID, nexproto.AccountManagementProtocolID)
+
+	if !res {
+		return
+	}
 
 	rmcResponseStream := nex.NewStream()
 
@@ -89,6 +97,8 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 
 	client.SetExternalStationURL(stationURL)
 	client.SetPlayerID(user.PID)
+	utils.GetClientStoreSingleton().AddClient(client.Address().String())
+	utils.GetClientStoreSingleton().PushPID(client.Address().String(), client.PlayerID())
 
 	// update station URL of the machine that created the user
 	result, err := machinesCollection.UpdateOne(
