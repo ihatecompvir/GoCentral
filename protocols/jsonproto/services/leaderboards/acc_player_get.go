@@ -6,6 +6,7 @@ import (
 	db "rb3server/database"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/utils"
 	"sort"
 
 	"github.com/ihatecompvir/nex-go"
@@ -123,8 +124,10 @@ func (service AccPlayerGetService) Handle(data string, database *mongo.Database,
 		return "", err
 	}
 
-	if req.PID000 != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for acc leaderboards")
+	validPIDres, err := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), uint32(req.PID000))
+
+	if !validPIDres {
+		log.Println("Client is attempting to get leaderboards without a valid server-assigned PID, rejecting call")
 		return "", err
 	}
 

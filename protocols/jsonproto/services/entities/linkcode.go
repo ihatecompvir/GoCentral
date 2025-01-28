@@ -4,6 +4,7 @@ import (
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/utils"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
@@ -43,10 +44,11 @@ func (service GetLinkcodeService) Handle(data string, database *mongo.Database, 
 	}
 
 	// make sure the client is asking for their own link code
-	if req.PID != int(client.PlayerID()) {
-		res = []GetLinkcodeResponse{{
-			"Could not get link code, please try again later",
-		}}
+	validPIDres, err := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), uint32(req.PID))
+
+	if !validPIDres {
+		log.Println("Client is attempting to get a link code without a valid server-assigned PID, rejecting call")
+		return "", err
 	}
 
 	usersCollection := database.Collection("users")

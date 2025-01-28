@@ -3,6 +3,7 @@ package misc
 import (
 	"log"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/utils"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
@@ -48,8 +49,10 @@ func (service MiscSyncAvailableSongsService) Handle(data string, database *mongo
 		return marshaler.MarshalResponse(service.Path(), []MiscSyncAvailableSongsResponse{{0}})
 	}
 
-	if req.PIDs[0] != int(client.PlayerID()) {
-		log.Printf("Client-supplied PID %v did not match server-assigned PID %v, rejecting available song sync", req.PIDs[0], client.PlayerID())
+	res, err := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), uint32(req.PIDs[0]))
+
+	if !res {
+		log.Println("Client is attempting to sync available songs without a valid server-assigned PID, rejecting call")
 		return "", err
 	}
 

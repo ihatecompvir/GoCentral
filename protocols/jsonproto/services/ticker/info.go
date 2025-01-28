@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/utils"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
@@ -51,9 +52,11 @@ func (service TickerInfoService) Handle(data string, database *mongo.Database, c
 		return "", err
 	}
 
-	if req.PID != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for getting ticker info")
-		return "", err
+	validPIDres, _ := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), uint32(req.PID))
+
+	if !validPIDres {
+		log.Println("Client is attempting to get ticker stats without a valid server-assigned PID, rejecting call")
+		return "", nil
 	}
 
 	bandsCollection := database.Collection("bands")

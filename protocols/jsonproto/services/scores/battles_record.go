@@ -6,6 +6,7 @@ import (
 	db "rb3server/database"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/utils"
 	"strconv"
 
 	"github.com/ihatecompvir/nex-go"
@@ -55,8 +56,10 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 		return "", err
 	}
 
-	if req.PIDs[0] != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting battle score record")
+	pidRes, _ := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), uint32(req.PIDs[0]))
+
+	if !pidRes {
+		log.Println("Client is attempting to record a score without a valid server-assigned PID, rejecting call")
 		return "", err
 	}
 

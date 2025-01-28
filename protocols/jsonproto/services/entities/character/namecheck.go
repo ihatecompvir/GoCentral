@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/utils"
 	"strings"
 
 	"github.com/ihatecompvir/nex-go"
@@ -40,10 +41,13 @@ func (service CharacterNameCheckService) Handle(data string, database *mongo.Dat
 		return "", err
 	}
 
-	if req.PID != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting character name check")
+	validPIDres, err := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), uint32(req.PID))
+
+	if !validPIDres {
+		log.Println("Client is attempting to namecheck for a character without a valid server-assigned PID, rejecting call")
 		return "", err
 	}
+
 	// do a profanity check before updating the band
 	var config models.Config
 	configCollection := database.Collection("config")

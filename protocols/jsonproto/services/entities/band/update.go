@@ -6,6 +6,7 @@ import (
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/utils"
 	"strings"
 
 	"github.com/ihatecompvir/nex-go"
@@ -68,8 +69,10 @@ func (service BandUpdateService) Handle(data string, database *mongo.Database, c
 		}
 	}
 
-	if req.PID != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting band update")
+	validPIDres, err := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), uint32(req.PID))
+
+	if !validPIDres {
+		log.Println("Client is attempting to update a band without a valid server-assigned PID, rejecting call")
 		return "", err
 	}
 

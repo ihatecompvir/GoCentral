@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/utils"
 	"strings"
 	"time"
 
@@ -47,9 +48,11 @@ func (service SetlistUpdateService) Handle(data string, database *mongo.Database
 		return "", err
 	}
 
-	if req.PID != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting setlist update")
-		return "", err
+	validPIDres, _ := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), uint32(req.PID))
+
+	if !validPIDres {
+		log.Println("Client is attempting to update setlist without a valid server-assigned PID, rejecting call")
+		return "", nil
 	}
 
 	// Do a profanity check before updating the setlist

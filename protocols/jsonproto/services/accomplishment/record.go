@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/utils"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
@@ -71,9 +72,11 @@ func (service AccomplishmentRecordService) Handle(data string, database *mongo.D
 		return "", err
 	}
 
-	if req.PID != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for recording accomplishment")
-		return "", err
+	res, _ := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), uint32(req.PID))
+
+	if !res {
+		log.Println("Client is attempting to record accomplishments without a valid server-assigned PID, rejecting call")
+		return "", nil
 	}
 
 	accomplishmentsCollection := database.Collection("accomplishments")

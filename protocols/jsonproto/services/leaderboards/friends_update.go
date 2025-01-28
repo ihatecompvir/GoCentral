@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/utils"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
@@ -42,9 +43,11 @@ func (service FriendsUpdateService) Handle(data string, database *mongo.Database
 		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
-	if req.PID != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for player rank range leaderboards")
-		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+	validPIDres, err := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), uint32(req.PID))
+
+	if !validPIDres {
+		log.Println("Client is attempting to update friends without a valid server-assigned PID, rejecting call")
+		return "", err
 	}
 
 	log.Println("Updating friends list for player ", req.PID)

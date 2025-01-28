@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/utils"
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
@@ -37,8 +38,10 @@ func (service BattleMaxrankGetService) Handle(data string, database *mongo.Datab
 		return "", err
 	}
 
-	if req.PID000 != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for battle maxrank")
+	validPIDres, err := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), uint32(req.PID000))
+
+	if !validPIDres {
+		log.Println("Client is attempting to get leaderboards without a valid server-assigned PID, rejecting call")
 		return "", err
 	}
 

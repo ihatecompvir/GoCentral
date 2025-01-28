@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/utils"
 
 	db "rb3server/database"
 
@@ -55,9 +56,11 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
-	if req.PID000 != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting request for battle player leaderboards")
-		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+	validPIDres, err := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), uint32(req.PID000))
+
+	if !validPIDres {
+		log.Println("Client is attempting to get leaderboards without a valid server-assigned PID, rejecting call")
+		return "", err
 	}
 
 	scoresCollection := database.Collection("scores")

@@ -6,6 +6,7 @@ import (
 	db "rb3server/database"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
+	"rb3server/utils"
 	"strings"
 	"time"
 
@@ -49,8 +50,10 @@ func (service BattleCreateService) Handle(data string, database *mongo.Database,
 		return "", err
 	}
 
-	if req.PID != int(client.PlayerID()) {
-		log.Println("Client-supplied PID did not match server-assigned PID, rejecting battle creation")
+	validPIDres, err := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), uint32(req.PID))
+
+	if !validPIDres {
+		log.Println("Client is attempting to create a battle without a valid server-assigned PID, rejecting call")
 		return "", err
 	}
 
