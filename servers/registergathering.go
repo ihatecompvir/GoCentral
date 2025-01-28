@@ -4,8 +4,6 @@ import (
 	"log"
 	"math/rand"
 	"rb3server/database"
-	"rb3server/models"
-	"rb3server/quazal"
 
 	"time"
 
@@ -44,23 +42,6 @@ func RegisterGathering(err error, client *nex.Client, callID uint32, gathering [
 		log.Printf("Successfully cleared %v stale gatherings for %s...\n", deleteResult.DeletedCount, client.Username)
 	}
 
-	// get the user
-	users := database.GocentralDatabase.Collection("users")
-	var user models.User
-	err = users.FindOne(nil, bson.M{"username": client.Username}).Decode(&user)
-
-	if err != nil {
-		log.Println("User " + client.Username + " did not exist in database, could not register gathering")
-		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.OperationError)
-		return
-	}
-
-	consoleType := client.Platform()
-
-	if user.CrossplayEnabled == true {
-		consoleType = 1
-	}
-
 	// Create a new gathering
 	_, err = gatherings.InsertOne(nil, bson.D{
 		{Key: "gathering_id", Value: gatheringID},
@@ -69,7 +50,6 @@ func RegisterGathering(err error, client *nex.Client, callID uint32, gathering [
 		{Key: "last_updated", Value: time.Now().Unix()},
 		{Key: "state", Value: 0},
 		{Key: "public", Value: 0},
-		{Key: "matchmaking_pool", Value: consoleType},
 	})
 
 	if err != nil {

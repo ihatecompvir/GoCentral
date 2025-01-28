@@ -60,19 +60,6 @@ func (service BattleScoreRecordService) Handle(data string, database *mongo.Data
 		return "", err
 	}
 
-	// update the users crossplay status
-	if req.Region == "crossplay" {
-		err = db.UpdateCrossplayStatusForPID(req.PIDs[0], true)
-		if err != nil {
-			log.Println("Error updating crossplay status for PID", req.PIDs[0])
-		}
-	} else {
-		err = db.UpdateCrossplayStatusForPID(req.PIDs[0], false)
-		if err != nil {
-			log.Println("Error updating crossplay status for PID", req.PIDs[0])
-		}
-	}
-
 	// make sure the player is not trying to submit a score for a battle that is expired
 	isExpired, _ := db.GetBattleExpiryInfo(req.BattleID)
 	if isExpired {

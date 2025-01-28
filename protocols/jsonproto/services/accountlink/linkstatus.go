@@ -6,8 +6,6 @@ import (
 
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/mongo"
-
-	db "rb3server/database"
 )
 
 type AccountLinkRequest struct {
@@ -40,19 +38,6 @@ func (service AccountLinkService) Handle(data string, database *mongo.Database, 
 	if req.PID != int(client.PlayerID()) {
 		log.Println("Client-supplied PID did not match server-assigned PID, rejecting checking account link status")
 		return "", err
-	}
-
-	// update the users crossplay status
-	if req.Region == "crossplay" {
-		err = db.UpdateCrossplayStatusForPID(req.PID, true)
-		if err != nil {
-			log.Println("Error updating crossplay status for PID", req.PID)
-		}
-	} else {
-		err = db.UpdateCrossplayStatusForPID(req.PID, false)
-		if err != nil {
-			log.Println("Error updating crossplay status for PID", req.PID)
-		}
 	}
 
 	res := []AccountLinkResponse{{

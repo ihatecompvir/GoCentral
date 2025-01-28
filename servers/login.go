@@ -127,7 +127,6 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 				{Key: "console_type", Value: machineType},
 				{Key: "guid", Value: guid},
 				{Key: "link_code", Value: database.GenerateLinkCode(10)},
-				{Key: "crossplay_enabled", Value: false},
 			})
 
 			if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
