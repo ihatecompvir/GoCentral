@@ -86,14 +86,6 @@ func StatsHandler(w http.ResponseWriter, r *http.Request) {
 
 		if isGatheringActive {
 			activeGatherings++
-			switch gathering.MatchmakingPool {
-			case 1, 3:
-				activeGatheringsPS3++
-			case 2:
-				activeGatheringsWii++
-			default:
-				break
-			}
 		}
 	}
 
