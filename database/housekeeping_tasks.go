@@ -12,7 +12,7 @@ import (
 
 func CleanupDuplicateScores() {
 	scoresCollection := GocentralDatabase.Collection("scores")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	pipeline := mongo.Pipeline{
@@ -73,7 +73,7 @@ func PruneOldSessions() {
 
 	// find any gatherings which haven't had their "updated" field updated in the last hour and delete them
 	// technically speaking, someone playing a song longer than one hour could have their gathering deleted, but this is such an extreme and unlikely edge case that it's not worth worrying about
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// Calculate the Unix time for 1 hour ago
@@ -87,72 +87,40 @@ func PruneOldSessions() {
 
 func CleanupInvalidScores() {
 	scoresCollection := GocentralDatabase.Collection("scores")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	deletedCount := 0
 
-	// Delete any scores where the song ID is 0 (invalid)
-	// some customs might have song ID 0, but the scores on such a leaderboard are not going to be right anyway since it will be *every* custom with an invalid song ID
-	result, err := scoresCollection.DeleteMany(ctx, bson.M{"song_id": 0})
-
-	deletedCount += int(result.DeletedCount)
-
-	if err != nil {
-		log.Println("Could not delete invalid scores: ", err)
+	// safe deletion function
+	deleteInvalidScores := func(filter bson.M) {
+		result, err := scoresCollection.DeleteMany(ctx, filter)
+		if err != nil {
+			log.Println("Could not delete invalid scores: ", err)
+			return
+		}
+		if result != nil {
+			deletedCount += int(result.DeletedCount)
+		}
 	}
 
-	// Delete any scores where the role ID is greater than 10
-	result, err = scoresCollection.DeleteMany(ctx, bson.M{"role_id": bson.M{"$gt": 10}})
-	if err != nil {
-		log.Println("Could not delete invalid scores: ", err)
-	}
-
-	deletedCount += int(result.DeletedCount)
-
-	// delete any scores where the score is less than or equal to 0
-	result, err = scoresCollection.DeleteMany(ctx, bson.M{"score": bson.M{"$lte": 0}})
-	if err != nil {
-		log.Println("Could not delete invalid scores: ", err)
-	}
-
-	deletedCount += int(result.DeletedCount)
-
-	// delete any scores where the stars are greater than 6
-	result, err = scoresCollection.DeleteMany(ctx, bson.M{"stars": bson.M{"$gt": 6}})
-	if err != nil {
-		log.Println("Could not delete invalid scores: ", err)
-	}
-
-	deletedCount += int(result.DeletedCount)
-
-	// delete any scores where the diff ID is greater than 4
-	// DIFFICULTIES ARE 1-INDEXED, DON'T CHANGE THIS
-	result, err = scoresCollection.DeleteMany(ctx, bson.M{"diff_id": bson.M{"$gt": 4}})
-	if err != nil {
-		log.Println("Could not delete invalid scores: ", err)
-	}
-
-	deletedCount += int(result.DeletedCount)
-
-	// delete any scores where the percentage is greater than 100
-	result, err = scoresCollection.DeleteMany(ctx, bson.M{"notespct": bson.M{"$gt": 100}})
-	if err != nil {
-		log.Println("Could not delete invalid scores: ", err)
-	}
-
-	deletedCount += int(result.DeletedCount)
+	// Delete scores based on various conditions
+	deleteInvalidScores(bson.M{"song_id": 0})                   // Invalid song ID
+	deleteInvalidScores(bson.M{"role_id": bson.M{"$gt": 10}})   // Role ID greater than 10
+	deleteInvalidScores(bson.M{"score": bson.M{"$lte": 0}})     // Score less than or equal to 0
+	deleteInvalidScores(bson.M{"stars": bson.M{"$gt": 6}})      // Stars greater than 6
+	deleteInvalidScores(bson.M{"diff_id": bson.M{"$gt": 4}})    // Difficulty ID greater than 4
+	deleteInvalidScores(bson.M{"notespct": bson.M{"$gt": 100}}) // Percentage greater than 100
 
 	if deletedCount != 0 {
 		log.Printf("Deleted %d invalid scores.\n", deletedCount)
 	}
-
 }
 
 func DeleteExpiredBattles() {
 	setlistsCollection := GocentralDatabase.Collection("setlists")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	cursor, err := setlistsCollection.Find(ctx, bson.M{"type": bson.M{"$in": []int{1000, 1001, 1002}}})
