@@ -20,9 +20,9 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 	log.Printf("Client wants to perform NAT traversal probes to %v servers...\n", len(stationURLs))
 
 	// make sure we aren't trying to probe more than 8 station URLs
-	// RB3 is limited to 4 player lobbies, but I believe the game can probe both the internal and external station URLs of each player
-	// so 8 should be a sufficient cap
-	if len(stationURLs) > 4 {
+	// RB3 is limited to 8 player lobbies, but I believe the game can probe both the internal and external station URLs of each player
+	// so 10 should be a sufficient cap
+	if len(stationURLs) > 8 {
 		log.Println("Client is attempting to probe more than 8 servers, rejecting call")
 		SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.InvalidArgument)
 		return
