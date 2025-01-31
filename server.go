@@ -137,6 +137,8 @@ func main() {
 
 		r.Get("/song_list", restapi.SongListHandler)
 
+		r.Get("/leaderboards", restapi.LeaderboardHandler)
+
 		httpPort := os.Getenv("HTTPPORT")
 
 		if httpPort == "" {

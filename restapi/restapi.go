@@ -3,12 +3,15 @@ package restapi
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"regexp"
+	"strconv"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	database "rb3server/database"
 	"rb3server/models"
@@ -25,6 +28,21 @@ type Stats struct {
 	ActiveGatheringsWii        int64   `json:"active_gatherings_wii"`
 	MostPopularSongIDs         []int   `json:"most_popular_song_ids"`
 	MostPopularSongScoreCounts []int64 `json:"most_popular_song_score_counts"`
+}
+
+type LeaderboardEntry struct {
+	PID          int    `json:"pid"`
+	Name         string `json:"name"`
+	DiffID       int    `json:"diff_id"`
+	Rank         int    `json:"rank"`
+	Score        int    `json:"score"`
+	IsPercentile int    `json:"is_percentile"`
+	InstMask     int    `json:"inst_mask"`
+	NotesPct     int    `json:"notes_pct"`
+	IsFriend     int    `json:"is_friend"`
+	UnnamedBand  int    `json:"unnamed_band"`
+	PGUID        string `json:"pguid"`
+	ORank        int    `json:"orank"`
 }
 
 func AddStandardHeaders(writer http.ResponseWriter) {
@@ -243,4 +261,124 @@ func MotdHandler(w http.ResponseWriter, r *http.Request) {
 	AddStandardHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonResponse)
+}
+
+func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	AddStandardHeaders(w)
+
+	songIDStr := r.URL.Query().Get("song_id")
+	roleIDStr := r.URL.Query().Get("role_id")
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("page_size")
+
+	if songIDStr == "" || roleIDStr == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "song_id and role_id are required"})
+		return
+	}
+
+	songID, err := strconv.Atoi(songIDStr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid song_id"})
+		return
+	}
+
+	roleID, err := strconv.Atoi(roleIDStr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid role_id"})
+		return
+	}
+
+	page := 1
+	if pageStr != "" {
+		page, err = strconv.Atoi(pageStr)
+		if err != nil || page < 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid page number"})
+			return
+		}
+	}
+
+	pageSize := 20 // Default page size
+	if pageSizeStr != "" {
+		pageSize, err = strconv.Atoi(pageSizeStr)
+		if err != nil || pageSize < 1 || pageSize > 100 { // limit to 100 to avoid large result set
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid page_size"})
+			return
+		}
+	}
+
+	skip := int64((page - 1) * pageSize)
+	limit := int64(pageSize)
+	scoresCollection := database.GocentralDatabase.Collection("scores")
+
+	// Find scores for the song and role ID, sorted by score descending
+	findOptions := options.Find().SetSort(bson.M{"score": -1}).SetSkip(skip).SetLimit(limit)
+	cursor, err := scoresCollection.Find(context.TODO(), bson.M{"song_id": songID, "role_id": roleID}, findOptions)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to query leaderboard"})
+		return
+	}
+	defer cursor.Close(context.TODO())
+
+	var leaderboard []LeaderboardEntry
+	rank := (page-1)*pageSize + 1
+
+	for cursor.Next(context.TODO()) {
+		var score models.Score
+		if err := cursor.Decode(&score); err != nil {
+			log.Println("Error decoding score:", err)
+			continue
+		}
+
+		isBandScore := score.RoleID == 10
+
+		var entry LeaderboardEntry
+
+		if isBandScore {
+			entry = LeaderboardEntry{
+				PID:          score.OwnerPID,
+				Name:         database.GetBandNameForBandID(score.OwnerPID),
+				DiffID:       score.DiffID,
+				Rank:         rank,
+				Score:        score.Score,
+				IsPercentile: 0,
+				InstMask:     score.InstrumentMask,
+				NotesPct:     score.NotesPercent,
+				IsFriend:     0,
+				UnnamedBand:  0,
+				PGUID:        "",
+				ORank:        rank,
+			}
+		} else {
+			entry = LeaderboardEntry{
+				PID:          score.OwnerPID,
+				Name:         database.GetConsolePrefixedUsernameForPID(score.OwnerPID),
+				DiffID:       score.DiffID,
+				Rank:         rank,
+				Score:        score.Score,
+				IsPercentile: 0,
+				InstMask:     score.InstrumentMask,
+				NotesPct:     score.NotesPercent,
+				IsFriend:     0,
+				UnnamedBand:  0,
+				PGUID:        "",
+				ORank:        rank,
+			}
+		}
+		leaderboard = append(leaderboard, entry)
+		rank++
+	}
+
+	if err := cursor.Err(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Error during cursor iteration"})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string][]LeaderboardEntry{"leaderboard": leaderboard})
 }

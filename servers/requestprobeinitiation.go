@@ -3,13 +3,18 @@ package servers
 import (
 	"log"
 	"rb3server/quazal"
-	"strconv"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
 )
 
 func RequestProbeInitiation(err error, client *nex.Client, callID uint32, stationURLs []string) {
+
+	// check that client is not nil
+	if client == nil {
+		log.Println("Client is nil, cannot perform NAT probe")
+		return
+	}
 
 	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.NATTraversalProtocolID)
 
@@ -21,7 +26,7 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 
 	// make sure we aren't trying to probe more than 8 station URLs
 	// RB3 is limited to 8 player lobbies, but I believe the game can probe both the internal and external station URLs of each player
-	// so 10 should be a sufficient cap
+	// so 8 should be a sufficient cap
 	if len(stationURLs) > 8 {
 		log.Println("Client is attempting to probe more than 8 servers, rejecting call")
 		SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.InvalidArgument)
@@ -49,7 +54,7 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 
 	rmcMessage := nex.RMCRequest{}
 	rmcMessage.SetProtocolID(nexproto.NATTraversalProtocolID)
-	rmcMessage.SetCallID(0xFFFF0000 + callID)
+	rmcMessage.SetCallID(callID)
 	rmcMessage.SetMethodID(nexproto.InitiateProbe)
 	rmcRequestStream := nex.NewStreamOut(SecureServer)
 	rmcRequestStream.WriteBufferString(client.ExternalStationURL())
@@ -69,9 +74,15 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 		}
 
 		targetUrl := nex.NewStationURL(target)
+
+		if targetUrl == nil {
+			log.Println("Could not parse station URL, rejecting call")
+			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.InvalidArgument)
+			return
+		}
+
 		log.Println("Sending NAT probe to " + target)
-		targetRvcID, _ := strconv.Atoi(targetUrl.RVCID())
-		targetClient := SecureServer.FindClientFromConnectionID(uint32(targetRvcID))
+		targetClient := SecureServer.FindClientFromIPAddress(targetUrl.Address() + ":" + targetUrl.Port())
 		if targetClient != nil {
 			var messagePacket nex.PacketInterface
 
@@ -90,7 +101,7 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 
 			SecureServer.Send(messagePacket)
 		} else {
-			log.Printf("Could not find active client with RVCID %v\n", targetRvcID)
+			log.Printf("Could not find active client with IP %v\n", targetUrl.Address()+":"+targetUrl.Port())
 			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.OperationError)
 			return
 		}
