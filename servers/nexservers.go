@@ -193,7 +193,7 @@ func StartSecureServer() {
 
 	natTraversalProtocol.RequestProbeInitiation(RequestProbeInitiation)
 
-	accountManagementProtocol.NintendoCreateAccount(NintendoCreateAccount)
+	accountManagementProtocol.LookupOrCreateAccount(LookupOrCreateAccount)
 	accountManagementProtocol.SetStatus(SetStatus)
 	accountManagementProtocol.DeleteAccount(DeleteAccount)
 	accountManagementProtocol.FindByNameLike(FindByNameLike)

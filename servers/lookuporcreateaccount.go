@@ -15,7 +15,7 @@ import (
 )
 
 // also handles Xbox 360 account switching
-func NintendoCreateAccount(err error, client *nex.Client, callID uint32, username string, key string, groups uint32, email string) {
+func LookupOrCreateAccount(err error, client *nex.Client, callID uint32, username string, key string, groups uint32, email string) {
 
 	// don't allow users who have not logged in as a master user to create/lookup accounts
 	res, _ := ValidateClientPID(SecureServer, client, callID, nexproto.AccountManagementProtocolID)
@@ -43,16 +43,25 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 
 		guid, err := generateGUID()
 
-		_, err = users.InsertOne(context.TODO(), bson.D{
-			{Key: "username", Value: username},
-			{Key: "pid", Value: config.LastPID + 1},
-			{Key: "console_type", Value: client.Platform()},
-			{Key: "guid", Value: guid},
-			{Key: "created_by_machine_id", Value: client.MachineID()},
-		})
+		if client.Platform() == 2 {
+			_, err = users.InsertOne(context.TODO(), bson.D{
+				{Key: "username", Value: username},
+				{Key: "pid", Value: config.LastPID + 1},
+				{Key: "console_type", Value: client.Platform()},
+				{Key: "guid", Value: guid},
+				{Key: "created_by_machine_id", Value: client.MachineID()},
+			})
+		} else {
+			_, err = users.InsertOne(context.TODO(), bson.D{
+				{Key: "username", Value: username},
+				{Key: "pid", Value: config.LastPID + 1},
+				{Key: "console_type", Value: client.Platform()},
+				{Key: "guid", Value: guid},
+			})
+		}
 
 		if err != nil {
-			log.Printf("Could not create Nintendo user %s: %s\n", username, err)
+			log.Printf("Could not create user %s: %s\n", username, err)
 			SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
 			return
 		}
@@ -82,14 +91,14 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 		if err = users.FindOne(context.TODO(), bson.M{"username": username}).Decode(&user); err != nil {
 
 			if err != nil {
-				log.Printf("Could not find newly created Nintendo user: %s\n", err)
+				log.Printf("Could not find newly created user: %s\n", err)
 				SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
 				return
 			}
 		}
 	}
 
-	log.Printf("%s requesting Nintendo log in from Wii Friend Code %s, has PID %v\n", username, client.WiiFC, user.PID)
+	log.Printf("%s requesting to lookup or create an account\n", username)
 
 	client.Username = username
 
@@ -100,29 +109,31 @@ func NintendoCreateAccount(err error, client *nex.Client, callID uint32, usernam
 	utils.GetClientStoreSingleton().AddClient(client.Address().String())
 	utils.GetClientStoreSingleton().PushPID(client.Address().String(), client.PlayerID())
 
-	// update station URL of the machine that created the user
-	result, err := machinesCollection.UpdateOne(
-		context.TODO(),
-		bson.M{"machine_id": client.MachineID()},
-		bson.D{
-			{"$set", bson.D{{"station_url", stationURL}}},
-		},
-	)
+	if client.Platform() == 2 {
+		// update station URL of the machine that created the user
+		result, err := machinesCollection.UpdateOne(
+			context.TODO(),
+			bson.M{"machine_id": client.MachineID()},
+			bson.D{
+				{"$set", bson.D{{"station_url", stationURL}}},
+			},
+		)
 
-	if err != nil {
-		log.Printf("Could not update station URLs for machine ID %v: %s\n", client.MachineID(), err)
-		SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
-		return
+		if err != nil {
+			log.Printf("Could not update station URLs for machine ID %v: %s\n", client.MachineID(), err)
+			SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
+			return
+		}
+
+		log.Printf("Updated %v station URL for machine ID %v \n", result.ModifiedCount, client.MachineID())
 	}
-
-	log.Printf("Updated %v station URL for machine ID %v \n", result.ModifiedCount, client.MachineID())
 
 	rmcResponseStream.WriteUInt32LE(user.PID)
 
 	rmcResponseBody := rmcResponseStream.Bytes()
 
 	rmcResponse := nex.NewRMCResponse(nexproto.AccountManagementProtocolID, callID)
-	rmcResponse.SetSuccess(nexproto.NintendoCreateAccount, rmcResponseBody)
+	rmcResponse.SetSuccess(nexproto.LookupOrCreateAccount, rmcResponseBody)
 
 	rmcResponseBytes := rmcResponse.Bytes()
 
