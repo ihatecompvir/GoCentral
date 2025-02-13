@@ -68,17 +68,15 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 
 		// sanity check on station URL length
 		if len(target) > 256 {
-			log.Println("Station URL is too long, rejecting call")
-			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.InvalidArgument)
-			return
+			log.Println("Station URL is too long, skipping probe")
+			continue
 		}
 
 		targetUrl := nex.NewStationURL(target)
 
 		if targetUrl == nil {
-			log.Println("Could not parse station URL, rejecting call")
-			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.InvalidArgument)
-			return
+			log.Println("Could not parse station URL, skipping probe")
+			continue
 		}
 
 		log.Println("Sending NAT probe to " + target)
@@ -101,9 +99,8 @@ func RequestProbeInitiation(err error, client *nex.Client, callID uint32, statio
 
 			SecureServer.Send(messagePacket)
 		} else {
-			log.Printf("Could not find active client with IP %v\n", targetUrl.Address()+":"+targetUrl.Port())
-			SendErrorCode(SecureServer, client, nexproto.NATTraversalProtocolID, callID, quazal.OperationError)
-			return
+			log.Printf("Could not find active client with IP %v, skipping probe\n", targetUrl.Address()+":"+targetUrl.Port())
+			continue
 		}
 	}
 
