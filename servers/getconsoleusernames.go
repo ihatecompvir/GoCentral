@@ -29,46 +29,51 @@ func GetConsoleUsernames(err error, client *nex.Client, callID uint32, friendCod
 
 	_ = machinesCollection.FindOne(context.TODO(), bson.M{"wii_friend_code": friendCode}).Decode(&machine)
 
-	// if the machine ID is 0, it doesn't exist
-	if machine.MachineID == 0 {
-		log.Printf("Machine with friend code %v does not exist\n", friendCode)
-		SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, quazal.UnknownError)
-		return
-	}
-
-	// now that we have the machine ID, we can look up all associated users
-	usersCollection := database.GocentralDatabase.Collection("users")
-
 	var users []models.User
 
-	cur, err := usersCollection.Find(context.TODO(), bson.M{"created_by_machine_id": machine.MachineID})
+	// if the machine ID is 0, it doesn't exist
+	if machine.MachineID == 0 {
+		// TODO: fake machine ID we can use for Wii Friends that don't have RB3
+		log.Printf("Machine with friend code %v does not exist\n", friendCode)
+	} else {
+		// add the master user to the usernames list
+		var masterUser models.User
+		masterUser.Username = "Master User (" + friendCode + ")"
+		masterUser.PID = uint32(machine.MachineID)
+		users = append(users, masterUser)
 
-	if err != nil {
-		log.Printf("Could not find users for machine %v: %v\n", machine.MachineID, err)
-		SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, quazal.UnknownError)
-		return
-	}
+		// now that we have the machine ID, we can look up all associated users
+		usersCollection := database.GocentralDatabase.Collection("users")
 
-	// iterate through the users and add them to the list
-	for cur.Next(context.Background()) {
-		var user models.User
-		err := cur.Decode(&user)
+		cur, err := usersCollection.Find(context.TODO(), bson.M{"created_by_machine_id": machine.MachineID})
+
 		if err != nil {
-			log.Printf("Could not decode user: %v\n", err)
+			log.Printf("Could not find users for machine %v: %v\n", machine.MachineID, err)
 			SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, quazal.UnknownError)
 			return
 		}
-		users = append(users, user)
+
+		// iterate through the users and add them to the list
+		for cur.Next(context.Background()) {
+			var user models.User
+			err := cur.Decode(&user)
+			if err != nil {
+				log.Printf("Could not decode user: %v\n", err)
+				SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, quazal.UnknownError)
+				return
+			}
+			// limit the amount of users reported to 4 (including the Master User)
+			if len(users) <= 4 {
+				users = append(users, user)
+			}
+		}
 	}
 
 	// create a stream to hold the response
 	rmcResponseStream := nex.NewStream()
 
-	rmcResponseStream.WriteUInt32LE(uint32(len(users) + 1))
+	rmcResponseStream.WriteUInt32LE(uint32(len(users)))
 
-	rmcResponseStream.WriteBufferString("Master User (" + friendCode + ")")
-
-	// write the usernames to the stream
 	for _, user := range users {
 		rmcResponseStream.WriteBufferString(user.Username)
 	}

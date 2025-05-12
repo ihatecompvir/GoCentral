@@ -195,6 +195,7 @@ func StartSecureServer() {
 
 	accountManagementProtocol.LookupOrCreateAccount(LookupOrCreateAccount)
 	accountManagementProtocol.SetStatus(SetStatus)
+	accountManagementProtocol.GetStatus(GetStatus)
 	accountManagementProtocol.DeleteAccount(DeleteAccount)
 	accountManagementProtocol.FindByNameLike(FindByNameLike)
 

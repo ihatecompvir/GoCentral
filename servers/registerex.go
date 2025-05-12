@@ -141,6 +141,7 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 				bson.M{"machine_id": machine.MachineID},
 				bson.D{
 					{"$set", bson.D{{"station_url", stationURL}}},
+					{"$set", bson.D{{"int_station_url", internalStationURL}}},
 				},
 			)
 		}

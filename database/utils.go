@@ -132,6 +132,10 @@ func GetCoolFact() string {
 			return "Players on this server have earned an unknown number of stars because something broke trying to calculate it!"
 		}
 
+		if len(result) == 0 {
+			return "Players on this server have no stars because nobody's set a score!"
+		}
+
 		stars := result[0]["total"].(int32)
 		return "Players on this server have earned a cumulative " + strconv.Itoa(int(stars)) + " " + pluralize(int64(stars), "star", "stars") + "!"
 	case 1:

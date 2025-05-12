@@ -56,7 +56,12 @@ func RequestURLs(err error, client *nex.Client, callID uint32, stationCID uint32
 			return
 		}
 
-		if machine.StationURL != "" {
+		if machine.IntStationURL != "" && machine.StationURL != "" {
+			rmcResponseStream.WriteUInt8(1)
+			rmcResponseStream.WriteUInt32LE(2)
+			rmcResponseStream.WriteBufferString(machine.StationURL)
+			rmcResponseStream.WriteBufferString(machine.IntStationURL)
+		} else if machine.StationURL != "" {
 			rmcResponseStream.WriteUInt8(1)
 			rmcResponseStream.WriteUInt32LE(1)
 			rmcResponseStream.WriteBufferString(machine.StationURL)
