@@ -16,12 +16,11 @@ Note that this only aims to replicate what the game calls "Rock Central", suppor
 2. In Settings->Network, make sure status is "Connected" and PSN status is "RPCN".
 3. In "IP/Hosts switches", add `rb3ps3live.hmxservices.com=45.33.44.103`
 ### Connecting on Wii (RB3Enhanced)
-1. Make sure RB3Enhanced 0.6 or later is installed. https://rb3e.enhanced.rocks/
-2. On your SD card (or in Dolphin's SD directory), open "rb3.ini" in the "rb3" folder.
-3. Change GoCentralAddress to `gocentral-wii.rbenhanced.rocks`, ensuring there is no # at the start of the line.
-4. Change NASAddress to `naswii.ipg.pw`.
+1. Make sure RB3Enhanced 0.7 or later is installed. https://rb3e.rbenhanced.rocks/
+2. GoCentral is enabled by default! If you need to enable it yourself:
+    * Open rb3.ini, change GoCentralAddress to `gocentral-wii.rbenhanced.rocks`
 ### Connecting on Wii (Gecko/Ocarina Code) - Dolphin too!
-1. Download the code from https://rb3e.rbenhancedrocks/gocentral_gecko.txt
+1. Download the code from https://rb3e.rbenhanced.rocks/gocentral_gecko.txt
 2. Copy this code to wherever you store Gecko/Ocarina codes on your SD card. This is often in txtcodes/SZBx69.txt, where x is your region (P for Europe, E for America).
 
 (If on Dolphin, right click the game's properties and enter the code into the Gecko Codes tab.)
@@ -30,9 +29,9 @@ Note that this only aims to replicate what the game calls "Rock Central", suppor
 2. In your loader settings for Rock Band 3, enable the "NoSSL only" option for custom servers.
 If you are using another loader, check with your loader on enabling a NoSSL patch. Will add more instructions later on.
 ### Connecting on Xbox 360 (RB3Enhanced)
-1. Make sure RB3Enhanced 0.6 or later is installed. https://rb3e.enhanced.rocks/
-2. Open rb3.ini, either in the folder Rock Band 3 is installed to or the "rb3" folder on your hard drive.
-3. Change GoCentralAddress to `gocentral-xbox.rbenhanced.rocks`, ensuring there is no # at the start of the line.
+1. Make sure RB3Enhanced 0.7 or later is installed. https://rb3e.rbenhanced.rocks/
+2. GoCentral is enabled by default! If you need to enable it yourself:
+    * Open rb3.ini, change GoCentralAddress to `gocentral-xbox.rbenhanced.rocks`
 
 For the most reliable experience, port forward port 9103 (UDP) to your console in your router's settings, or if on RPCS3, enable UPnP.
 
