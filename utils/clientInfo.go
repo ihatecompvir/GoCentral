@@ -45,8 +45,8 @@ func (cs *ClientStore) AddClient(ip string) {
 // pushes a PID to the client's stack of PIDs
 func (cs *ClientStore) PushPID(ip string, pid uint32) error {
 	cs.mu.RLock()
+	defer cs.mu.RUnlock()
 	client, exists := cs.clients[ip]
-	cs.mu.RUnlock()
 	if !exists {
 		return errors.New("client not found")
 	}
@@ -63,8 +63,8 @@ func (cs *ClientStore) PushPID(ip string, pid uint32) error {
 // checks if a PID is valid for a client (i.e. have they logged in or called NintendoCreateAccount to switch to it, for multiple profile support)
 func (cs *ClientStore) IsValidPID(ip string, pid uint32) (bool, error) {
 	cs.mu.RLock()
+	defer cs.mu.RUnlock()
 	client, exists := cs.clients[ip]
-	cs.mu.RUnlock()
 	if !exists {
 		return false, errors.New("client not found")
 	}
