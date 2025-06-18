@@ -126,7 +126,12 @@ func (service RankRangeGetService) Handle(data string, database *mongo.Database,
 		// use fallback names if something could not be fetched or wasn't in the db
 		if name == "" {
 			if isBandScore {
-				name = "Unnamed Band"
+				playerName := playerNames[score.OwnerPID]
+				if playerName != "" {
+					name = playerName + "'s Band" // "Player's Band" if the band name is not set but the player is known
+				} else {
+					name = "Unnamed Band"
+				}
 			} else {
 				name = "Unnamed Player"
 			}
