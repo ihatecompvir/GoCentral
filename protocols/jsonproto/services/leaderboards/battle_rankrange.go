@@ -97,6 +97,7 @@ func (service BattleRankRangeGetService) Handle(data string, database *mongo.Dat
 
 	// grab console-prefixed usernames for players and band names for the bands
 	playerNames, _ := db.GetConsolePrefixedUsernamesByPIDs(context.Background(), database, playerPIDs)
+	nonPrefixedPlayerNames, _ := db.GetUsernamesByPIDs(context.Background(), database, playerPIDs)
 	bandNames, _ := db.GetBandNamesByBandIDs(context.Background(), database, bandPIDs)
 
 	var res []BattleRankRangeGetResponse
@@ -117,7 +118,7 @@ func (service BattleRankRangeGetService) Handle(data string, database *mongo.Dat
 		// use fallback names if something could not be fetched or wasn't in the db
 		if name == "" {
 			if isBandScore {
-				playerName := playerNames[score.OwnerPID]
+				playerName := nonPrefixedPlayerNames[score.OwnerPID]
 				if playerName != "" {
 					name = playerName + "'s Band"
 				} else {
