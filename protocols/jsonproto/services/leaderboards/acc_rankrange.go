@@ -64,15 +64,12 @@ func (service AccRankRangeGetService) Handle(data string, database *mongo.Databa
 
 	accomplishmentsCollection := database.Collection("accomplishments")
 
-	// FindOne the accomplishment scores
 	var accomplishments models.Accomplishments
 	err = accomplishmentsCollection.FindOne(context.TODO(), bson.M{}).Decode(&accomplishments)
 
 	if err != nil {
 		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
-
-	res := []AccRankRangeGetResponse{}
 
 	accSlice := getAccomplishmentField(req.AccID, accomplishments)
 
@@ -81,18 +78,45 @@ func (service AccRankRangeGetService) Handle(data string, database *mongo.Databa
 		return accSlice[i].Score > accSlice[j].Score
 	})
 
-	// get the scores in the range, and append them to the response
-	for i := req.StartRank - 1; i < req.EndRank-1; i++ {
-		if i >= len(accSlice) {
-			break
+	// calculate what the actual range will be
+	start := req.StartRank - 1
+	if start < 0 {
+		start = 0
+	}
+	end := req.EndRank - 1
+	if end > len(accSlice) {
+		end = len(accSlice)
+	}
+	visibleScores := accSlice[start:end]
+
+	// collect all the player PIDs we need to fetch
+	playerPIDs := make([]int, 0, len(visibleScores))
+	for _, score := range visibleScores {
+		playerPIDs = append(playerPIDs, score.PID)
+	}
+
+	// grab console-prefixed usernames for all players at once
+	playerNames, _ := db.GetConsolePrefixedUsernamesByPIDs(context.Background(), database, playerPIDs)
+
+	res := []AccRankRangeGetResponse{}
+
+	for i, score := range visibleScores {
+		// get the player name from the map
+		// since we prefetched the names this is a quick map lookup
+		name := playerNames[score.PID]
+
+		// use fallback name if something could not be fetched or wasn't in the db
+		if name == "" {
+			name = "Unnamed Player"
 		}
 
-		score := accSlice[i]
+		rank := start + i + 1
+
 		res = append(res, AccRankRangeGetResponse{
 			PID:          score.PID,
-			Name:         db.GetConsolePrefixedUsernameForPID(score.PID),
+			Name:         name,
 			DiffID:       0,
-			Rank:         i + 1,
+			Rank:         rank,
 			Score:        score.Score,
 			IsPercentile: 0,
 			InstMask:     0,
@@ -100,7 +124,7 @@ func (service AccRankRangeGetService) Handle(data string, database *mongo.Databa
 			IsFriend:     0,
 			UnnamedBand:  0,
 			PGUID:        "",
-			ORank:        i + 1,
+			ORank:        rank,
 		})
 	}
 

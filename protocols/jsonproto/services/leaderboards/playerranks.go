@@ -10,7 +10,6 @@ import (
 	"github.com/ihatecompvir/nex-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type PlayerranksGetRequest struct {
@@ -55,35 +54,38 @@ func (service PlayerranksGetService) Handle(data string, database *mongo.Databas
 
 	res := []PlayerranksGetResponse{}
 
+	playerScoresFilter := bson.M{
+		"pid":     req.PID,
+		"role_id": req.RoleID,
+		"song_id": bson.M{"$in": req.SongIDs},
+	}
+	cursor, err := scoresCollection.Find(context.TODO(), playerScoresFilter)
+	if err != nil {
+		log.Println(err)
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+	}
+
+	playerScoresMap := make(map[int]int)
+	for cursor.Next(context.Background()) {
+		var score models.Score
+		cursor.Decode(&score)
+		playerScoresMap[score.SongID] = score.Score
+	}
+
 	for _, id := range req.SongIDs {
-		var playerScore models.Score
-		err = scoresCollection.FindOne(context.TODO(), bson.M{"song_id": id, "role_id": req.RoleID, "pid": req.PID}).Decode(&playerScore)
-		if err != nil && err != mongo.ErrNoDocuments {
-			log.Println(err)
-			return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
-		}
-
-		if err == mongo.ErrNoDocuments {
-			err = scoresCollection.FindOne(context.TODO(), bson.M{"song_id": id, "role_id": req.RoleID}, &options.FindOneOptions{
-				Sort: bson.M{"score": -1},
-			}).Decode(&playerScore)
-			if err != nil && err != mongo.ErrNoDocuments {
-				log.Println(err)
-				return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
-			}
-		}
-
-		playerScoreIdx, err := scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": id, "role_id": req.RoleID, "score": bson.M{"$gt": playerScore.Score}})
+		playerScore := playerScoresMap[id]
+		rank, err := scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": id, "role_id": req.RoleID, "score": bson.M{"$gt": playerScore}})
 		if err != nil {
-			return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+			log.Println("Could not count documents for rank:", err)
+			// just say theyre number 1 lol
+			rank = 0
 		}
 
-		var response PlayerranksGetResponse
-		response.SongID = id
-		response.Rank = int(playerScoreIdx)
-		response.IsPercentile = 0
-
-		res = append(res, response)
+		res = append(res, PlayerranksGetResponse{
+			SongID:       id,
+			Rank:         int(rank + 1),
+			IsPercentile: 0,
+		})
 	}
 
 	if len(res) == 0 {
@@ -91,5 +93,4 @@ func (service PlayerranksGetService) Handle(data string, database *mongo.Databas
 	} else {
 		return marshaler.MarshalResponse(service.Path(), res)
 	}
-
 }

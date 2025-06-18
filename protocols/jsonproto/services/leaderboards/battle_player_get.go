@@ -86,11 +86,11 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 	}
 
 	startRank := playerScoreIdx - (playerScoreIdx % 19)
-	endRank := startRank + 19
+	limit := int64(19) // The limit is always the page size, not the end rank.
 
 	cursor, err := scoresCollection.Find(context.TODO(), bson.M{"battle_id": req.BattleID}, &options.FindOptions{
 		Skip:  &startRank,
-		Limit: &endRank,
+		Limit: &limit,
 		Sort:  bson.M{"score": -1},
 	})
 
@@ -98,52 +98,66 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
-	var res []BattlePlayerGetResponse
+	// just grab all the relevant scores into a single slice
+	var scores []models.Score
+	if err = cursor.All(context.Background(), &scores); err != nil {
+		log.Println("Failed to decode all scores:", err)
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+	}
 
+	// collect all the player and band PIDs we need to fetch
+	playerPIDs := make([]int, 0)
+	bandPIDs := make([]int, 0)
+	for _, score := range scores {
+		if score.RoleID == 10 { // this indicates a band score
+			bandPIDs = append(bandPIDs, score.OwnerPID)
+		} else {
+			playerPIDs = append(playerPIDs, score.OwnerPID)
+		}
+	}
+
+	// grab console-prefixed usernames for players and band names for the bands
+	playerNames, _ := db.GetConsolePrefixedUsernamesByPIDs(context.Background(), database, playerPIDs)
+	bandNames, _ := db.GetBandNamesByBandIDs(context.Background(), database, bandPIDs)
+
+	var res []BattlePlayerGetResponse
 	var idx int64 = startRank + 1
 
-	for cursor.Next(context.Background()) {
-		var score models.Score
-		err := cursor.Decode(&score)
-
-		if err != nil {
-			log.Println("Failed to decode score:", err)
-			continue
-		}
-
+	for _, score := range scores {
+		var name string
 		isBandScore := score.RoleID == 10
 
+		// get the band or player name
+		// since we prefetched the names this is a quick map lookup
 		if isBandScore {
-			res = append(res, BattlePlayerGetResponse{
-				PID:          score.OwnerPID,
-				Name:         db.GetBandNameForBandID(score.OwnerPID),
-				DiffID:       score.DiffID,
-				Rank:         int(idx),
-				Score:        score.Score,
-				IsPercentile: 0,
-				InstMask:     score.InstrumentMask,
-				NotesPct:     score.NotesPercent,
-				IsFriend:     0,
-				UnnamedBand:  0,
-				PGUID:        "",
-				ORank:        int(idx),
-			})
+			name = bandNames[score.OwnerPID]
 		} else {
-			res = append(res, BattlePlayerGetResponse{
-				PID:          score.OwnerPID,
-				Name:         db.GetConsolePrefixedUsernameForPID(score.OwnerPID),
-				DiffID:       score.DiffID,
-				Rank:         int(idx),
-				Score:        score.Score,
-				IsPercentile: 0,
-				InstMask:     score.InstrumentMask,
-				NotesPct:     score.NotesPercent,
-				IsFriend:     0,
-				UnnamedBand:  0,
-				PGUID:        "",
-				ORank:        int(idx),
-			})
+			name = playerNames[score.OwnerPID]
 		}
+
+		// use fallback names if something could not be fetched or wasn't in the db
+		if name == "" {
+			if isBandScore {
+				name = "Unnamed Band"
+			} else {
+				name = "Unnamed Player"
+			}
+		}
+
+		res = append(res, BattlePlayerGetResponse{
+			PID:          score.OwnerPID,
+			Name:         name,
+			DiffID:       score.DiffID,
+			Rank:         int(idx),
+			Score:        score.Score,
+			IsPercentile: 0,
+			InstMask:     score.InstrumentMask,
+			NotesPct:     score.NotesPercent,
+			IsFriend:     0,
+			UnnamedBand:  0,
+			PGUID:        "",
+			ORank:        int(idx),
+		})
 
 		idx++
 	}

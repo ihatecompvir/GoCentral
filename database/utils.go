@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"log"
 	"math/rand"
 	"rb3server/models"
 	"regexp"
@@ -9,6 +10,8 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Convenience functions involving the DB
@@ -27,6 +30,42 @@ func GetUsernameForPID(pid int) string {
 	} else {
 		return "Player"
 	}
+}
+
+// returns a map of usernames for a list of PIDs
+// useful if you need to resolve multiple usernames at once and want to avoid multiple DB calls
+func GetUsernamesByPIDs(ctx context.Context, database *mongo.Database, pids []int) (map[int]string, error) {
+	if len(pids) == 0 {
+		return make(map[int]string), nil
+	}
+
+	usersCollection := database.Collection("users")
+	filter := bson.M{"pid": bson.M{"$in": pids}}
+
+	// projection to only fetch pid and username and avoid getting other fields
+	opts := options.Find().SetProjection(bson.M{"pid": 1, "username": 1})
+
+	cursor, err := usersCollection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	// create a username map to map PIDs to usernames
+	usernameMap := make(map[int]string)
+	for cursor.Next(ctx) {
+		var user struct {
+			PID      int    `bson:"pid"`
+			Username string `bson:"username"`
+		}
+		if err := cursor.Decode(&user); err != nil {
+			log.Printf("Failed to decode user for username map: %v", err)
+			continue
+		}
+		usernameMap[user.PID] = user.Username
+	}
+
+	return usernameMap, cursor.Err()
 }
 
 // returns the pid for a given username
@@ -77,6 +116,57 @@ func GetConsolePrefixedUsernameForPID(pid int) string {
 	}
 }
 
+// returns a map of usernames with console specific prefixes for a list of PIDs
+func GetConsolePrefixedUsernamesByPIDs(ctx context.Context, database *mongo.Database, pids []int) (map[int]string, error) {
+	if len(pids) == 0 {
+		return make(map[int]string), nil
+	}
+
+	usersCollection := database.Collection("users")
+	filter := bson.M{"pid": bson.M{"$in": pids}}
+
+	// projection to only fetch pid, username, and console_type
+	// i love mongo projections
+	opts := options.Find().SetProjection(bson.M{"pid": 1, "username": 1, "console_type": 1})
+
+	cursor, err := usersCollection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	usernameMap := make(map[int]string)
+	for cursor.Next(ctx) {
+		var user struct {
+			PID         int    `bson:"pid"`
+			Username    string `bson:"username"`
+			ConsoleType int    `bson:"console_type"`
+		}
+		if err := cursor.Decode(&user); err != nil {
+			log.Printf("Failed to decode user for prefixed username map: %v", err)
+			continue
+		}
+
+		// do the same prefix logic as the single-user function
+		var prefixedName string
+		switch user.ConsoleType {
+		case 0:
+			prefixedName = user.Username + " [360]"
+		case 1:
+			prefixedName = user.Username + " [PS3]"
+		case 2:
+			prefixedName = user.Username + " [Wii]"
+		case 3:
+			prefixedName = user.Username + " [RPCS3]"
+		default:
+			prefixedName = user.Username
+		}
+		usernameMap[user.PID] = prefixedName
+	}
+
+	return usernameMap, cursor.Err()
+}
+
 // returns the name of the band for a given band_id
 func GetBandNameForBandID(pid int) string {
 	var band models.Band
@@ -95,6 +185,41 @@ func GetBandNameForBandID(pid int) string {
 			return "Unnamed Band"
 		}
 	}
+}
+
+// returns a map of band names for a list of band IDs
+func GetBandNamesByBandIDs(ctx context.Context, database *mongo.Database, bandIDs []int) (map[int]string, error) {
+	if len(bandIDs) == 0 {
+		return make(map[int]string), nil
+	}
+
+	bandsCollection := database.Collection("bands")
+	filter := bson.M{"band_id": bson.M{"$in": bandIDs}}
+
+	// use a projection to only fetch band_id and name (that is all we need, we do not need band art and etc.)
+	opts := options.Find().SetProjection(bson.M{"band_id": 1, "name": 1})
+
+	cursor, err := bandsCollection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	// create a band name map to map band IDs to names
+	bandNameMap := make(map[int]string)
+	for cursor.Next(ctx) {
+		var band struct {
+			BandID int    `bson:"band_id"`
+			Name   string `bson:"name"`
+		}
+		if err := cursor.Decode(&band); err != nil {
+			log.Printf("Failed to decode band for name map: %v", err)
+			continue
+		}
+		bandNameMap[band.BandID] = band.Name
+	}
+
+	return bandNameMap, cursor.Err()
 }
 
 // gets a random fact about the DB
@@ -232,30 +357,19 @@ func GetBattleExpiryInfo(battleID int) (bool, time.Time) {
 // TODO: might rework or revisit this system when the web app and REST API become more fleshed out
 // whether or not a PID has a certain role
 func IsPIDInGroup(pid int, groupID string) bool {
-	usersCollection := GocentralDatabase.Collection("users")
-
-	// sanity checks
 	if pid == 0 || groupID == "" {
 		return false
 	}
 
-	// find user by pid
-	var user models.User
-	_ = usersCollection.FindOne(context.TODO(), bson.M{"pid": pid}).Decode(&user)
+	usersCollection := GocentralDatabase.Collection("users")
 
-	// failed to find user
-	if user.Username == "" {
+	// filter to let the db do the work
+	filter := bson.M{"pid": pid, "groups": groupID}
+	count, err := usersCollection.CountDocuments(context.TODO(), filter)
+	if err != nil {
 		return false
 	}
-
-	// check if user is in the group
-	for _, group := range user.Groups {
-		if group == groupID {
-			return true
-		}
-	}
-
-	return false
+	return count > 0
 }
 
 // checks if a PID is a master user
