@@ -197,7 +197,7 @@ func GetBandNamesByOwnerPIDs(ctx context.Context, database *mongo.Database, owne
 	filter := bson.M{"owner_pid": bson.M{"$in": ownerPIDs}}
 
 	// use a projection to only fetch band_id and name (that is all we need, we do not need band art and etc.)
-	opts := options.Find().SetProjection(bson.M{"band_id": 1, "name": 1})
+	opts := options.Find().SetProjection(bson.M{"owner_pid": 1, "name": 1})
 
 	cursor, err := bandsCollection.Find(ctx, filter, opts)
 	if err != nil {
