@@ -187,14 +187,14 @@ func GetBandNameForBandID(pid int) string {
 	}
 }
 
-// returns a map of band names for a list of band IDs
-func GetBandNamesByBandIDs(ctx context.Context, database *mongo.Database, bandIDs []int) (map[int]string, error) {
-	if len(bandIDs) == 0 {
+// returns a map of band names for a list of owner PIDs
+func GetBandNamesByOwnerPIDs(ctx context.Context, database *mongo.Database, ownerPIDs []int) (map[int]string, error) {
+	if len(ownerPIDs) == 0 {
 		return make(map[int]string), nil
 	}
 
 	bandsCollection := database.Collection("bands")
-	filter := bson.M{"band_id": bson.M{"$in": bandIDs}}
+	filter := bson.M{"owner_pid": bson.M{"$in": ownerPIDs}}
 
 	// use a projection to only fetch band_id and name (that is all we need, we do not need band art and etc.)
 	opts := options.Find().SetProjection(bson.M{"band_id": 1, "name": 1})
@@ -209,14 +209,14 @@ func GetBandNamesByBandIDs(ctx context.Context, database *mongo.Database, bandID
 	bandNameMap := make(map[int]string)
 	for cursor.Next(ctx) {
 		var band struct {
-			BandID int    `bson:"band_id"`
-			Name   string `bson:"name"`
+			OwnerPID int    `bson:"owner_pid"`
+			Name     string `bson:"name"`
 		}
 		if err := cursor.Decode(&band); err != nil {
 			log.Printf("Failed to decode band for name map: %v", err)
 			continue
 		}
-		bandNameMap[band.BandID] = band.Name
+		bandNameMap[band.OwnerPID] = band.Name
 	}
 
 	return bandNameMap, cursor.Err()

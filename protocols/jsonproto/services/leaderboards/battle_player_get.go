@@ -107,18 +107,14 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 
 	// collect all the player and band PIDs we need to fetch
 	playerPIDs := make([]int, 0)
-	bandPIDs := make([]int, 0)
 	for _, score := range scores {
 		playerPIDs = append(playerPIDs, score.OwnerPID)
-		if score.RoleID == 10 { // this indicates a band score
-			bandPIDs = append(bandPIDs, score.OwnerPID)
-		}
 	}
 
 	// grab console-prefixed usernames for players and band names for the bands
 	playerNames, _ := db.GetConsolePrefixedUsernamesByPIDs(context.Background(), database, playerPIDs)
 	nonPrefixedPlayerNames, _ := db.GetUsernamesByPIDs(context.Background(), database, playerPIDs)
-	bandNames, _ := db.GetBandNamesByBandIDs(context.Background(), database, bandPIDs)
+	bandNames, _ := db.GetBandNamesByOwnerPIDs(context.Background(), database, playerPIDs)
 
 	var res []BattlePlayerGetResponse
 	var idx int64 = startRank + 1
