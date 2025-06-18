@@ -89,10 +89,9 @@ func (service BattleRankRangeGetService) Handle(data string, database *mongo.Dat
 	playerPIDs := make([]int, 0)
 	bandPIDs := make([]int, 0)
 	for _, score := range scores {
+		playerPIDs = append(playerPIDs, score.OwnerPID)
 		if score.RoleID == 10 { // this indicates a band score
 			bandPIDs = append(bandPIDs, score.OwnerPID)
-		} else {
-			playerPIDs = append(playerPIDs, score.OwnerPID)
 		}
 	}
 
