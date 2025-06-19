@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -15,6 +16,11 @@ import (
 
 	database "rb3server/database"
 	"rb3server/models"
+)
+
+var (
+	motdPattern    = regexp.MustCompile(`set_motd\s+"([^"]+)"`)
+	dlcmotdPattern = regexp.MustCompile(`set_dlcmotd\s+"([^"]+)"`)
 )
 
 type Stats struct {
@@ -57,191 +63,211 @@ func AddStandardHeaders(writer http.ResponseWriter) {
 	}
 }
 
-func HealthHandler(w http.ResponseWriter, r *http.Request) {
+// JSON helper methods to not repeat the same code in every handler
+
+// Sends a JSON response with the given status code and payload.
+func sendJSON(w http.ResponseWriter, statusCode int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	AddStandardHeaders(w)
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		log.Printf("ERROR: could not write json response: %v", err)
+	}
+}
+
+// Sends an error response with the given status code and message.
+func sendError(w http.ResponseWriter, statusCode int, message string) {
+	sendJSON(w, statusCode, map[string]string{"error": message})
+}
+
+// Handles the health check endpoint to verify if the database is reachable.
+// If somehow the DB has gone down, this will return a 503 Service Unavailable status so clients know that the service is not operational.
+func HealthHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := database.GocentralDatabase.Client().Ping(ctx, nil); err != nil {
+		sendError(w, http.StatusServiceUnavailable, "database is not available")
+		return
+	}
+
+	sendJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func StatsHandler(w http.ResponseWriter, r *http.Request) {
-	// return the number of users, scores, machines, and setlists
-	scores := database.GocentralDatabase.Collection("scores")
-	machines := database.GocentralDatabase.Collection("machines")
-	setlists := database.GocentralDatabase.Collection("setlists")
-	characters := database.GocentralDatabase.Collection("characters")
-	bands := database.GocentralDatabase.Collection("bands")
+	ctx := r.Context()
+	var stats Stats
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var firstErr error
+
+	recordError := func(err error) {
+		if err != nil {
+			mu.Lock()
+			if firstErr == nil {
+				firstErr = err
+			}
+			mu.Unlock()
+		}
+	}
+
+	collections := map[string]*mongo.Collection{
+		"scores":     database.GocentralDatabase.Collection("scores"),
+		"machines":   database.GocentralDatabase.Collection("machines"),
+		"setlists":   database.GocentralDatabase.Collection("setlists"),
+		"characters": database.GocentralDatabase.Collection("characters"),
+		"bands":      database.GocentralDatabase.Collection("bands"),
+	}
+
+	// count up the documents in each collection to get how many X there are
+	for name, coll := range collections {
+		wg.Add(1)
+		go func(name string, coll *mongo.Collection) {
+			defer wg.Done()
+			count, err := coll.CountDocuments(ctx, bson.M{})
+			if err != nil {
+				recordError(err)
+				return
+			}
+			mu.Lock()
+			switch name {
+			case "scores":
+				stats.Scores = count
+			case "machines":
+				stats.Machines = count
+			case "setlists":
+				stats.Setlists = count
+			case "characters":
+				stats.Characters = count
+			case "bands":
+				stats.Bands = count
+			}
+			mu.Unlock()
+		}(name, coll)
+	}
+
+	// do the work on the DB to check for active gatherings rather than how we did it before
+	// active = updated wiuthin last 5 minutes
 	gatherings := database.GocentralDatabase.Collection("gatherings")
+	unixTimeFiveminutesAgo := time.Now().Unix() - 5*60
+	filter := bson.M{"last_updated": bson.M{"$gt": unixTimeFiveminutesAgo}}
 
-	scoreCount, _ := scores.CountDocuments(context.Background(), bson.M{})
-	machineCount, _ := machines.CountDocuments(context.Background(), bson.M{})
-	setlistCount, _ := setlists.CountDocuments(context.Background(), bson.M{})
-	characterCount, _ := characters.CountDocuments(context.Background(), bson.M{})
-	bandCount, _ := bands.CountDocuments(context.Background(), bson.M{})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		count, err := gatherings.CountDocuments(ctx, filter)
+		recordError(err)
+		stats.ActiveGatherings = count
+	}()
 
-	// count the number of active gatherings
-	activeGatherings := 0
-	activeGatheringsPS3 := 0
-	activeGatheringsWii := 0
+	// get three most popular songs
+	// why three? idk lol
+	// TODO: allow this to be configurable for up to 10 or so, so we can show more popular songs
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		scores := database.GocentralDatabase.Collection("scores")
+		pipeline := mongo.Pipeline{
+			{{Key: "$group", Value: bson.D{{Key: "_id", Value: "$song_id"}, {Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}}}}},
+			{{Key: "$sort", Value: bson.D{{Key: "count", Value: -1}}}},
+			{{Key: "$limit", Value: 3}},
+		}
+		cursor, err := scores.Aggregate(ctx, pipeline)
+		if err != nil {
+			recordError(err)
+			return
+		}
+		defer cursor.Close(ctx)
 
-	cursor, err := gatherings.Find(context.Background(), bson.M{})
-	if err != nil {
-		AddStandardHeaders(w)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	for cursor.Next(context.Background()) {
-		var gathering models.Gathering
-		cursor.Decode(&gathering)
-
-		// has the gathering been updated in the last 5 minutes?
-		// if not, it's not active
-		var isGatheringActive bool = false
-		if gathering.LastUpdated > time.Now().Unix()-5*60 {
-			isGatheringActive = true
+		var mostScoredSongs []struct {
+			ID    int   `bson:"_id"`
+			Count int64 `bson:"count"`
+		}
+		if err := cursor.All(ctx, &mostScoredSongs); err != nil {
+			recordError(err)
+			return
 		}
 
-		if isGatheringActive {
-			activeGatherings++
+		mu.Lock()
+		for _, song := range mostScoredSongs {
+			stats.MostPopularSongIDs = append(stats.MostPopularSongIDs, song.ID)
+			stats.MostPopularSongScoreCounts = append(stats.MostPopularSongScoreCounts, song.Count)
 		}
-	}
+		mu.Unlock()
+	}()
 
-	// find the song with the most scores
-	pipeline := mongo.Pipeline{
-		{{Key: "$group", Value: bson.D{
-			{Key: "_id", Value: "$song_id"},
-			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
-		}}},
-		{{Key: "$sort", Value: bson.D{{Key: "count", Value: -1}}}},
-		{{Key: "$limit", Value: 3}},
-	}
-	cursor, err = scores.Aggregate(context.Background(), pipeline)
-	if err != nil {
-		AddStandardHeaders(w)
-		w.WriteHeader(http.StatusInternalServerError)
+	wg.Wait()
+
+	if firstErr != nil {
+		log.Printf("ERROR: could not fetch stats: %v", firstErr)
+		sendError(w, http.StatusInternalServerError, "Failed to retrieve statistics")
 		return
 	}
 
-	var mostScoredSongs []struct {
-		ID    int   `bson:"_id"`
-		Count int64 `bson:"count"`
-	}
-
-	err = cursor.All(context.Background(), &mostScoredSongs)
-	if err != nil {
-		AddStandardHeaders(w)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	var songIDs []int
-	var songCounts []int64
-
-	for _, song := range mostScoredSongs {
-		songIDs = append(songIDs, song.ID)
-		songCounts = append(songCounts, song.Count)
-	}
-
-	stats := Stats{
-		Scores:                     scoreCount,
-		Machines:                   machineCount,
-		Setlists:                   setlistCount,
-		Characters:                 characterCount,
-		Bands:                      bandCount,
-		ActiveGatherings:           int64(activeGatherings),
-		ActiveGatheringsPS3:        int64(activeGatheringsPS3),
-		ActiveGatheringsWii:        int64(activeGatheringsWii),
-		MostPopularSongIDs:         songIDs,
-		MostPopularSongScoreCounts: songCounts,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	AddStandardHeaders(w)
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(stats)
+	sendJSON(w, http.StatusOK, stats)
 }
 
 func SongListHandler(w http.ResponseWriter, r *http.Request) {
-
 	scoresCollection := database.GocentralDatabase.Collection("scores")
 
 	// Aggregate pipeline to group by song_id to get unique song ids
-	pipeline := mongo.Pipeline{
-		{{"$group", bson.D{{"_id", "$song_id"}}}},
-	}
+	pipeline := mongo.Pipeline{{{"$group", bson.D{{"_id", "$song_id"}}}}}
 
-	cursor, err := scoresCollection.Aggregate(context.TODO(), pipeline)
+	cursor, err := scoresCollection.Aggregate(r.Context(), pipeline)
 	if err != nil {
-		AddStandardHeaders(w)
-		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("ERROR: failed to aggregate songs: %v", err)
+		sendError(w, http.StatusInternalServerError, "Could not retrieve song list")
 		return
 	}
-	defer cursor.Close(context.TODO())
+	defer cursor.Close(r.Context())
 
 	var songs []int
-	for cursor.Next(context.TODO()) {
+	for cursor.Next(r.Context()) {
 		var result struct {
 			ID int `bson:"_id"`
 		}
 		if err := cursor.Decode(&result); err != nil {
-			AddStandardHeaders(w)
-			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("ERROR: failed to decode song id: %v", err)
+			sendError(w, http.StatusInternalServerError, "Could not process song list")
 			return
 		}
 		songs = append(songs, result.ID)
 	}
 
 	if err := cursor.Err(); err != nil {
-		AddStandardHeaders(w)
-		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("ERROR: cursor error in song list: %v", err)
+		sendError(w, http.StatusInternalServerError, "Could not read song list from database")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	AddStandardHeaders(w)
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string][]int{"songs": songs})
+	sendJSON(w, http.StatusOK, map[string][]int{"songs": songs})
 }
 
 func MotdHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	var motdInfo models.MOTDInfo
-
-	// get MOTD from database
 	motdCollection := database.GocentralDatabase.Collection("motd")
 
-	res := motdCollection.FindOne(context.Background(), bson.D{})
-
-	if res.Err() != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	// return json string of MOTD
-	err := res.Decode(&motdInfo)
-
+	err := motdCollection.FindOne(r.Context(), bson.D{}).Decode(&motdInfo)
 	if err != nil {
-		AddStandardHeaders(w)
-		w.WriteHeader(http.StatusInternalServerError)
+		if err == mongo.ErrNoDocuments {
+			sendError(w, http.StatusNotFound, "MOTD not found")
+			return
+		}
+		log.Printf("ERROR: failed to find motd: %v", err)
+		sendError(w, http.StatusInternalServerError, "Could not retrieve MOTD")
 		return
 	}
 
-	// use RegEx to grab the MOTD strings
-	motdPattern := regexp.MustCompile(`set_motd\s+"([^"]+)"`)
-	dlcmotdPattern := regexp.MustCompile(`set_dlcmotd\s+"([^"]+)"`)
-
+	// try to pull MOTD and DLC MOTD from the DTA field using some regex
+	// this won't return the full DTA so if there is any extra shit this wont get it
 	motdMatches := motdPattern.FindStringSubmatch(motdInfo.DTA)
 	dlcmotdMatches := dlcmotdPattern.FindStringSubmatch(motdInfo.DTA)
 
 	motd := ""
-	dlcmotd := ""
-
 	if len(motdMatches) > 1 {
 		motd = motdMatches[1]
 	}
 
+	dlcmotd := ""
 	if len(dlcmotdMatches) > 1 {
 		dlcmotd = dlcmotdMatches[1]
 	}
@@ -251,16 +277,7 @@ func MotdHandler(w http.ResponseWriter, r *http.Request) {
 		"dlcmotd": dlcmotd,
 	}
 
-	jsonResponse, err := json.Marshal(response)
-	if err != nil {
-		AddStandardHeaders(w)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	AddStandardHeaders(w)
-	w.WriteHeader(http.StatusOK)
-	w.Write(jsonResponse)
+	sendJSON(w, http.StatusOK, response)
 }
 
 func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
@@ -273,22 +290,18 @@ func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 	pageSizeStr := r.URL.Query().Get("page_size")
 
 	if songIDStr == "" || roleIDStr == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "song_id and role_id are required"})
+		sendError(w, http.StatusBadRequest, "role_id and song_id are required")
 		return
 	}
 
 	songID, err := strconv.Atoi(songIDStr)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid song_id"})
-		return
+		sendError(w, http.StatusBadRequest, "Invalid song_id")
 	}
 
 	roleID, err := strconv.Atoi(roleIDStr)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid role_id"})
+		sendError(w, http.StatusBadRequest, "Invalid role_id")
 		return
 	}
 
@@ -296,8 +309,7 @@ func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 	if pageStr != "" {
 		page, err = strconv.Atoi(pageStr)
 		if err != nil || page < 1 {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid page number"})
+			sendError(w, http.StatusBadRequest, "Invalid page number")
 			return
 		}
 	}
@@ -306,8 +318,7 @@ func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 	if pageSizeStr != "" {
 		pageSize, err = strconv.Atoi(pageSizeStr)
 		if err != nil || pageSize < 1 || pageSize > 100 { // limit to 100 to avoid large result set
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid page_size"})
+			sendError(w, http.StatusBadRequest, "Invalid page_size")
 			return
 		}
 	}
@@ -320,8 +331,7 @@ func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 	findOptions := options.Find().SetSort(bson.M{"score": -1}).SetSkip(skip).SetLimit(limit)
 	cursor, err := scoresCollection.Find(context.TODO(), bson.M{"song_id": songID, "role_id": roleID}, findOptions)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to query leaderboard"})
+		sendError(w, http.StatusInternalServerError, "Failed to query leaderboard data")
 		return
 	}
 	defer cursor.Close(context.TODO())
@@ -376,9 +386,8 @@ func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := cursor.Err(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Error during cursor iteration"})
+		sendError(w, http.StatusInternalServerError, "Failed to query leaderboard data")
 		return
 	}
-	json.NewEncoder(w).Encode(map[string][]LeaderboardEntry{"leaderboard": leaderboard})
+	sendJSON(w, http.StatusOK, map[string][]LeaderboardEntry{"leaderboard": leaderboard})
 }

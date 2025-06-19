@@ -173,12 +173,31 @@ func GetBandNameForBandID(pid int) string {
 
 	bandsCollection := GocentralDatabase.Collection("bands")
 
-	_ = bandsCollection.FindOne(nil, bson.M{"owner_pid": pid}).Decode(&band)
+	_ = bandsCollection.FindOne(nil, bson.M{"band_id": pid}).Decode(&band)
 
 	if band.Name != "" {
 		return band.Name
 	} else {
 		username := GetUsernameForPID(pid)
+		if username != "" {
+			return username + "'s Band"
+		} else {
+			return "Unnamed Band"
+		}
+	}
+}
+
+func GetBandNameForOwnerPID(ownerPID int) string {
+	var band models.Band
+
+	bandsCollection := GocentralDatabase.Collection("bands")
+
+	_ = bandsCollection.FindOne(nil, bson.M{"owner_pid": ownerPID}).Decode(&band)
+
+	if band.Name != "" {
+		return band.Name
+	} else {
+		username := GetUsernameForPID(ownerPID)
 		if username != "" {
 			return username + "'s Band"
 		} else {
