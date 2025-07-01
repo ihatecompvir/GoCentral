@@ -54,5 +54,5 @@ For the most reliable experience, port forward port 9103 (UDP) to your console i
 
 ## Special Thanks
 The following users made contributions to GoCentral, but aren't listed in the Contributors tab on GitHub, so they are listed here instead.
-- [@knvtva](https://github.com/knvtva)
+- [@Cloudsify](https://github.com/Cloudsify)
 - [@li1lypad](https://github.com/li1lypad)
