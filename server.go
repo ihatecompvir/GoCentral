@@ -164,27 +164,31 @@ func main() {
 		log.Println("GoCentral REST API HTTP server started on:" + httpPort)
 	}
 
-	log.Printf("Starting housekeeping tasks...\n")
-
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
+	enableHousekeeping := os.Getenv("ENABLEHOUSEKEEPING")
 
 	quit := make(chan struct{})
 
-	// automatically run some housekeeping tasks
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				database.CleanupDuplicateScores()
-				database.PruneOldSessions()
-				database.CleanupInvalidScores()
-				database.DeleteExpiredBattles()
-			case <-quit:
-				return
+	if enableHousekeeping == "true" {
+		log.Printf("Starting housekeeping tasks...\n")
+
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+
+		// automatically run some housekeeping tasks
+		go func() {
+			for {
+				select {
+				case <-ticker.C:
+					database.CleanupDuplicateScores()
+					database.PruneOldSessions()
+					database.CleanupInvalidScores()
+					database.DeleteExpiredBattles()
+				case <-quit:
+					return
+				}
 			}
-		}
-	}()
+		}()
+	}
 
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
