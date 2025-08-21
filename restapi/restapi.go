@@ -56,6 +56,7 @@ type GlobalBattleInfo struct {
 	BattleID    int    `json:"battle_id"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
+	StartsAt    int64  `json:"starts_at"`
 	ExpiresAt   int64  `json:"expires_at"`
 	Instrument  int    `json:"instrument"`
 	SongIDs     []int  `json:"song_ids"`
@@ -355,10 +356,13 @@ func BattleListHandler(w http.ResponseWriter, r *http.Request) {
 
 		_, expiresAt := database.GetBattleExpiryInfo(setlist.SetlistID)
 
+		startsAt := time.Unix(setlist.Created, 0).UTC()
+
 		battleInfo := GlobalBattleInfo{
 			BattleID:    setlist.SetlistID,
 			Title:       setlist.Title,
 			Description: setlist.Desc,
+			StartsAt:    startsAt.Unix(),  // give unix time for start rather than some kind of string
 			ExpiresAt:   expiresAt.Unix(), // give unix time for expiry rather than some kind of string
 			Instrument:  setlist.Instrument,
 			SongIDs:     setlist.SongIDs,
