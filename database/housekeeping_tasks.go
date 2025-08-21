@@ -29,36 +29,43 @@ func CleanupDuplicateScores() {
 		{{"$match", bson.D{{"count", bson.D{{"$gt", 1}}}}}},
 		{{"$project", bson.D{
 			{"_id", 0},
-			{"dups", bson.D{{"$slice", bson.A{"$ids", 1, bson.D{{"$subtract", bson.A{bson.D{{"$size", "$ids"}}, 1}}}}}}},
+			// Take all but the first (newest) id as duplicates to delete.
+			{"dups", bson.D{{"$slice",
+				bson.A{"$ids", 1, bson.D{{"$subtract", bson.A{bson.D{{"$size", "$ids"}}, 1}}}},
+			}}},
 		}}},
 	}
 
 	cursor, err := scoresCollection.Aggregate(ctx, pipeline)
 	if err != nil {
-		log.Println("Could not aggregate duplicate scores: ", err)
+		log.Println("Could not aggregate duplicate scores:", err)
 		return
 	}
 	defer cursor.Close(ctx)
 
 	var results []bson.M
 	if err = cursor.All(ctx, &results); err != nil {
-		log.Println("Could not decode aggregation results: ", err)
+		log.Println("Could not decode aggregation results:", err)
 		return
 	}
 
 	deletedCount := 0
-
 	for _, result := range results {
-		docs := result["docs"].(bson.A)
-		for i := 1; i < len(docs); i++ { // skip the first document to keep one
-			doc := docs[i].(bson.M)
-			_, err := scoresCollection.DeleteOne(ctx, bson.M{"_id": doc["_id"]})
-			if err != nil {
-				log.Println("Could not delete duplicate score: ", err)
-			} else {
-				deletedCount++
-			}
+		dupsAny, ok := result["dups"]
+		if !ok || dupsAny == nil {
+			continue
 		}
+		dups, ok := dupsAny.(bson.A)
+		if !ok || len(dups) == 0 {
+			continue
+		}
+
+		res, err := scoresCollection.DeleteMany(ctx, bson.M{"_id": bson.M{"$in": dups}})
+		if err != nil {
+			log.Println("Could not delete duplicate scores:", err)
+			continue
+		}
+		deletedCount += int(res.DeletedCount)
 	}
 
 	if deletedCount != 0 {
