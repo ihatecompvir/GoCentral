@@ -137,7 +137,13 @@ func main() {
 
 		r.Get("/song_list", restapi.SongListHandler)
 
+		// legacy endpoint, will keep around for now
 		r.Get("/leaderboards", restapi.LeaderboardHandler)
+
+		r.Get("/leaderboards/song", restapi.LeaderboardHandler)
+		r.Get("/leaderboards/battle", restapi.BattleLeaderboardHandler)
+
+		r.Get("/battles", restapi.BattleListHandler)
 
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(restapi.AdminTokenAuth)

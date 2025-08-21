@@ -46,10 +46,19 @@ type LeaderboardEntry struct {
 	IsPercentile int    `json:"is_percentile"`
 	InstMask     int    `json:"inst_mask"`
 	NotesPct     int    `json:"notes_pct"`
-	IsFriend     int    `json:"is_friend"`
 	UnnamedBand  int    `json:"unnamed_band"`
 	PGUID        string `json:"pguid"`
 	ORank        int    `json:"orank"`
+	Stars        int    `json:"stars"`
+}
+
+type GlobalBattleInfo struct {
+	BattleID    int    `json:"battle_id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	ExpiresAt   int64  `json:"expires_at"`
+	Instrument  int    `json:"instrument"`
+	SongIDs     []int  `json:"song_ids"`
 }
 
 type CreateBattleRequest struct {
@@ -321,6 +330,51 @@ func MotdHandler(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, http.StatusOK, response)
 }
 
+// Returns the list of Harmonix battles and any associated data
+func BattleListHandler(w http.ResponseWriter, r *http.Request) {
+	setlistsCollection := database.GocentralDatabase.Collection("setlists")
+	ctx := r.Context()
+
+	// filter for Harmonix battles
+	filter := bson.M{"type": 1002}
+	cursor, err := setlistsCollection.Find(ctx, filter)
+	if err != nil {
+		log.Printf("ERROR: could not query global battles: %v", err)
+		sendError(w, http.StatusInternalServerError, "Could not retrieve global battles")
+		return
+	}
+	defer cursor.Close(ctx)
+
+	var battles []GlobalBattleInfo
+	for cursor.Next(ctx) {
+		var setlist models.Setlist
+		if err := cursor.Decode(&setlist); err != nil {
+			log.Printf("ERROR: failed to decode battle setlist: %v", err)
+			continue
+		}
+
+		_, expiresAt := database.GetBattleExpiryInfo(setlist.SetlistID)
+
+		battleInfo := GlobalBattleInfo{
+			BattleID:    setlist.SetlistID,
+			Title:       setlist.Title,
+			Description: setlist.Desc,
+			ExpiresAt:   expiresAt.Unix(), // give unix time for expiry rather than some kind of string
+			Instrument:  setlist.Instrument,
+			SongIDs:     setlist.SongIDs,
+		}
+		battles = append(battles, battleInfo)
+	}
+
+	if err := cursor.Err(); err != nil {
+		log.Printf("ERROR: cursor error in global battles: %v", err)
+		sendError(w, http.StatusInternalServerError, "Could not read global battles from database")
+		return
+	}
+
+	sendJSON(w, http.StatusOK, map[string][]GlobalBattleInfo{"battles": battles})
+}
+
 func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	AddStandardHeaders(w)
@@ -394,17 +448,17 @@ func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 		if isBandScore {
 			entry = LeaderboardEntry{
 				PID:          score.OwnerPID,
-				Name:         database.GetBandNameForBandID(score.OwnerPID),
+				Name:         database.GetBandNameForOwnerPID(score.OwnerPID),
 				DiffID:       score.DiffID,
 				Rank:         rank,
 				Score:        score.Score,
 				IsPercentile: 0,
 				InstMask:     score.InstrumentMask,
 				NotesPct:     score.NotesPercent,
-				IsFriend:     0,
 				UnnamedBand:  0,
 				PGUID:        "",
 				ORank:        rank,
+				Stars:        score.Stars,
 			}
 		} else {
 			entry = LeaderboardEntry{
@@ -416,10 +470,10 @@ func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 				IsPercentile: 0,
 				InstMask:     score.InstrumentMask,
 				NotesPct:     score.NotesPercent,
-				IsFriend:     0,
 				UnnamedBand:  0,
 				PGUID:        "",
 				ORank:        rank,
+				Stars:        score.Stars,
 			}
 		}
 		leaderboard = append(leaderboard, entry)
@@ -428,6 +482,99 @@ func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err := cursor.Err(); err != nil {
 		sendError(w, http.StatusInternalServerError, "Failed to query leaderboard data")
+		return
+	}
+	sendJSON(w, http.StatusOK, map[string][]LeaderboardEntry{"leaderboard": leaderboard})
+}
+
+func BattleLeaderboardHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	AddStandardHeaders(w)
+
+	battleIDStr := r.URL.Query().Get("battle_id")
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("page_size")
+
+	if battleIDStr == "" {
+		sendError(w, http.StatusBadRequest, "battle_id is required")
+		return
+	}
+
+	battleID, err := strconv.Atoi(battleIDStr)
+	if err != nil {
+		sendError(w, http.StatusBadRequest, "Invalid battle_id")
+		return
+	}
+
+	page := 1
+	if pageStr != "" {
+		page, err = strconv.Atoi(pageStr)
+		if err != nil || page < 1 {
+			sendError(w, http.StatusBadRequest, "Invalid page number")
+			return
+		}
+	}
+
+	pageSize := 20
+	if pageSizeStr != "" {
+		pageSize, err = strconv.Atoi(pageSizeStr)
+		if err != nil || pageSize < 1 || pageSize > 100 {
+			sendError(w, http.StatusBadRequest, "Invalid page_size")
+			return
+		}
+	}
+
+	skip := int64((page - 1) * pageSize)
+	limit := int64(pageSize)
+	scoresCollection := database.GocentralDatabase.Collection("scores")
+
+	findOptions := options.Find().SetSort(bson.M{"score": -1}).SetSkip(skip).SetLimit(limit)
+	cursor, err := scoresCollection.Find(context.TODO(), bson.M{"battle_id": battleID}, findOptions)
+	if err != nil {
+		sendError(w, http.StatusInternalServerError, "Failed to query battle leaderboard data")
+		return
+	}
+	defer cursor.Close(context.TODO())
+
+	var leaderboard []LeaderboardEntry
+	rank := (page-1)*pageSize + 1
+
+	for cursor.Next(context.TODO()) {
+		var score models.Score
+		if err := cursor.Decode(&score); err != nil {
+			log.Println("Error decoding score:", err)
+			continue
+		}
+
+		isBandScore := score.RoleID == 10
+		var entryName string
+
+		if isBandScore {
+			entryName = database.GetBandNameForOwnerPID(score.OwnerPID)
+		} else {
+			entryName = database.GetConsolePrefixedUsernameForPID(score.OwnerPID)
+		}
+
+		entry := LeaderboardEntry{
+			PID:          score.OwnerPID,
+			Name:         entryName,
+			DiffID:       score.DiffID,
+			Rank:         rank,
+			Score:        score.Score,
+			IsPercentile: 0,
+			InstMask:     score.InstrumentMask,
+			NotesPct:     score.NotesPercent,
+			UnnamedBand:  0,
+			PGUID:        "",
+			ORank:        rank,
+			Stars:        score.Stars,
+		}
+		leaderboard = append(leaderboard, entry)
+		rank++
+	}
+
+	if err := cursor.Err(); err != nil {
+		sendError(w, http.StatusInternalServerError, "Cursor error while fetching battle leaderboard data")
 		return
 	}
 	sendJSON(w, http.StatusOK, map[string][]LeaderboardEntry{"leaderboard": leaderboard})
@@ -476,7 +623,7 @@ func CreateBattleHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setlistCollection := database.GocentralDatabase.Collection("battles")
+	setlistCollection := database.GocentralDatabase.Collection("setlists")
 
 	newBattle := models.Setlist{
 		SetlistID:    newBattleID,
