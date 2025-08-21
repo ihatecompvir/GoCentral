@@ -11,4 +11,5 @@ type Config struct {
 	ProfanityList   []string           `json:"profanity_list" bson:"profanity_list"`
 	BattleLimit     int                `json:"battle_limit" bson:"battle_limit"`
 	LastMachineID   int                `json:"last_machine_id" bson:"last_machine_id"`
+	AdminAPIToken   string             `json:"admin_api_token" bson:"admin_api_token"`
 }

@@ -139,6 +139,11 @@ func main() {
 
 		r.Get("/leaderboards", restapi.LeaderboardHandler)
 
+		r.Route("/admin", func(r chi.Router) {
+			r.Use(restapi.AdminTokenAuth)
+			r.Post("/battles/create", restapi.CreateBattleHandler)
+		})
+
 		httpPort := os.Getenv("HTTPPORT")
 
 		if httpPort == "" {

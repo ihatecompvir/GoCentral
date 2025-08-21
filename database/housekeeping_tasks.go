@@ -16,22 +16,21 @@ func CleanupDuplicateScores() {
 	defer cancel()
 
 	pipeline := mongo.Pipeline{
+		{{"$sort", bson.D{{"_id", -1}}}},
 		{{"$group", bson.D{
 			{"_id", bson.D{
-				{"pid", "$pid"},
-				{"role_id", "$role_id"},
-				{"song_id", "$song_id"},
-				{"boi", "$boi"},
-				{"diff_id", "$diff_id"},
-				{"instrument_mask", "$instrument_mask"},
-				{"notespct", "$notespct"},
-				{"score", "$score"},
-				{"stars", "$stars"},
+				{"pid", "$pid"}, {"role_id", "$role_id"}, {"song_id", "$song_id"},
+				{"boi", "$boi"}, {"diff_id", "$diff_id"}, {"instrument_mask", "$instrument_mask"},
+				{"notespct", "$notespct"}, {"score", "$score"}, {"stars", "$stars"},
 			}},
+			{"ids", bson.D{{"$push", "$_id"}}},
 			{"count", bson.D{{"$sum", 1}}},
-			{"docs", bson.D{{"$push", "$$ROOT"}}},
 		}}},
 		{{"$match", bson.D{{"count", bson.D{{"$gt", 1}}}}}},
+		{{"$project", bson.D{
+			{"_id", 0},
+			{"dups", bson.D{{"$slice", bson.A{"$ids", 1, bson.D{{"$subtract", bson.A{bson.D{{"$size", "$ids"}}, 1}}}}}}},
+		}}},
 	}
 
 	cursor, err := scoresCollection.Aggregate(ctx, pipeline)

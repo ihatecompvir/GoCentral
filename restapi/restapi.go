@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,6 +52,15 @@ type LeaderboardEntry struct {
 	ORank        int    `json:"orank"`
 }
 
+type CreateBattleRequest struct {
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	SongIDs     []int     `json:"song_ids"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	Instrument  int       `json:"instrument"`
+	Flags       int       `json:"flags"`
+}
+
 func AddStandardHeaders(writer http.ResponseWriter) {
 	headers := map[string]string{
 		"Server":                      "GoCentral",
@@ -61,6 +71,37 @@ func AddStandardHeaders(writer http.ResponseWriter) {
 	for key, value := range headers {
 		writer.Header().Set(key, value)
 	}
+}
+
+// Checks for a valid API token in the Authorization header.
+func AdminTokenAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+
+		// must be in the pretty standard bearer auth token format
+		splitToken := strings.Split(authHeader, "Bearer ")
+		if len(splitToken) != 2 {
+			sendError(w, http.StatusInternalServerError, "Could not verify authorization")
+			return
+		}
+		token := splitToken[1]
+
+		var config models.Config
+		configCollection := database.GocentralDatabase.Collection("config")
+		err := configCollection.FindOne(r.Context(), bson.M{}).Decode(&config)
+		if err != nil {
+			log.Printf("ERROR: could not get config for auth: %v", err)
+			sendError(w, http.StatusInternalServerError, "Could not verify authorization")
+			return
+		}
+
+		if config.AdminAPIToken == "" || token != config.AdminAPIToken {
+			sendError(w, http.StatusInternalServerError, "Could not verify authorization")
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 // JSON helper methods to not repeat the same code in every handler
@@ -390,4 +431,80 @@ func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sendJSON(w, http.StatusOK, map[string][]LeaderboardEntry{"leaderboard": leaderboard})
+}
+
+// Handles the creation of a new Harmonix battle.
+// This endpoint will create a global Harmonix battle that is shown to all users.
+// It requires a valid admin API token in the Authorization header.
+func CreateBattleHandler(w http.ResponseWriter, r *http.Request) {
+	var req CreateBattleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	// Input Validation
+	if req.Title == "" || len(req.SongIDs) == 0 {
+		sendError(w, http.StatusBadRequest, "Title and at least one song_id are required")
+		return
+	}
+	if req.ExpiresAt.Before(time.Now()) {
+		sendError(w, http.StatusBadRequest, "expires_at must be in the future")
+		return
+	}
+
+	ctx := r.Context()
+	configCollection := database.GocentralDatabase.Collection("config")
+
+	var config models.Config
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	filter := bson.M{}
+	update := bson.M{"$inc": bson.M{"last_setlist_id": 1}}
+
+	err := configCollection.FindOneAndUpdate(ctx, filter, update, opts).Decode(&config)
+	if err != nil {
+		log.Printf("ERROR: Could not update last_setlist_id: %v", err)
+		sendError(w, http.StatusInternalServerError, "Could not generate battle ID")
+		return
+	}
+	newBattleID := config.LastSetlistID
+
+	// calculate the expiry duration, in seconds
+	durationSeconds := int(time.Until(req.ExpiresAt).Seconds())
+	if durationSeconds <= 0 {
+		sendError(w, http.StatusBadRequest, "expires_at must be in the future")
+		return
+	}
+
+	setlistCollection := database.GocentralDatabase.Collection("battles")
+
+	newBattle := models.Setlist{
+		SetlistID:    newBattleID,
+		PID:          0,
+		Title:        req.Title,
+		Desc:         req.Description,
+		Type:         1002,
+		Owner:        "Harmonix",
+		Shared:       "t",
+		SongIDs:      req.SongIDs,
+		SongNames:    make([]string, len(req.SongIDs)),
+		TimeEndVal:   durationSeconds,
+		TimeEndUnits: "seconds",
+		Flags:        req.Flags,
+		Instrument:   req.Instrument,
+		Created:      time.Now().Unix(),
+	}
+
+	_, err = setlistCollection.InsertOne(ctx, newBattle)
+	if err != nil {
+		log.Printf("Could not insert new battle: %v", err)
+		sendError(w, http.StatusInternalServerError, "Failed to create battle")
+		return
+	}
+
+	log.Printf("Successfully created global battle #%d titled '%s'", newBattleID, req.Title)
+	sendJSON(w, http.StatusCreated, map[string]interface{}{
+		"success":   true,
+		"battle_id": newBattleID,
+	})
 }
