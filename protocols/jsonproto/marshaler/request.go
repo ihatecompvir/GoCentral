@@ -136,42 +136,46 @@ func UnmarshalRequest(data string, out interface{}) error {
 
 func normalizeJson(data string) (map[string]interface{}, error) {
 	var out [][]interface{}
-	err := json.Unmarshal([]byte(data), &out)
-	if err != nil {
+	if err := json.Unmarshal([]byte(data), &out); err != nil {
 		return nil, err
 	}
 
 	if len(out) != 1 {
-		return nil, fmt.Errorf("received bad length:%d\n", len(out))
+		return nil, fmt.Errorf("received bad length:%d", len(out))
 	}
 
 	outer := out[0]
 	if len(outer) != 2 {
-		return nil, fmt.Errorf("received bad length:%d\n", len(outer))
+		return nil, fmt.Errorf("received bad outer length:%d", len(outer))
 	}
 
 	inner, ok := outer[1].([]interface{})
 	if !ok {
 		return nil, fmt.Errorf("bad inner")
 	}
+	if len(inner) < 2 {
+		return nil, fmt.Errorf("bad inner length:%d", len(inner))
+	}
 
 	fields, ok := inner[0].([]interface{})
 	if !ok {
 		return nil, fmt.Errorf("bad fields")
 	}
-
-	fieldLen := len(fields)
-
 	values, ok := inner[1].([]interface{})
 	if !ok {
 		return nil, fmt.Errorf("bad values")
 	}
 
-	m := make(map[string]interface{}, fieldLen)
-	for i := 0; i < fieldLen; i++ {
+	flen, vlen := len(fields), len(values)
+	if flen != vlen {
+		return nil, fmt.Errorf("fields/values length mismatch: %d vs %d", flen, vlen)
+	}
+
+	m := make(map[string]interface{}, flen)
+	for i := 0; i < flen; i++ {
 		field, ok := fields[i].(string)
 		if !ok {
-			return nil, fmt.Errorf("bad field name")
+			return nil, fmt.Errorf("bad field name at index %d", i)
 		}
 		m[field] = values[i]
 	}
