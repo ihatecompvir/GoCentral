@@ -148,6 +148,7 @@ func main() {
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(restapi.AdminTokenAuth)
 			r.Post("/battles/create", restapi.CreateBattleHandler)
+			r.Delete("/battles", restapi.DeleteBattleHandler)
 		})
 
 		httpPort := os.Getenv("HTTPPORT")

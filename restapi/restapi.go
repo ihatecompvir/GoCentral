@@ -71,6 +71,10 @@ type CreateBattleRequest struct {
 	Flags       int       `json:"flags"`
 }
 
+type DeleteBattleRequest struct {
+	BattleID int `json:"battle_id"`
+}
+
 func AddStandardHeaders(writer http.ResponseWriter) {
 	headers := map[string]string{
 		"Server":                      "GoCentral",
@@ -657,5 +661,54 @@ func CreateBattleHandler(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, http.StatusCreated, map[string]interface{}{
 		"success":   true,
 		"battle_id": newBattleID,
+	})
+}
+
+// Deletes a global battle and any associated scores.
+// Requires a valid admin API token in the Authorization header.
+func DeleteBattleHandler(w http.ResponseWriter, r *http.Request) {
+	var req DeleteBattleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	if req.BattleID == 0 {
+		sendError(w, http.StatusBadRequest, "battle_id is required")
+		return
+	}
+
+	ctx := r.Context()
+	setlists := database.GocentralDatabase.Collection("setlists")
+	scores := database.GocentralDatabase.Collection("scores")
+
+	res, err := setlists.DeleteOne(ctx, bson.M{"setlist_id": req.BattleID, "type": 1002})
+	if err != nil {
+		log.Printf("ERROR: failed to delete battle %d: %v", req.BattleID, err)
+		sendError(w, http.StatusInternalServerError, "Failed to delete battle")
+		return
+	}
+	if res.DeletedCount == 0 {
+		sendError(w, http.StatusNotFound, "Battle not found")
+		return
+	}
+
+	scoreRes, err := scores.DeleteMany(ctx, bson.M{"battle_id": req.BattleID})
+	if err != nil {
+		log.Printf("WARN: battle %d deleted, but failed to delete scores: %v", req.BattleID, err)
+		sendJSON(w, http.StatusOK, map[string]interface{}{
+			"success":        true,
+			"battle_id":      req.BattleID,
+			"scores_deleted": 0,
+			"warning":        "Battle deleted, but score cleanup failed",
+		})
+		return
+	}
+
+	log.Printf("Deleted battle #%d (scores cleaned: %d)", req.BattleID, scoreRes.DeletedCount)
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success":        true,
+		"battle_id":      req.BattleID,
+		"scores_deleted": scoreRes.DeletedCount,
 	})
 }
