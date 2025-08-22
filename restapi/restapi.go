@@ -52,6 +52,14 @@ type LeaderboardEntry struct {
 	Stars        int    `json:"stars"`
 }
 
+type BattleLeaderboardEntry struct {
+	PID   int    `json:"pid"`
+	Name  string `json:"name"`
+	Score int    `json:"score"`
+	Rank  int    `json:"rank"`
+	ORank int    `json:"orank"`
+}
+
 type GlobalBattleInfo struct {
 	BattleID    int    `json:"battle_id"`
 	Title       string `json:"title"`
@@ -544,7 +552,7 @@ func BattleLeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cursor.Close(context.TODO())
 
-	var leaderboard []LeaderboardEntry
+	var leaderboard []BattleLeaderboardEntry
 	rank := (page-1)*pageSize + 1
 
 	for cursor.Next(context.TODO()) {
@@ -563,19 +571,12 @@ func BattleLeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 			entryName = database.GetConsolePrefixedUsernameForPID(score.OwnerPID)
 		}
 
-		entry := LeaderboardEntry{
-			PID:          score.OwnerPID,
-			Name:         entryName,
-			DiffID:       score.DiffID,
-			Rank:         rank,
-			Score:        score.Score,
-			IsPercentile: 0,
-			InstMask:     score.InstrumentMask,
-			NotesPct:     score.NotesPercent,
-			UnnamedBand:  0,
-			PGUID:        "",
-			ORank:        rank,
-			Stars:        score.Stars,
+		entry := BattleLeaderboardEntry{
+			PID:   score.OwnerPID,
+			Name:  entryName,
+			Rank:  rank,
+			Score: score.Score,
+			ORank: rank,
 		}
 		leaderboard = append(leaderboard, entry)
 		rank++
@@ -585,7 +586,7 @@ func BattleLeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 		sendError(w, http.StatusInternalServerError, "Cursor error while fetching battle leaderboard data")
 		return
 	}
-	sendJSON(w, http.StatusOK, map[string][]LeaderboardEntry{"leaderboard": leaderboard})
+	sendJSON(w, http.StatusOK, map[string][]BattleLeaderboardEntry{"leaderboard": leaderboard})
 }
 
 // Handles the creation of a new Harmonix battle.
