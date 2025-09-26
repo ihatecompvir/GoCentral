@@ -147,8 +147,15 @@ func main() {
 
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(restapi.AdminTokenAuth)
+
+			// battle management
 			r.Post("/battles/create", restapi.CreateBattleHandler)
 			r.Delete("/battles", restapi.DeleteBattleHandler)
+
+			// ban Management
+			r.Get("/players/banned", restapi.ListBannedPlayersHandler)
+			r.Post("/players/ban", restapi.BanPlayerHandler)
+			r.Post("/players/unban", restapi.UnbanPlayerHandler)
 		})
 
 		httpPort := os.Getenv("HTTPPORT")

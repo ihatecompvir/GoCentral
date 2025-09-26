@@ -13,7 +13,9 @@ import (
 	"rb3server/models"
 	"rb3server/quazal"
 	"regexp"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -115,7 +117,34 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 		log.Printf("Could not get config %v\n", err)
 	}
 
-	if machineType == 0 || machineType == 1 {
+	// check if they've got any bans
+	var userBans []models.BannedPlayer
+	for _, bannedPlayer := range config.BannedPlayers {
+		if bannedPlayer.Username == username {
+			userBans = append(userBans, bannedPlayer)
+		}
+	}
+
+	// if there are any bans, check if the latest one is still active
+	if len(userBans) > 0 {
+		// sort bans by CreatedAt timestamp, descending
+		sort.Slice(userBans, func(i, j int) bool {
+			return userBans[i].CreatedAt.After(userBans[j].CreatedAt)
+		})
+
+		latestBan := userBans[0]
+
+		// zero time means permanent ban
+		// if the expires time is in the past, this is an old ban and we can ignore it
+		if latestBan.ExpiresAt.IsZero() || time.Now().Before(latestBan.ExpiresAt) {
+			log.Printf("Banned user %s attempted to log in. Denying connection based on ban created at %s.", username, latestBan.CreatedAt)
+			SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.AccountDisabled)
+			return
+		}
+	}
+
+	switch machineType {
+	case 0, 1:
 		if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
 			log.Printf("%s has never connected before - create DB entry\n", username)
 
@@ -163,7 +192,7 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 				return
 			}
 		}
-	} else if machineType == 2 {
+	case 2:
 		// check if the machine ID is already in the DB
 		machinesCollection := database.GocentralDatabase.Collection("machines")
 

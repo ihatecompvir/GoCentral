@@ -83,6 +83,16 @@ type DeleteBattleRequest struct {
 	BattleID int `json:"battle_id"`
 }
 
+type BanPlayerRequest struct {
+	Username string `json:"username"`
+	Reason   string `json:"reason"`
+	Duration string `json:"duration"` // e.g., "24h", "7d", "permanent"
+}
+
+type UnbanPlayerRequest struct {
+	Username string `json:"username"`
+}
+
 func AddStandardHeaders(writer http.ResponseWriter) {
 	headers := map[string]string{
 		"Server":                      "GoCentral",
@@ -712,4 +722,144 @@ func DeleteBattleHandler(w http.ResponseWriter, r *http.Request) {
 		"battle_id":      req.BattleID,
 		"scores_deleted": scoreRes.DeletedCount,
 	})
+}
+
+// Handles banning a player. This will add a new ban record to the config's banned_players array.
+func BanPlayerHandler(w http.ResponseWriter, r *http.Request) {
+	var req BanPlayerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	if req.Username == "" {
+		sendError(w, http.StatusBadRequest, "Username is required")
+		return
+	}
+
+	var expiresAt time.Time
+	// zero time means permanent
+	if req.Duration != "permanent" && req.Duration != "" {
+		duration, err := time.ParseDuration(req.Duration)
+		if err != nil {
+			sendError(w, http.StatusBadRequest, "Invalid duration format. Use '1h', '24h', '7d', etc., or 'permanent'.")
+			return
+		}
+		expiresAt = time.Now().Add(duration)
+	}
+
+	newBan := models.BannedPlayer{
+		Username:  req.Username,
+		Reason:    req.Reason,
+		ExpiresAt: expiresAt,
+		CreatedAt: time.Now(),
+	}
+
+	configCollection := database.GocentralDatabase.Collection("config")
+	filter := bson.M{}
+
+	update := bson.M{"$push": bson.M{"banned_players": newBan}}
+
+	if _, err := configCollection.UpdateOne(r.Context(), filter, update); err != nil {
+		log.Printf("ERROR: could not add ban for %s: %v", req.Username, err)
+		sendError(w, http.StatusInternalServerError, "Failed to update ban list")
+		return
+	}
+
+	log.Printf("Added new ban record for player: %s. Reason: %s. Duration: %s", req.Username, req.Reason, req.Duration)
+	sendJSON(w, http.StatusCreated, map[string]interface{}{
+		"success": true,
+		"message": "New ban record for player " + req.Username + " has been created.",
+	})
+}
+
+// Handles "unbanning" a player by expiring their most recent ban, preserving the record.
+func UnbanPlayerHandler(w http.ResponseWriter, r *http.Request) {
+	var req UnbanPlayerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	if req.Username == "" {
+		sendError(w, http.StatusBadRequest, "Username is required")
+		return
+	}
+
+	ctx := r.Context()
+	configCollection := database.GocentralDatabase.Collection("config")
+
+	var config models.Config
+	if err := configCollection.FindOne(ctx, bson.M{}).Decode(&config); err != nil {
+		sendError(w, http.StatusInternalServerError, "Could not retrieve config to process unban")
+		return
+	}
+
+	// foind the most recent active ban for this user
+	latestBanIndex := -1
+	var latestBanTime time.Time
+	for i, ban := range config.BannedPlayers {
+		if ban.Username == req.Username {
+			// check if it is still active
+			if ban.ExpiresAt.IsZero() || time.Now().Before(ban.ExpiresAt) {
+				// verify if it's the latest one
+				if latestBanIndex == -1 || ban.CreatedAt.After(latestBanTime) {
+					latestBanIndex = i
+					latestBanTime = ban.CreatedAt
+				}
+			}
+		}
+	}
+
+	if latestBanIndex == -1 {
+		sendError(w, http.StatusNotFound, "No active ban found for player "+req.Username)
+		return
+	}
+
+	// expire the ban by setting its expiration to the current time
+	config.BannedPlayers[latestBanIndex].ExpiresAt = time.Now()
+
+	// update the entire document
+	filter := bson.M{"_id": config.ID}
+	update := bson.M{"$set": bson.M{"banned_players": config.BannedPlayers}}
+	result, err := configCollection.UpdateOne(ctx, filter, update)
+	if err != nil || result.ModifiedCount == 0 {
+		log.Printf("ERROR: could not expire ban for player %s: %v", req.Username, err)
+		sendError(w, http.StatusInternalServerError, "Failed to update ban list")
+		return
+	}
+
+	log.Printf("Unbanned player: %s by expiring their latest ban.", req.Username)
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "Player " + req.Username + "'s most recent ban has been expired.",
+	})
+}
+
+// Lists all currently active bans.
+func ListBannedPlayersHandler(w http.ResponseWriter, r *http.Request) {
+	var config models.Config
+	configCollection := database.GocentralDatabase.Collection("config")
+
+	err := configCollection.FindOne(r.Context(), bson.D{}).Decode(&config)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			sendJSON(w, http.StatusOK, map[string][]models.BannedPlayer{"banned_players": {}})
+			return
+		}
+		log.Printf("ERROR: could not get config for listing banned players: %v", err)
+		sendError(w, http.StatusInternalServerError, "Could not retrieve ban list")
+		return
+	}
+
+	activeBans := []models.BannedPlayer{}
+	if config.BannedPlayers != nil {
+		for _, ban := range config.BannedPlayers {
+			if ban.ExpiresAt.IsZero() || time.Now().Before(ban.ExpiresAt) {
+				activeBans = append(activeBans, ban)
+			}
+		}
+	}
+
+	sendJSON(w, http.StatusOK, map[string][]models.BannedPlayer{"banned_players": activeBans})
 }
