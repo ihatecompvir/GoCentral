@@ -27,26 +27,27 @@ func LookupOrCreateAccount(err error, client *nex.Client, callID uint32, usernam
 	rmcResponseStream := nex.NewStream()
 
 	users := database.GocentralDatabase.Collection("users")
-	configCollection := database.GocentralDatabase.Collection("config")
 	machinesCollection := database.GocentralDatabase.Collection("machines")
 
 	var user models.User
-
-	var config models.Config
-	err = configCollection.FindOne(context.TODO(), bson.M{}).Decode(&config)
-	if err != nil {
-		log.Printf("Could not get config %v\n", err)
-	}
 
 	if result := users.FindOne(context.TODO(), bson.M{"username": username}).Decode(&user); result != nil {
 		log.Printf("%s has never connected before - create DB entry\n", username)
 
 		guid, err := generateGUID()
 
+		// get the next PID atomically to avoid race conditions when running multiple ionstances
+		newPID, err := database.GetNextPID(context.TODO())
+		if err != nil {
+			log.Printf("Could not get next PID: %s\n", err)
+			SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
+			return
+		}
+
 		if client.Platform() == 2 {
 			_, err = users.InsertOne(context.TODO(), bson.D{
 				{Key: "username", Value: username},
-				{Key: "pid", Value: config.LastPID + 1},
+				{Key: "pid", Value: newPID},
 				{Key: "console_type", Value: client.Platform()},
 				{Key: "guid", Value: guid},
 				{Key: "created_by_machine_id", Value: client.MachineID()},
@@ -54,7 +55,7 @@ func LookupOrCreateAccount(err error, client *nex.Client, callID uint32, usernam
 		} else {
 			_, err = users.InsertOne(context.TODO(), bson.D{
 				{Key: "username", Value: username},
-				{Key: "pid", Value: config.LastPID + 1},
+				{Key: "pid", Value: newPID},
 				{Key: "console_type", Value: client.Platform()},
 				{Key: "guid", Value: guid},
 			})
@@ -65,25 +66,6 @@ func LookupOrCreateAccount(err error, client *nex.Client, callID uint32, usernam
 			SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
 			return
 		}
-
-		_, err = configCollection.UpdateOne(
-			context.TODO(),
-			bson.M{},
-			bson.D{
-				{"$set", bson.D{{"last_pid", config.LastPID + 1}}},
-			},
-		)
-		if err != nil {
-			log.Println("Could not update config in database: ", err)
-			SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
-			return
-		}
-
-		Config.LastPID = config.LastPID + 1
-		Config.LastMachineID = config.LastMachineID
-		Config.LastBandID = config.LastBandID
-		Config.LastSetlistID = config.LastSetlistID
-		Config.LastCharacterID = config.LastCharacterID
 
 		// make sure we actually set the server-assigned PID to the new one when it is created
 		client.SetPlayerID(user.PID)

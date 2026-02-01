@@ -7,12 +7,122 @@ import (
 	"rb3server/models"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+// config cache
+var (
+	configCache         *models.Config
+	configCacheMu       sync.RWMutex
+	configCacheExpiry   time.Time
+	configCacheTTL      = 30 * time.Second
+)
+
+// returns the cached config, or fetches it from the live DB if needed
+func GetCachedConfig(ctx context.Context) (*models.Config, error) {
+	configCacheMu.RLock()
+	if configCache != nil && time.Now().Before(configCacheExpiry) {
+		cachedConfig := *configCache
+		configCacheMu.RUnlock()
+		return &cachedConfig, nil
+	}
+	configCacheMu.RUnlock()
+
+	configCollection := GocentralDatabase.Collection("config")
+	var config models.Config
+	err := configCollection.FindOne(ctx, bson.M{}).Decode(&config)
+	if err != nil {
+		return nil, err
+	}
+
+	configCacheMu.Lock()
+	configCache = &config
+	configCacheExpiry = time.Now().Add(configCacheTTL)
+	configCacheMu.Unlock()
+
+	return &config, nil
+}
+
+// invalidates the config cache, forcing the next read to fetch from the database
+// should always call this after updating the config in the live DB
+func InvalidateConfigCache() {
+	configCacheMu.Lock()
+	configCache = nil
+	configCacheMu.Unlock()
+}
+
+// atomically increments and returns the next PID
+func GetNextPID(ctx context.Context) (int, error) {
+	return getNextCounter(ctx, "last_pid")
+}
+
+// atomically increments and returns the next band ID
+func GetNextBandID(ctx context.Context) (int, error) {
+	return getNextCounter(ctx, "last_band_id")
+}
+
+// atomically increments and returns the next character ID
+func GetNextCharacterID(ctx context.Context) (int, error) {
+	return getNextCounter(ctx, "last_character_id")
+}
+
+// atomically increments and returns the next setlist ID
+func GetNextSetlistID(ctx context.Context) (int, error) {
+	return getNextCounter(ctx, "last_setlist_id")
+}
+
+// atomically increments and returns the next machine ID
+func GetNextMachineID(ctx context.Context) (int, error) {
+	return getNextCounter(ctx, "last_machine_id")
+}
+
+// atomically increments a counter field and returns the new value.
+// this can be used for any generic counter (such as machine ID or setlist ID etc. etc. etc.)
+// kind of shit but eh
+func getNextCounter(ctx context.Context, field string) (int, error) {
+	configCollection := GocentralDatabase.Collection("config")
+
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	result := configCollection.FindOneAndUpdate(
+		ctx,
+		bson.M{},
+		bson.M{"$inc": bson.M{field: 1}},
+		opts,
+	)
+
+	if result.Err() != nil {
+		return 0, result.Err()
+	}
+
+	var config models.Config
+	if err := result.Decode(&config); err != nil {
+		return 0, err
+	}
+
+	// Invalidate the cache since the counter has changed
+	InvalidateConfigCache()
+
+	// Return the appropriate field value
+	switch field {
+	case "last_pid":
+		return config.LastPID, nil
+	case "last_band_id":
+		return config.LastBandID, nil
+	case "last_character_id":
+		return config.LastCharacterID, nil
+	case "last_setlist_id":
+		return config.LastSetlistID, nil
+	case "last_machine_id":
+		return config.LastMachineID, nil
+	default:
+		return 0, nil
+	}
+}
 
 // Convenience functions involving the DB
 // This is to reduce the boilerplate code everywhere for common functions like PID-->Username resolution

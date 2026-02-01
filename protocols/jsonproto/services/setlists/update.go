@@ -3,6 +3,7 @@ package setlists
 import (
 	"context"
 	"log"
+	db "rb3server/database"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 	"rb3server/utils"
@@ -56,11 +57,10 @@ func (service SetlistUpdateService) Handle(data string, database *mongo.Database
 	}
 
 	// Do a profanity check before updating the setlist
-	var config models.Config
-	configCollection := database.Collection("config")
-	err = configCollection.FindOne(context.TODO(), bson.M{}).Decode(&config)
+	config, err := db.GetCachedConfig(context.TODO())
 	if err != nil {
-		log.Printf("Could not get config %v\n", err)
+		log.Printf("Could not get config: %v\n", err)
+		return marshaler.MarshalResponse(service.Path(), []SetlistUpdateResponse{{0}})
 	}
 
 	// Check if the setlist name or description contain anything in the profanity list
@@ -122,22 +122,13 @@ func (service SetlistUpdateService) Handle(data string, database *mongo.Database
 	}
 
 	if isNewSetlist {
-		// Only update last_setlist_id if we are inserting a new setlist
-		config.LastSetlistID += 1
-
-		_, err = configCollection.UpdateOne(
-			context.TODO(),
-			bson.M{},
-			bson.D{
-				{"$set", bson.D{{"last_setlist_id", config.LastSetlistID}}},
-			},
-		)
-
+		newSetlistID, err := db.GetNextSetlistID(context.TODO())
 		if err != nil {
-			log.Println("Could not update config in database while updating character: ", err)
+			log.Println("Could not get next setlist ID: ", err)
+			return marshaler.MarshalResponse(service.Path(), []SetlistUpdateResponse{{0}})
 		}
 
-		setlist.SetlistID = config.LastSetlistID
+		setlist.SetlistID = newSetlistID
 	}
 
 	setlist.ArtURL = ""

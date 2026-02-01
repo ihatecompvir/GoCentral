@@ -1,8 +1,10 @@
 package character
 
 import (
+	"context"
 	"encoding/hex"
 	"log"
+	db "rb3server/database"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 	"rb3server/utils"
@@ -55,39 +57,24 @@ func (service CharacterUpdateService) Handle(data string, database *mongo.Databa
 		return marshaler.MarshalResponse(service.Path(), []CharacterUpdateResponse{{0}})
 	}
 
-	var config models.Config
-	configCollection := database.Collection("config")
-	err = configCollection.FindOne(nil, bson.M{}).Decode(&config)
-	if err != nil {
-		log.Printf("Could not get config %v\n", err)
-	}
-
 	characters := database.Collection("characters")
 	var character models.Character
 	err = characters.FindOne(nil, bson.M{"guid": req.GUID}).Decode(&character)
 
 	if err != nil {
 
-		_, err = configCollection.UpdateOne(
-			nil,
-			bson.M{},
-			bson.D{
-				{"$set", bson.D{{"last_character_id", config.LastCharacterID + 1}}},
-			},
-		)
-
+		newCharacterID, err := db.GetNextCharacterID(context.Background())
 		if err != nil {
-			log.Println("Could not update config in database while updating character: ", err)
+			log.Println("Could not get next character ID: ", err)
+			return marshaler.MarshalResponse(service.Path(), []CharacterUpdateResponse{{0}})
 		}
-
-		config.LastCharacterID += 1
 
 		_, err = characters.InsertOne(nil, bson.D{
 			{Key: "guid", Value: req.GUID},
 			{Key: "char_data", Value: characterBytes},
 			{Key: "name", Value: req.Name},
 			{Key: "owner_pid", Value: req.PID},
-			{Key: "character_id", Value: config.LastCharacterID + 1},
+			{Key: "character_id", Value: newCharacterID},
 		})
 		if err != nil {
 			log.Printf("Could not update character %s with GUID %s for PID %v: %s\n", req.Name, req.GUID, req.PID, err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"log"
+	db "rb3server/database"
 	"rb3server/models"
 	"rb3server/protocols/jsonproto/marshaler"
 	"rb3server/utils"
@@ -88,25 +89,17 @@ func (service BandUpdateService) Handle(data string, database *mongo.Database, c
 
 	if err != nil {
 
-		_, err = configCollection.UpdateOne(
-			nil,
-			bson.M{},
-			bson.D{
-				{"$set", bson.D{{"last_band_id", config.LastBandID + 1}}},
-			},
-		)
-
-		config.LastBandID += 1
-
+		newBandID, err := db.GetNextBandID(context.Background())
 		if err != nil {
-			log.Println("Could not update config in database while updating band: ", err)
+			log.Println("Could not get next band ID: ", err)
+			return marshaler.MarshalResponse(service.Path(), []BandUpdateResponse{{0}})
 		}
 
 		_, err = bands.InsertOne(nil, bson.D{
 			{Key: "art", Value: artBytes},
 			{Key: "name", Value: req.Name},
 			{Key: "owner_pid", Value: req.PID},
-			{Key: "band_id", Value: config.LastBandID},
+			{Key: "band_id", Value: newBandID},
 		})
 
 		if err != nil {

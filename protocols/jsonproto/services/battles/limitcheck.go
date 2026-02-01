@@ -45,11 +45,10 @@ func (service LimitCheckService) Handle(data string, database *mongo.Database, c
 		return "", err
 	}
 
-	var config models.Config
-	configCollection := database.Collection("config")
-	err = configCollection.FindOne(context.TODO(), bson.M{}).Decode(&config)
+	config, err := db.GetCachedConfig(context.TODO())
 	if err != nil {
-		log.Printf("Could not get config %v\n", err)
+		log.Printf("Could not get config: %v\n", err)
+		return marshaler.MarshalResponse(service.Path(), []LimitCheckResponse{{0x16}})
 	}
 
 	users := database.Collection("users")

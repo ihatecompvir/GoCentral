@@ -118,9 +118,7 @@ func AdminTokenAuth(next http.Handler) http.Handler {
 		}
 		token := splitToken[1]
 
-		var config models.Config
-		configCollection := database.GocentralDatabase.Collection("config")
-		err := configCollection.FindOne(r.Context(), bson.M{}).Decode(&config)
+		config, err := database.GetCachedConfig(r.Context())
 		if err != nil {
 			log.Printf("ERROR: could not get config for auth: %v", err)
 			sendError(w, http.StatusInternalServerError, "Could not verify authorization")
@@ -457,8 +455,9 @@ func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cursor.Close(context.TODO())
 
-	var leaderboard []LeaderboardEntry
-	rank := (page-1)*pageSize + 1
+	var scores []models.Score
+	var bandPIDs []int
+	var userPIDs []int
 
 	for cursor.Next(context.TODO()) {
 		var score models.Score
@@ -466,41 +465,66 @@ func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("Error decoding score:", err)
 			continue
 		}
+		scores = append(scores, score)
 
 		isBandScore := score.RoleID == 10
+		if isBandScore {
+			bandPIDs = append(bandPIDs, score.OwnerPID)
+		} else {
+			userPIDs = append(userPIDs, score.OwnerPID)
+		}
+	}
 
-		var entry LeaderboardEntry
+	// fetch all names at onnce in a single shot
+	ctx := context.TODO()
+	bandNameMap, err := database.GetBandNamesByOwnerPIDs(ctx, database.GocentralDatabase, bandPIDs)
+	if err != nil {
+		log.Println("Error fetching band names:", err)
+		bandNameMap = make(map[int]string)
+	}
+
+	userNameMap, err := database.GetConsolePrefixedUsernamesByPIDs(ctx, database.GocentralDatabase, userPIDs)
+	if err != nil {
+		log.Println("Error fetching usernames:", err)
+		userNameMap = make(map[int]string)
+	}
+
+	// use cached stuff
+	// TODO: this is a bit messy
+	var leaderboard []LeaderboardEntry
+	rank := (page-1)*pageSize + 1
+
+	for _, score := range scores {
+		isBandScore := score.RoleID == 10
+		var entryName string
 
 		if isBandScore {
-			entry = LeaderboardEntry{
-				PID:          score.OwnerPID,
-				Name:         database.GetBandNameForOwnerPID(score.OwnerPID),
-				DiffID:       score.DiffID,
-				Rank:         rank,
-				Score:        score.Score,
-				IsPercentile: 0,
-				InstMask:     score.InstrumentMask,
-				NotesPct:     score.NotesPercent,
-				UnnamedBand:  0,
-				PGUID:        "",
-				ORank:        rank,
-				Stars:        score.Stars,
+			if name, ok := bandNameMap[score.OwnerPID]; ok {
+				entryName = name
+			} else {
+				entryName = "Unnamed Band"
 			}
 		} else {
-			entry = LeaderboardEntry{
-				PID:          score.OwnerPID,
-				Name:         database.GetConsolePrefixedUsernameForPID(score.OwnerPID),
-				DiffID:       score.DiffID,
-				Rank:         rank,
-				Score:        score.Score,
-				IsPercentile: 0,
-				InstMask:     score.InstrumentMask,
-				NotesPct:     score.NotesPercent,
-				UnnamedBand:  0,
-				PGUID:        "",
-				ORank:        rank,
-				Stars:        score.Stars,
+			if name, ok := userNameMap[score.OwnerPID]; ok {
+				entryName = name
+			} else {
+				entryName = "Unnamed Player"
 			}
+		}
+
+		entry := LeaderboardEntry{
+			PID:          score.OwnerPID,
+			Name:         entryName,
+			DiffID:       score.DiffID,
+			Rank:         rank,
+			Score:        score.Score,
+			IsPercentile: 0,
+			InstMask:     score.InstrumentMask,
+			NotesPct:     score.NotesPercent,
+			UnnamedBand:  0,
+			PGUID:        "",
+			ORank:        rank,
+			Stars:        score.Stars,
 		}
 		leaderboard = append(leaderboard, entry)
 		rank++
@@ -562,8 +586,9 @@ func BattleLeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cursor.Close(context.TODO())
 
-	var leaderboard []BattleLeaderboardEntry
-	rank := (page-1)*pageSize + 1
+	var scores []models.Score
+	var bandPIDs []int
+	var userPIDs []int
 
 	for cursor.Next(context.TODO()) {
 		var score models.Score
@@ -571,14 +596,49 @@ func BattleLeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("Error decoding score:", err)
 			continue
 		}
+		scores = append(scores, score)
 
+		isBandScore := score.RoleID == 10
+		if isBandScore {
+			bandPIDs = append(bandPIDs, score.OwnerPID)
+		} else {
+			userPIDs = append(userPIDs, score.OwnerPID)
+		}
+	}
+
+	// get all names in a single shot
+	ctx := context.TODO()
+	bandNameMap, err := database.GetBandNamesByOwnerPIDs(ctx, database.GocentralDatabase, bandPIDs)
+	if err != nil {
+		log.Println("Error fetching band names:", err)
+		bandNameMap = make(map[int]string)
+	}
+
+	userNameMap, err := database.GetConsolePrefixedUsernamesByPIDs(ctx, database.GocentralDatabase, userPIDs)
+	if err != nil {
+		log.Println("Error fetching usernames:", err)
+		userNameMap = make(map[int]string)
+	}
+
+	var leaderboard []BattleLeaderboardEntry
+	rank := (page-1)*pageSize + 1
+
+	for _, score := range scores {
 		isBandScore := score.RoleID == 10
 		var entryName string
 
 		if isBandScore {
-			entryName = database.GetBandNameForOwnerPID(score.OwnerPID)
+			if name, ok := bandNameMap[score.OwnerPID]; ok {
+				entryName = name
+			} else {
+				entryName = "Unnamed Band"
+			}
 		} else {
-			entryName = database.GetConsolePrefixedUsernameForPID(score.OwnerPID)
+			if name, ok := userNameMap[score.OwnerPID]; ok {
+				entryName = name
+			} else {
+				entryName = "Unnamed Player"
+			}
 		}
 
 		entry := BattleLeaderboardEntry{
@@ -620,20 +680,14 @@ func CreateBattleHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	configCollection := database.GocentralDatabase.Collection("config")
 
-	var config models.Config
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	filter := bson.M{}
-	update := bson.M{"$inc": bson.M{"last_setlist_id": 1}}
-
-	err := configCollection.FindOneAndUpdate(ctx, filter, update, opts).Decode(&config)
+	// race condition prevention
+	newBattleID, err := database.GetNextSetlistID(ctx)
 	if err != nil {
-		log.Printf("ERROR: Could not update last_setlist_id: %v", err)
+		log.Printf("ERROR: Could not get next setlist ID: %v", err)
 		sendError(w, http.StatusInternalServerError, "Could not generate battle ID")
 		return
 	}
-	newBattleID := config.LastSetlistID
 
 	// calculate the expiry duration, in seconds
 	durationSeconds := int(time.Until(req.ExpiresAt).Seconds())

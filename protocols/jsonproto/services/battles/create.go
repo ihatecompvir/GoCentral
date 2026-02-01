@@ -58,11 +58,10 @@ func (service BattleCreateService) Handle(data string, database *mongo.Database,
 	}
 
 	// do a profanity check before updating the setlist
-	var config models.Config
-	configCollection := database.Collection("config")
-	err = configCollection.FindOne(context.TODO(), bson.M{}).Decode(&config)
+	config, err := db.GetCachedConfig(context.TODO())
 	if err != nil {
-		log.Printf("Could not get config %v\n", err)
+		log.Printf("Could not get config: %v\n", err)
+		return marshaler.MarshalResponse(service.Path(), []BattleCreateResponse{{0, -1}})
 	}
 
 	// check if the setlist name or description contain anything in the profanity list
@@ -97,19 +96,11 @@ func (service BattleCreateService) Handle(data string, database *mongo.Database,
 		}
 	}
 
-	_, err = configCollection.UpdateOne(
-		context.TODO(),
-		bson.M{},
-		bson.D{
-			{"$set", bson.D{{"last_setlist_id", config.LastSetlistID + 1}}},
-		},
-	)
-
+	newSetlistID, err := db.GetNextSetlistID(context.TODO())
 	if err != nil {
-		log.Println("Could not update config in database while creating battle: ", err)
+		log.Println("Could not get next setlist ID while creating battle: ", err)
+		return marshaler.MarshalResponse(service.Path(), []BattleCreateResponse{{0, -1}})
 	}
-
-	config.LastSetlistID += 1
 
 	users := database.Collection("users")
 	var user models.User
@@ -130,7 +121,7 @@ func (service BattleCreateService) Handle(data string, database *mongo.Database,
 	setlist.Type = 1000
 	setlist.Owner = user.Username
 	setlist.OwnerGUID = user.GUID
-	setlist.SetlistID = config.LastSetlistID
+	setlist.SetlistID = newSetlistID
 	setlist.PID = req.PID
 	setlist.SongIDs = req.SongIDs
 
@@ -178,7 +169,7 @@ func (service BattleCreateService) Handle(data string, database *mongo.Database,
 
 	res := []BattleCreateResponse{{
 		0,
-		config.LastSetlistID,
+		newSetlistID,
 	}}
 
 	return marshaler.MarshalResponse(service.Path(), res)

@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ihatecompvir/nex-go"
@@ -23,19 +24,51 @@ import (
 )
 
 var machineType int = 255 // 0 = xbox, 1 = ps3, 2 = wii
-func deriveKerberosKey(userPID uint32, pwd string) []byte {
-	var kerberosTicketKey []byte
 
-	// hardcoded dummy pwd, only guest doesn't use this password
+// cache entry with exp
+type kerberosKeyCacheEntry struct {
+	key       []byte
+	expiresAt time.Time
+}
+
+// kerb cache
+var (
+	kerberosKeyCache   = make(map[string]*kerberosKeyCacheEntry)
+	kerberosKeyCacheMu sync.RWMutex
+	kerberosKeyCacheTTL = 5 * time.Minute
+)
+
+func deriveKerberosKey(userPID uint32, pwd string) []byte {
+	pwdToUse := pwd
 	if pwd == "" {
-		kerberosTicketKey = []byte(os.Getenv("USERPASSWORD"))
-	} else {
-		kerberosTicketKey = []byte(pwd)
+		pwdToUse = os.Getenv("USERPASSWORD")
 	}
+	cacheKey := fmt.Sprintf("%d:%s", userPID, pwdToUse)
+
+	// check if it is in cache first
+	kerberosKeyCacheMu.RLock()
+	if entry, ok := kerberosKeyCache[cacheKey]; ok {
+		if time.Now().Before(entry.expiresAt) {
+			kerberosKeyCacheMu.RUnlock()
+			return entry.key
+		}
+	}
+	kerberosKeyCacheMu.RUnlock()
+
+	// was not cached - compute it
+	kerberosTicketKey := []byte(pwdToUse)
 
 	for i := 0; i < 65000+(int(userPID)%1024); i++ {
 		kerberosTicketKey = nex.MD5Hash(kerberosTicketKey)
 	}
+
+	// put it in cache
+	kerberosKeyCacheMu.Lock()
+	kerberosKeyCache[cacheKey] = &kerberosKeyCacheEntry{
+		key:       kerberosTicketKey,
+		expiresAt: time.Now().Add(kerberosKeyCacheTTL),
+	}
+	kerberosKeyCacheMu.Unlock()
 
 	return kerberosTicketKey
 }
@@ -82,7 +115,6 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 	serverPID := 2 // Quazal Rendez-Vous
 
 	users := database.GocentralDatabase.Collection("users")
-	configCollection := database.GocentralDatabase.Collection("config")
 
 	var user models.User
 
@@ -111,10 +143,11 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 		return
 	}
 
-	var config models.Config
-	err = configCollection.FindOne(context.TODO(), bson.M{}).Decode(&config)
+	config, err := database.GetCachedConfig(context.TODO())
 	if err != nil {
-		log.Printf("Could not get config %v\n", err)
+		log.Printf("Could not get config: %v\n", err)
+		SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.OperationError)
+		return
 	}
 
 	// check if they've got any bans
@@ -150,9 +183,17 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 
 			guid, err := generateGUID()
 
+			// get nex pid atomically to avoid racing with multiple server instances
+			newPID, err := database.GetNextPID(context.TODO())
+			if err != nil {
+				log.Printf("Could not get next PID: %s\n", err)
+				SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.OperationError)
+				return
+			}
+
 			_, err = users.InsertOne(nil, bson.D{
 				{Key: "username", Value: username},
-				{Key: "pid", Value: config.LastPID + 1},
+				{Key: "pid", Value: newPID},
 				{Key: "console_type", Value: machineType},
 				{Key: "guid", Value: guid},
 				{Key: "link_code", Value: database.GenerateLinkCode(10)},
@@ -164,32 +205,32 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 				return
 			}
 
-			_, err = configCollection.UpdateOne(
-				nil,
-				bson.M{},
-				bson.D{
-					{"$set", bson.D{{"last_pid", config.LastPID + 1}}},
-				},
-			)
-			if err != nil {
-				log.Println("Could not update config in database: ", err)
+		} else {
+			// update console type and link code if needed for existing users
+			updateFields := bson.D{}
+
+			// always update console type to reflect current login platform
+			if user.ConsoleType != machineType {
+				log.Printf("Updating console type for %s from %d to %d\n", username, user.ConsoleType, machineType)
+				updateFields = append(updateFields, bson.E{Key: "console_type", Value: machineType})
 			}
 
-			Config.LastPID = config.LastPID + 1
-			Config.LastMachineID = config.LastMachineID
-			Config.LastBandID = config.LastBandID
-			Config.LastSetlistID = config.LastSetlistID
-			Config.LastCharacterID = config.LastCharacterID
+			// generate link code if missing (which will be true for legacy accounts created before i made this system)
+			if user.LinkCode == "" {
+				linkCode := database.GenerateLinkCode(10)
+				updateFields = append(updateFields, bson.E{Key: "link_code", Value: linkCode})
+			}
 
-		} else if user.LinkCode == "" {
-			linkCode := database.GenerateLinkCode(10)
-			_, err = users.UpdateOne(context.TODO(), bson.M{"username": username}, bson.D{
-				{"$set", bson.D{{"link_code", linkCode}}},
-			})
-			if err != nil {
-				log.Printf("Could not update link code for %s: %s\n", username, err)
-				SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.OperationError)
-				return
+			// only perform update if there are fields to update
+			if len(updateFields) > 0 {
+				_, err = users.UpdateOne(context.TODO(), bson.M{"username": username}, bson.D{
+					{"$set", updateFields},
+				})
+				if err != nil {
+					log.Printf("Could not update user data for %s: %s\n", username, err)
+					SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.OperationError)
+					return
+				}
 			}
 		}
 	case 2:
@@ -204,29 +245,18 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 		if machine.MachineID == 0 {
 			log.Printf("Wii with friend code %v has never connected before - create DB entry\n", res[1])
 
-			var config models.Config
-			configCollection := database.GocentralDatabase.Collection("config")
-			err = configCollection.FindOne(context.TODO(), bson.M{}).Decode(&config)
+			// race condition prevention
+			newMachineID, err := database.GetNextMachineID(context.TODO())
 			if err != nil {
-				log.Printf("Could not get config %v\n", err)
-			}
-
-			_, err = configCollection.UpdateOne(
-				context.TODO(),
-				bson.M{},
-				bson.D{
-					{Key: "$set", Value: bson.D{{"last_machine_id", Config.LastMachineID + 1}}},
-				},
-			)
-
-			if err != nil {
-				log.Println("Could not update config in database: ", err)
+				log.Printf("Could not get next machine ID: %s\n", err)
+				SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.OperationError)
+				return
 			}
 
 			_, err = machinesCollection.InsertOne(context.TODO(), bson.D{
 				{Key: "wii_friend_code", Value: res[1]},
 				{Key: "console_type", Value: 2},
-				{Key: "machine_id", Value: Config.LastMachineID + 1},
+				{Key: "machine_id", Value: newMachineID},
 				{Key: "status", Value: ""},
 			})
 
@@ -235,8 +265,6 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 				SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.OperationError)
 				return
 			}
-
-			Config.LastMachineID++
 		} else {
 			user.PID = uint32(machine.MachineID)
 			client.WiiFC = machine.WiiFriendCode
