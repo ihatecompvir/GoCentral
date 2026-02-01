@@ -19,6 +19,29 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// shouldVerifyTicket checks if ticket verification is enabled for the given console type.
+// Console types: 0 = Xbox 360, 1 = PS3, 2 = Wii, 3 = RPCS3
+// Set environment variables to "1" or "true" to enable verification:
+// VERIFY_XBOX360_TICKETS, VERIFY_PS3_TICKETS, VERIFY_WII_TICKETS, VERIFY_RPCS3_TICKETS
+func shouldVerifyTicket(consoleType int) bool {
+	var envVar string
+	switch consoleType {
+	case 0:
+		envVar = "VERIFY_XBOX360_TICKETS"
+	case 1:
+		envVar = "VERIFY_PS3_TICKETS"
+	case 2:
+		envVar = "VERIFY_WII_TICKETS"
+	case 3:
+		envVar = "VERIFY_RPCS3_TICKETS"
+	default:
+		return false
+	}
+
+	value := os.Getenv(envVar)
+	return value == "1" || value == "true"
+}
+
 func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []string, className string, ticketData []byte) {
 	users := database.GocentralDatabase.Collection("users")
 	machines := database.GocentralDatabase.Collection("machines")
@@ -106,7 +129,7 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 			return
 		}
 
-		if os.Getenv("TICKETVERIFIERENDPOINT") != "" {
+		if os.Getenv("TICKETVERIFIERENDPOINT") != "" && shouldVerifyTicket(consoleType) {
 			ticketVerifier := &authentication.TicketVerifier{TicketVerifierEndpoint: os.Getenv("TICKETVERIFIERENDPOINT")}
 
 			if !ticketVerifier.VerifyTicket(ticketDataToEncode, consoleType) {
