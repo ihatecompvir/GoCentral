@@ -6,6 +6,7 @@ import (
 	"os"
 	"rb3server/database"
 	"testing"
+	"time"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -112,7 +113,79 @@ func TestMain(m *testing.M) {
 	})
 
 	if err != nil {
-		log.Fatalf("Failed to insert test user: %v", err)
+		log.Fatalf("Failed to insert test band: %v", err)
+	}
+
+	// insert another band for batch lookup tests
+	_, err = bandsCollection.InsertOne(ctx, map[string]interface{}{
+		"band_id":   2,
+		"name":      "The Testifiers",
+		"owner_pid": 502,
+	})
+	if err != nil {
+		log.Fatalf("Failed to insert test band: %v", err)
+	}
+
+	// insert a config document for counter tests
+	configCollection := database.GocentralDatabase.Collection("config")
+	_, err = configCollection.InsertOne(ctx, map[string]interface{}{
+		"last_pid":          1000,
+		"last_band_id":      100,
+		"last_character_id": 200,
+		"last_setlist_id":   300,
+		"last_machine_id":   400,
+	})
+	if err != nil {
+		log.Fatalf("Failed to insert test config: %v", err)
+	}
+
+	// insert a test setlist/battle for battle expiry tests
+	setlistsCollection := database.GocentralDatabase.Collection("setlists")
+	_, err = setlistsCollection.InsertOne(ctx, map[string]interface{}{
+		"setlist_id":     1,
+		"name":           "Test Battle",
+		"owner_pid":      500,
+		"created":        time.Now().Unix() - 3600, // created 1 hour ago
+		"time_end_val":   2,
+		"time_end_units": "hours",
+	})
+	if err != nil {
+		log.Fatalf("Failed to insert test setlist: %v", err)
+	}
+
+	// insert an expired setlist/battle
+	_, err = setlistsCollection.InsertOne(ctx, map[string]interface{}{
+		"setlist_id":     2,
+		"name":           "Expired Battle",
+		"owner_pid":      500,
+		"created":        time.Now().Unix() - 86400, // created 24 hours ago
+		"time_end_val":   1,
+		"time_end_units": "hours",
+	})
+	if err != nil {
+		log.Fatalf("Failed to insert test setlist: %v", err)
+	}
+
+	// insert test scores for GetCoolFact tests
+	scoresCollection := database.GocentralDatabase.Collection("scores")
+	_, err = scoresCollection.InsertOne(ctx, map[string]interface{}{
+		"pid":   500,
+		"stars": 5,
+		"score": 100000,
+	})
+	if err != nil {
+		log.Fatalf("Failed to insert test score: %v", err)
+	}
+
+	// insert test characters for GetCoolFact tests
+	charactersCollection := database.GocentralDatabase.Collection("characters")
+	_, err = charactersCollection.InsertOne(ctx, map[string]interface{}{
+		"character_id": 1,
+		"owner_pid":    500,
+		"name":         "Test Character",
+	})
+	if err != nil {
+		log.Fatalf("Failed to insert test character: %v", err)
 	}
 
 	code := m.Run()
@@ -589,6 +662,387 @@ func TestGetMachineIDFromUsername_EdgeCases(t *testing.T) {
 		machineID := database.GetMachineIDFromUsername(username)
 		if machineID != expected {
 			t.Errorf("Expected machine ID %d for malformed master user string, got %d", expected, machineID)
+		}
+	})
+}
+
+// Tests the GetBandNamesByOwnerPIDs batch lookup function
+func TestGetBandNamesByOwnerPIDs(t *testing.T) {
+	t.Run("Valid owner PIDs", func(t *testing.T) {
+		ownerPIDs := []int{500, 502}
+		expected := map[int]string{
+			500: "T. Wrecks the Test",
+			502: "The Testifiers",
+		}
+
+		bandNames, err := database.GetBandNamesByOwnerPIDs(context.Background(), database.GocentralDatabase, ownerPIDs)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		for pid, expectedName := range expected {
+			if actualName, ok := bandNames[pid]; !ok || actualName != expectedName {
+				t.Errorf("For owner PID %d, expected band name %q, got %q (found: %v)", pid, expectedName, actualName, ok)
+			}
+		}
+		t.Logf("Successfully retrieved band names for owner PIDs: %v", bandNames)
+	})
+
+	t.Run("Mixed existing and missing owner PIDs", func(t *testing.T) {
+		ownerPIDs := []int{500, 99999}
+		expectedCount := 1
+
+		bandNames, err := database.GetBandNamesByOwnerPIDs(context.Background(), database.GocentralDatabase, ownerPIDs)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		if len(bandNames) != expectedCount {
+			t.Errorf("Expected %d band names, got %d", expectedCount, len(bandNames))
+		}
+
+		if bandNames[500] != "T. Wrecks the Test" {
+			t.Errorf("Expected band name 'T. Wrecks the Test' for PID 500, got %q", bandNames[500])
+		}
+	})
+
+	t.Run("Empty owner PID list", func(t *testing.T) {
+		ownerPIDs := []int{}
+
+		bandNames, err := database.GetBandNamesByOwnerPIDs(context.Background(), database.GocentralDatabase, ownerPIDs)
+		if err != nil {
+			t.Fatalf("Unexpected error for empty owner PID list: %v", err)
+		}
+
+		if len(bandNames) != 0 {
+			t.Errorf("Expected 0 band names for empty owner PID list, got %d", len(bandNames))
+		}
+	})
+}
+
+// Tests the GenerateLinkCode function
+func TestGenerateLinkCode(t *testing.T) {
+	t.Run("Generates correct length", func(t *testing.T) {
+		lengths := []int{5, 10, 15, 20}
+		for _, length := range lengths {
+			code := database.GenerateLinkCode(length)
+			if len(code) != length {
+				t.Errorf("Expected link code of length %d, got %d", length, len(code))
+			}
+		}
+	})
+
+	t.Run("Contains only valid characters", func(t *testing.T) {
+		validChars := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+		code := database.GenerateLinkCode(100) // Generate a long code to test randomness
+
+		for _, char := range code {
+			found := false
+			for _, validChar := range validChars {
+				if char == validChar {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("Link code contains invalid character: %c", char)
+			}
+		}
+	})
+
+	t.Run("Generates unique codes", func(t *testing.T) {
+		codes := make(map[string]bool)
+		for i := 0; i < 100; i++ {
+			code := database.GenerateLinkCode(10)
+			if codes[code] {
+				t.Logf("Warning: Duplicate code generated: %s (this can happen rarely due to randomness)", code)
+			}
+			codes[code] = true
+		}
+		// With 62^10 possible combinations, duplicates in 100 tries should be extremely rare
+		if len(codes) < 95 {
+			t.Errorf("Too many duplicate codes generated: only %d unique codes out of 100", len(codes))
+		}
+	})
+
+	t.Run("Zero length returns empty string", func(t *testing.T) {
+		code := database.GenerateLinkCode(0)
+		if code != "" {
+			t.Errorf("Expected empty string for length 0, got %q", code)
+		}
+	})
+}
+
+// Tests the GetBattleExpiryInfo function
+func TestGetBattleExpiryInfo(t *testing.T) {
+	t.Run("Active battle (not expired)", func(t *testing.T) {
+		// Battle ID 1 was created 1 hour ago with 2 hour duration
+		expired, expiryTime := database.GetBattleExpiryInfo(1)
+
+		if expired {
+			t.Errorf("Expected battle 1 to NOT be expired, but it was")
+		}
+
+		if expiryTime.IsZero() {
+			t.Error("Expected non-zero expiry time")
+		}
+
+		t.Logf("Battle 1 expires at: %v (expired: %v)", expiryTime, expired)
+	})
+
+	t.Run("Expired battle", func(t *testing.T) {
+		// Battle ID 2 was created 24 hours ago with 1 hour duration
+		expired, expiryTime := database.GetBattleExpiryInfo(2)
+
+		if !expired {
+			t.Errorf("Expected battle 2 to be expired, but it was not")
+		}
+
+		if expiryTime.IsZero() {
+			t.Error("Expected non-zero expiry time")
+		}
+
+		t.Logf("Battle 2 expired at: %v (expired: %v)", expiryTime, expired)
+	})
+
+	t.Run("Non-existent battle", func(t *testing.T) {
+		// Battle ID 99999 does not exist
+		expired, expiryTime := database.GetBattleExpiryInfo(99999)
+
+		// When battle doesn't exist, created time is 0 (Unix epoch)
+		// and expiry time should also be zero-ish (Unix epoch + duration)
+		t.Logf("Non-existent battle expiry: %v (expired: %v)", expiryTime, expired)
+	})
+}
+
+// Tests the GetCachedConfig and InvalidateConfigCache functions
+func TestGetCachedConfig(t *testing.T) {
+	t.Run("Fetches config successfully", func(t *testing.T) {
+		config, err := database.GetCachedConfig(context.Background())
+		if err != nil {
+			t.Fatalf("Failed to get cached config: %v", err)
+		}
+
+		if config == nil {
+			t.Fatal("Expected non-nil config")
+		}
+
+		// Don't check for specific values since other tests may have incremented counters
+		// Just verify the config has reasonable values (counters should be > 0)
+		if config.LastPID <= 0 {
+			t.Errorf("Expected LastPID to be positive, got %d", config.LastPID)
+		}
+
+		t.Logf("Config fetched: LastPID=%d, LastBandID=%d", config.LastPID, config.LastBandID)
+	})
+
+	t.Run("Returns cached config on subsequent calls", func(t *testing.T) {
+		config1, err := database.GetCachedConfig(context.Background())
+		if err != nil {
+			t.Fatalf("Failed to get first cached config: %v", err)
+		}
+
+		config2, err := database.GetCachedConfig(context.Background())
+		if err != nil {
+			t.Fatalf("Failed to get second cached config: %v", err)
+		}
+
+		// Both calls should return the same values
+		if config1.LastPID != config2.LastPID {
+			t.Errorf("Cached config values differ: %d vs %d", config1.LastPID, config2.LastPID)
+		}
+	})
+
+	t.Run("Invalidate cache works", func(t *testing.T) {
+		// Get config to populate cache
+		_, err := database.GetCachedConfig(context.Background())
+		if err != nil {
+			t.Fatalf("Failed to get cached config: %v", err)
+		}
+
+		// Invalidate cache
+		database.InvalidateConfigCache()
+
+		// Fetch again - should not panic or error
+		config, err := database.GetCachedConfig(context.Background())
+		if err != nil {
+			t.Fatalf("Failed to get config after invalidation: %v", err)
+		}
+
+		if config == nil {
+			t.Fatal("Expected non-nil config after invalidation")
+		}
+	})
+}
+
+// Tests the counter functions (GetNextPID, GetNextBandID, etc.)
+func TestGetNextPID(t *testing.T) {
+	ctx := context.Background()
+
+	pid1, err := database.GetNextPID(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get next PID: %v", err)
+	}
+
+	pid2, err := database.GetNextPID(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get second PID: %v", err)
+	}
+
+	if pid2 != pid1+1 {
+		t.Errorf("Expected sequential PIDs, got %d and %d", pid1, pid2)
+	}
+
+	t.Logf("Got PIDs: %d, %d", pid1, pid2)
+}
+
+func TestGetNextBandID(t *testing.T) {
+	ctx := context.Background()
+
+	bandID1, err := database.GetNextBandID(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get next band ID: %v", err)
+	}
+
+	bandID2, err := database.GetNextBandID(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get second band ID: %v", err)
+	}
+
+	if bandID2 != bandID1+1 {
+		t.Errorf("Expected sequential band IDs, got %d and %d", bandID1, bandID2)
+	}
+
+	t.Logf("Got band IDs: %d, %d", bandID1, bandID2)
+}
+
+func TestGetNextCharacterID(t *testing.T) {
+	ctx := context.Background()
+
+	charID1, err := database.GetNextCharacterID(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get next character ID: %v", err)
+	}
+
+	charID2, err := database.GetNextCharacterID(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get second character ID: %v", err)
+	}
+
+	if charID2 != charID1+1 {
+		t.Errorf("Expected sequential character IDs, got %d and %d", charID1, charID2)
+	}
+
+	t.Logf("Got character IDs: %d, %d", charID1, charID2)
+}
+
+func TestGetNextSetlistID(t *testing.T) {
+	ctx := context.Background()
+
+	setlistID1, err := database.GetNextSetlistID(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get next setlist ID: %v", err)
+	}
+
+	setlistID2, err := database.GetNextSetlistID(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get second setlist ID: %v", err)
+	}
+
+	if setlistID2 != setlistID1+1 {
+		t.Errorf("Expected sequential setlist IDs, got %d and %d", setlistID1, setlistID2)
+	}
+
+	t.Logf("Got setlist IDs: %d, %d", setlistID1, setlistID2)
+}
+
+func TestGetNextMachineID(t *testing.T) {
+	ctx := context.Background()
+
+	machineID1, err := database.GetNextMachineID(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get next machine ID: %v", err)
+	}
+
+	machineID2, err := database.GetNextMachineID(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get second machine ID: %v", err)
+	}
+
+	if machineID2 != machineID1+1 {
+		t.Errorf("Expected sequential machine IDs, got %d and %d", machineID1, machineID2)
+	}
+
+	t.Logf("Got machine IDs: %d, %d", machineID1, machineID2)
+}
+
+// Tests the GetCoolFact function
+func TestGetCoolFact(t *testing.T) {
+	// Run multiple times to exercise different random paths
+	facts := make(map[string]int)
+	for i := 0; i < 20; i++ {
+		fact := database.GetCoolFact()
+		if fact == "" {
+			t.Error("GetCoolFact returned empty string")
+		}
+		facts[fact]++
+	}
+
+	t.Logf("Got %d unique facts from 20 calls", len(facts))
+	for fact, count := range facts {
+		t.Logf("  %q (appeared %d times)", fact, count)
+	}
+
+	// Should have at least 1 fact (could be same if random keeps returning same number)
+	if len(facts) == 0 {
+		t.Error("Expected at least one fact to be returned")
+	}
+}
+
+// Tests edge cases for IsPIDInGroup
+func TestIsPIDInGroup_EdgeCases(t *testing.T) {
+	t.Run("Zero PID", func(t *testing.T) {
+		ok := database.IsPIDInGroup(0, "admin")
+		if ok {
+			t.Error("Expected false for zero PID")
+		}
+	})
+
+	t.Run("Empty group", func(t *testing.T) {
+		ok := database.IsPIDInGroup(500, "")
+		if ok {
+			t.Error("Expected false for empty group")
+		}
+	})
+
+	t.Run("Both zero PID and empty group", func(t *testing.T) {
+		ok := database.IsPIDInGroup(0, "")
+		if ok {
+			t.Error("Expected false for zero PID and empty group")
+		}
+	})
+}
+
+// Tests edge cases for IsPIDAMasterUser
+func TestIsPIDAMasterUser_NegativeCases(t *testing.T) {
+	t.Run("Regular user is not a master user", func(t *testing.T) {
+		ok := database.IsPIDAMasterUser(500)
+		if ok {
+			t.Error("Expected PID 500 to NOT be a master user")
+		}
+	})
+
+	t.Run("Non-existent PID", func(t *testing.T) {
+		ok := database.IsPIDAMasterUser(99999)
+		if ok {
+			t.Error("Expected non-existent PID to NOT be a master user")
+		}
+	})
+
+	t.Run("Zero PID", func(t *testing.T) {
+		ok := database.IsPIDAMasterUser(0)
+		if ok {
+			t.Error("Expected zero PID to NOT be a master user")
 		}
 	})
 }
