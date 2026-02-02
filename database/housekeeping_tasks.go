@@ -173,3 +173,41 @@ func DeleteExpiredBattles() {
 	}
 
 }
+
+func CleanupBannedUserScores() {
+	config, err := GetCachedConfig(context.Background())
+	if err != nil {
+		log.Println("Could not get config for banned user score cleanup:", err)
+		return
+	}
+
+	scoresCollection := GocentralDatabase.Collection("scores")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	deletedCount := 0
+
+	for _, bannedPlayer := range config.BannedPlayers {
+		// Only delete scores for permanently banned users
+		if bannedPlayer.ExpiresAt.IsZero() {
+			pid := GetPIDForUsername(bannedPlayer.Username)
+			if pid == 0 {
+				continue
+			}
+
+			// Delete all scores for this user
+			res, err := scoresCollection.DeleteMany(ctx, bson.M{"pid": pid})
+			if err != nil {
+				log.Printf("Error deleting scores for banned user %s (PID %d): %v\n", bannedPlayer.Username, pid, err)
+			} else if res.DeletedCount > 0 {
+				log.Printf("Deleted %d scores for permanently banned user %s (PID %d)\n", res.DeletedCount, bannedPlayer.Username, pid)
+				deletedCount += int(res.DeletedCount)
+			}
+		}
+	}
+
+	if deletedCount > 0 {
+		log.Printf("CleanupBannedUserScores: Removed a total of %d scores from banned users.\n", deletedCount)
+	}
+}
+

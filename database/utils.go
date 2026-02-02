@@ -17,10 +17,10 @@ import (
 
 // config cache
 var (
-	configCache         *models.Config
-	configCacheMu       sync.RWMutex
-	configCacheExpiry   time.Time
-	configCacheTTL      = 30 * time.Second
+	configCache       *models.Config
+	configCacheMu     sync.RWMutex
+	configCacheExpiry time.Time
+	configCacheTTL    = 30 * time.Second
 )
 
 // returns the cached config, or fetches it from the live DB if needed
@@ -558,4 +558,42 @@ func GetMachineIDFromUsername(username string) int {
 		return 0
 	}
 
+}
+
+// checks if a PID is currently banned
+func IsPIDBanned(pid int) bool {
+	config, err := GetCachedConfig(context.Background())
+	if err != nil {
+		log.Printf("Error getting config for ban check: %v", err)
+		return false
+	}
+
+	username := GetUsernameForPID(pid)
+
+	for _, bannedPlayer := range config.BannedPlayers {
+		if bannedPlayer.Username == username {
+			if bannedPlayer.ExpiresAt.IsZero() || time.Now().Before(bannedPlayer.ExpiresAt) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// checks if a username is currently banned
+func IsUsernameBanned(username string) bool {
+	config, err := GetCachedConfig(context.Background())
+	if err != nil {
+		log.Printf("Error getting config for ban check: %v", err)
+		return false
+	}
+	for _, bannedPlayer := range config.BannedPlayers {
+		if bannedPlayer.Username == username {
+			if bannedPlayer.ExpiresAt.IsZero() || time.Now().Before(bannedPlayer.ExpiresAt) {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"rb3server/models"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -214,14 +216,14 @@ func TestCleanupInvalidScores(t *testing.T) {
 
 	// Insert various invalid scores
 	invalidScores := []map[string]interface{}{
-		{"pid": testPID, "song_id": 0, "role_id": 1, "score": 1000, "stars": 5, "diff_id": 2, "notespct": 95},         // Invalid: song_id = 0
-		{"pid": testPID, "song_id": 100, "role_id": 15, "score": 1000, "stars": 5, "diff_id": 2, "notespct": 95},       // Invalid: role_id > 10
-		{"pid": testPID, "song_id": 100, "role_id": 1, "score": 0, "stars": 5, "diff_id": 2, "notespct": 95},           // Invalid: score <= 0
-		{"pid": testPID, "song_id": 100, "role_id": 1, "score": -100, "stars": 5, "diff_id": 2, "notespct": 95},        // Invalid: score < 0
-		{"pid": testPID, "song_id": 100, "role_id": 1, "score": 1000, "stars": 7, "diff_id": 2, "notespct": 95},        // Invalid: stars > 6
-		{"pid": testPID, "song_id": 100, "role_id": 1, "score": 1000, "stars": 5, "diff_id": 5, "notespct": 95},        // Invalid: diff_id > 4
-		{"pid": testPID, "song_id": 100, "role_id": 1, "score": 1000, "stars": 5, "diff_id": 2, "notespct": 105},       // Invalid: notespct > 100
-		{"pid": testPID, "song_id": 100, "role_id": 1, "score": 1000, "stars": 5, "diff_id": 2, "notespct": 95},        // Valid score
+		{"pid": testPID, "song_id": 0, "role_id": 1, "score": 1000, "stars": 5, "diff_id": 2, "notespct": 95},    // Invalid: song_id = 0
+		{"pid": testPID, "song_id": 100, "role_id": 15, "score": 1000, "stars": 5, "diff_id": 2, "notespct": 95}, // Invalid: role_id > 10
+		{"pid": testPID, "song_id": 100, "role_id": 1, "score": 0, "stars": 5, "diff_id": 2, "notespct": 95},     // Invalid: score <= 0
+		{"pid": testPID, "song_id": 100, "role_id": 1, "score": -100, "stars": 5, "diff_id": 2, "notespct": 95},  // Invalid: score < 0
+		{"pid": testPID, "song_id": 100, "role_id": 1, "score": 1000, "stars": 7, "diff_id": 2, "notespct": 95},  // Invalid: stars > 6
+		{"pid": testPID, "song_id": 100, "role_id": 1, "score": 1000, "stars": 5, "diff_id": 5, "notespct": 95},  // Invalid: diff_id > 4
+		{"pid": testPID, "song_id": 100, "role_id": 1, "score": 1000, "stars": 5, "diff_id": 2, "notespct": 105}, // Invalid: notespct > 100
+		{"pid": testPID, "song_id": 100, "role_id": 1, "score": 1000, "stars": 5, "diff_id": 2, "notespct": 95},  // Valid score
 	}
 
 	var insertedIDs []primitive.ObjectID
@@ -463,15 +465,15 @@ func TestDeleteExpiredBattles_BattleTypes(t *testing.T) {
 	// Type 1000, 1001, 1002 are battle types that should be checked
 	// Other types should be ignored
 	testBattles := []struct {
-		setlistID int
-		battleType int
+		setlistID   int
+		battleType  int
 		shouldCheck bool
 	}{
-		{777770, 1000, true},  // Should be checked
-		{777771, 1001, true},  // Should be checked
-		{777772, 1002, true},  // Should be checked (Harmonix)
-		{777773, 0, false},    // Regular setlist, should be ignored
-		{777774, 100, false},  // Other type, should be ignored
+		{777770, 1000, true}, // Should be checked
+		{777771, 1001, true}, // Should be checked
+		{777772, 1002, true}, // Should be checked (Harmonix)
+		{777773, 0, false},   // Regular setlist, should be ignored
+		{777774, 100, false}, // Other type, should be ignored
 	}
 
 	for _, tb := range testBattles {
@@ -511,5 +513,81 @@ func TestDeleteExpiredBattles_BattleTypes(t *testing.T) {
 
 		// Cleanup
 		setlistsCollection.DeleteMany(ctx, bson.M{"setlist_id": tb.setlistID})
+	}
+}
+
+func TestCleanupBannedUserScores(t *testing.T) {
+	// Setup
+	configCollection := database.GocentralDatabase.Collection("config")
+	scoresCollection := database.GocentralDatabase.Collection("scores")
+
+	bannedUser := "BannedUserTest"
+	bannedPID := 99999
+
+	usersCollection := database.GocentralDatabase.Collection("users")
+	usersCollection.InsertOne(context.TODO(), bson.M{"pid": bannedPID, "username": bannedUser})
+	defer usersCollection.DeleteOne(context.TODO(), bson.M{"pid": bannedPID})
+
+	// Add to config ban list (Permanent ban)
+	_, err := configCollection.UpdateOne(context.TODO(), bson.M{}, bson.D{
+		{"$push", bson.D{
+			{"banned_players", models.BannedPlayer{
+				Username:  bannedUser,
+				Reason:    "Test Ban",
+				ExpiresAt: time.Time{}, // Zero time = permanent
+				CreatedAt: time.Now(),
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Failed to add ban: %v", err)
+	}
+	// Ensure we clean up the ban after test
+	defer configCollection.UpdateOne(context.TODO(), bson.M{}, bson.M{
+		"$pull": bson.M{"banned_players": bson.M{"username": bannedUser}},
+	})
+
+	insertScoreForPID(t, bannedPID)
+	insertScoreForPID(t, bannedPID)
+
+	normalUser := "NormalUserTest"
+	normalPID := 88888
+	usersCollection.InsertOne(context.TODO(), bson.M{"pid": normalPID, "username": normalUser})
+	defer usersCollection.DeleteOne(context.TODO(), bson.M{"pid": normalPID})
+	insertScoreForPID(t, normalPID)
+
+	// Force cache invalidation to ensure we pick up the new ban
+	database.InvalidateConfigCache()
+
+	database.CleanupBannedUserScores()
+
+	// Check banned user scores are gone
+	count, err := scoresCollection.CountDocuments(context.TODO(), bson.M{"pid": bannedPID})
+	if err != nil {
+		t.Fatalf("Failed to count scores: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected 0 scores for banned user, got %d", count)
+	}
+
+	// Check normal user scores remain
+	count, err = scoresCollection.CountDocuments(context.TODO(), bson.M{"pid": normalPID})
+	if err != nil {
+		t.Fatalf("Failed to count scores: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("Expected 1 score for normal user, got %d", count)
+	}
+}
+
+func insertScoreForPID(t *testing.T, pid int) {
+	scoresCollection := database.GocentralDatabase.Collection("scores")
+	_, err := scoresCollection.InsertOne(context.TODO(), models.Score{
+		OwnerPID: pid,
+		Score:    12345,
+		SongID:   1,
+	})
+	if err != nil {
+		t.Fatalf("Failed to insert score: %v", err)
 	}
 }

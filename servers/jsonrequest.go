@@ -1,6 +1,8 @@
 package servers
 
 import (
+	"log"
+	"rb3server/database"
 	"rb3server/protocols/jsonproto"
 	"rb3server/quazal"
 
@@ -15,6 +17,13 @@ func JSONRequest(err error, client *nex.Client, callID uint32, rawJson string) {
 	validationRes, _ := ValidateClientPID(SecureServer, client, callID, nexproto.JsonProtocolID)
 
 	if !validationRes {
+		return
+	}
+
+	// Check if the user is banned
+	if database.IsPIDBanned(int(client.PlayerID())) {
+		log.Printf("Banned user %s (PID %d) attempted to make a JSON request. Denying access.\n", client.Username, client.PlayerID())
+		SendErrorCode(SecureServer, client, nexproto.JsonProtocolID, callID, quazal.AccessDenied)
 		return
 	}
 
@@ -52,6 +61,12 @@ func JSONRequest(err error, client *nex.Client, callID uint32, rawJson string) {
 }
 
 func JSONRequest2(err error, client *nex.Client, callID uint32, rawJson string) {
+
+	// Check if the user is banned
+	if database.IsPIDBanned(int(client.PlayerID())) {
+		// Just perform no-op/return for banned users on this telemetry endpoint
+		return
+	}
 
 	// we don't need to actually respond with any JSON here, the official servers just sent an empty response
 	// this method was exclusively for telemetry

@@ -10,7 +10,7 @@ import (
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
 )
 
-// ValidateClientPID checks if the client has a valid, non-Master PID
+// ValidateClientPID checks if the client has a valid, unbanned non-Master PID
 func ValidateNonMasterClientPID(server *nex.Server, client *nex.Client, callID uint32, protocolId int) (bool, error) {
 	// Check that the claimed PID has logged in
 	hasLoggedIn, err := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), client.PlayerID())
@@ -20,7 +20,7 @@ func ValidateNonMasterClientPID(server *nex.Server, client *nex.Client, callID u
 		return false, err
 	}
 
-	if !hasLoggedIn || client.PlayerID() == 0 || database.IsPIDAMasterUser(int(client.PlayerID())) {
+	if !hasLoggedIn || client.PlayerID() == 0 || database.IsPIDAMasterUser(int(client.PlayerID())) || database.IsPIDBanned(int(client.PlayerID())) {
 		log.Println("Client is attempting to perform a privileged action without a valid server-assigned PID, rejecting call")
 		SendErrorCode(server, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
 		return false, nil

@@ -93,6 +93,10 @@ type UnbanPlayerRequest struct {
 	Username string `json:"username"`
 }
 
+type DeletePlayerScoresRequest struct {
+	Username string `json:"username"`
+}
+
 func AddStandardHeaders(writer http.ResponseWriter) {
 	headers := map[string]string{
 		"Server":                      "GoCentral",
@@ -887,6 +891,41 @@ func UnbanPlayerHandler(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"message": "Player " + req.Username + "'s most recent ban has been expired.",
+	})
+}
+
+// Handles deleting all scores for a specific player.
+func DeletePlayerScoresHandler(w http.ResponseWriter, r *http.Request) {
+	var req DeletePlayerScoresRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	if req.Username == "" {
+		sendError(w, http.StatusBadRequest, "Username is required")
+		return
+	}
+
+	pid := database.GetPIDForUsername(req.Username)
+	if pid == 0 {
+		sendError(w, http.StatusNotFound, "User not found")
+		return
+	}
+
+	scoresCollection := database.GocentralDatabase.Collection("scores")
+	res, err := scoresCollection.DeleteMany(r.Context(), bson.M{"pid": pid})
+
+	if err != nil {
+		log.Printf("ERROR: could not delete scores for user %s: %v", req.Username, err)
+		sendError(w, http.StatusInternalServerError, "Failed to delete user scores")
+		return
+	}
+
+	log.Printf("Deleted %d scores for user %s (PID %d)", res.DeletedCount, req.Username, pid)
+	sendJSON(w, http.StatusOK, map[string]interface{}{
+		"success":        true,
+		"scores_deleted": res.DeletedCount,
 	})
 }
 

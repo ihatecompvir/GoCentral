@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"rb3server/database"
+	"rb3server/models"
 	"rb3server/restapi"
 	"testing"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Helper to make a request and return the response
@@ -1032,3 +1034,66 @@ func TestAdminEndpoints_RequireAuth(t *testing.T) {
 
 	t.Log("AdminEndpoints: all admin endpoints properly require authentication")
 }
+
+func TestDeletePlayerScoresHandler(t *testing.T) {
+	configCollection := database.GocentralDatabase.Collection("config")
+	// Setup Token
+	token := "delete-scores-admin-token"
+	ctx := context.Background()
+
+	var originalConfig struct {
+		AdminAPIToken string `bson:"admin_api_token"`
+	}
+	err := configCollection.FindOne(ctx, bson.M{}).Decode(&originalConfig)
+	if err == mongo.ErrNoDocuments {
+		// Insert default config
+		configCollection.InsertOne(ctx, bson.M{"admin_api_token": token, "last_pid": 1000})
+	} else {
+		configCollection.UpdateOne(ctx, bson.M{}, bson.M{"$set": bson.M{"admin_api_token": token}})
+	}
+	database.InvalidateConfigCache()
+	defer func() {
+		configCollection.UpdateOne(ctx, bson.M{}, bson.M{"$set": bson.M{"admin_api_token": originalConfig.AdminAPIToken}})
+		database.InvalidateConfigCache()
+	}()
+
+	// Setup Test User
+	testUser := "ScoreDeleteTestUser"
+	testPID := 77777
+	usersCollection := database.GocentralDatabase.Collection("users")
+	usersCollection.InsertOne(ctx, bson.M{"pid": testPID, "username": testUser})
+	defer usersCollection.DeleteOne(ctx, bson.M{"pid": testPID})
+
+	// Setup Scores
+	scoresCollection := database.GocentralDatabase.Collection("scores")
+	scoresCollection.InsertOne(ctx, models.Score{OwnerPID: testPID, Score: 100})
+	scoresCollection.InsertOne(ctx, models.Score{OwnerPID: testPID, Score: 200})
+
+	// Verify scores exist
+	count, _ := scoresCollection.CountDocuments(ctx, bson.M{"pid": testPID})
+	if count != 2 {
+		t.Fatalf("Failed to setup test scores, expected 2, got %d", count)
+	}
+
+	// Make Request
+	reqBody := restapi.DeletePlayerScoresRequest{Username: testUser}
+	bodyBytes, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest("DELETE", "/admin/players/scores", bytes.NewBuffer(bodyBytes))
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	rr := httptest.NewRecorder()
+	handler := restapi.AdminTokenAuth(http.HandlerFunc(restapi.DeletePlayerScoresHandler))
+	handler.ServeHTTP(rr, req)
+
+	// Verify Response
+	if rr.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify Scores Deleted
+	count, _ = scoresCollection.CountDocuments(ctx, bson.M{"pid": testPID})
+	if count != 0 {
+		t.Errorf("Expected 0 scores after deletion, got %d", count)
+	}
+}
+

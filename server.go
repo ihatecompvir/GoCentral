@@ -156,6 +156,7 @@ func main() {
 			r.Get("/players/banned", restapi.ListBannedPlayersHandler)
 			r.Post("/players/ban", restapi.BanPlayerHandler)
 			r.Post("/players/unban", restapi.UnbanPlayerHandler)
+			r.Delete("/players/scores", restapi.DeletePlayerScoresHandler)
 		})
 
 		httpPort := os.Getenv("HTTPPORT")
@@ -197,6 +198,7 @@ func main() {
 					database.PruneOldSessions()
 					database.CleanupInvalidScores()
 					database.DeleteExpiredBattles()
+					database.CleanupBannedUserScores()
 				case <-quit:
 					return
 				}
