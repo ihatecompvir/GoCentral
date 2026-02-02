@@ -807,7 +807,7 @@ func BanPlayerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newBan := models.BannedPlayer{
-		Username:  req.Username,
+		Username:  strings.ToLower(req.Username),
 		Reason:    req.Reason,
 		ExpiresAt: expiresAt,
 		CreatedAt: time.Now(),
@@ -853,11 +853,11 @@ func UnbanPlayerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// foind the most recent active ban for this user
+	// find the most recent active ban for this user (case-insensitive)
 	latestBanIndex := -1
 	var latestBanTime time.Time
 	for i, ban := range config.BannedPlayers {
-		if ban.Username == req.Username {
+		if strings.EqualFold(ban.Username, req.Username) {
 			// check if it is still active
 			if ban.ExpiresAt.IsZero() || time.Now().Before(ban.ExpiresAt) {
 				// verify if it's the latest one

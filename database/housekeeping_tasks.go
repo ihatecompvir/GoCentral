@@ -211,3 +211,51 @@ func CleanupBannedUserScores() {
 	}
 }
 
+func CleanupInvalidUsers() {
+	usersCollection := GocentralDatabase.Collection("users")
+	scoresCollection := GocentralDatabase.Collection("scores")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Find all users with empty usernames
+	cursor, err := usersCollection.Find(ctx, bson.M{"username": ""})
+	if err != nil {
+		log.Println("Could not find invalid users:", err)
+		return
+	}
+	defer cursor.Close(ctx)
+
+	var invalidUsers []models.User
+	if err = cursor.All(ctx, &invalidUsers); err != nil {
+		log.Println("Could not decode invalid users:", err)
+		return
+	}
+
+	deletedUserCount := 0
+	deletedScoreCount := 0
+
+	for _, user := range invalidUsers {
+		// Delete all scores for this user
+		scoresResult, err := scoresCollection.DeleteMany(ctx, bson.M{"pid": user.PID})
+		if err != nil {
+			log.Printf("Could not delete scores for invalid user PID %d: %v\n", user.PID, err)
+			continue
+		}
+		deletedScoreCount += int(scoresResult.DeletedCount)
+
+		// Delete the user
+		userResult, err := usersCollection.DeleteOne(ctx, bson.M{"pid": user.PID})
+		if err != nil {
+			log.Printf("Could not delete invalid user PID %d: %v\n", user.PID, err)
+			continue
+		}
+		if userResult.DeletedCount > 0 {
+			deletedUserCount++
+		}
+	}
+
+	if deletedUserCount > 0 || deletedScoreCount > 0 {
+		log.Printf("Deleted %d invalid users and %d associated scores.\n", deletedUserCount, deletedScoreCount)
+	}
+}
+

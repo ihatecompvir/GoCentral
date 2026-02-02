@@ -31,7 +31,7 @@ func LookupOrCreateAccount(err error, client *nex.Client, callID uint32, usernam
 
 	var user models.User
 
-	if result := users.FindOne(context.TODO(), bson.M{"username": username}).Decode(&user); result != nil {
+	if result := users.FindOne(context.TODO(), database.CaseInsensitiveUsername(username)).Decode(&user); result != nil {
 		log.Printf("%s has never connected before - create DB entry\n", username)
 
 		guid, err := generateGUID()
@@ -70,7 +70,7 @@ func LookupOrCreateAccount(err error, client *nex.Client, callID uint32, usernam
 		// make sure we actually set the server-assigned PID to the new one when it is created
 		client.SetPlayerID(user.PID)
 
-		if err = users.FindOne(context.TODO(), bson.M{"username": username}).Decode(&user); err != nil {
+		if err = users.FindOne(context.TODO(), database.CaseInsensitiveUsername(username)).Decode(&user); err != nil {
 
 			if err != nil {
 				log.Printf("Could not find newly created user: %s\n", err)

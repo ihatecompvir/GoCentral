@@ -150,10 +150,10 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 		return
 	}
 
-	// check if they've got any bans
+	// check if they've got any bans (case-insensitive)
 	var userBans []models.BannedPlayer
 	for _, bannedPlayer := range config.BannedPlayers {
-		if bannedPlayer.Username == username {
+		if strings.EqualFold(bannedPlayer.Username, username) {
 			userBans = append(userBans, bannedPlayer)
 		}
 	}
@@ -178,7 +178,7 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 
 	switch machineType {
 	case 0, 1:
-		if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
+		if err = users.FindOne(nil, database.CaseInsensitiveUsername(username)).Decode(&user); err != nil {
 			log.Printf("%s has never connected before - create DB entry\n", username)
 
 			guid, err := generateGUID()
@@ -199,7 +199,7 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 				{Key: "link_code", Value: database.GenerateLinkCode(10)},
 			})
 
-			if err = users.FindOne(nil, bson.M{"username": username}).Decode(&user); err != nil {
+			if err = users.FindOne(nil, database.CaseInsensitiveUsername(username)).Decode(&user); err != nil {
 				log.Printf("Could not find newly-created user %s: %s\n", username, err)
 				SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.OperationError)
 				return
@@ -223,7 +223,7 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 
 			// only perform update if there are fields to update
 			if len(updateFields) > 0 {
-				_, err = users.UpdateOne(context.TODO(), bson.M{"username": username}, bson.D{
+				_, err = users.UpdateOne(context.TODO(), database.CaseInsensitiveUsername(username), bson.D{
 					{"$set", updateFields},
 				})
 				if err != nil {

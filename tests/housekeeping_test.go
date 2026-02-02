@@ -591,3 +591,138 @@ func insertScoreForPID(t *testing.T, pid int) {
 		t.Fatalf("Failed to insert score: %v", err)
 	}
 }
+
+// Tests that CleanupBannedUserScores works with case-insensitive username matching
+func TestCleanupBannedUserScores_CaseInsensitive(t *testing.T) {
+	ctx := context.Background()
+	configCollection := database.GocentralDatabase.Collection("config")
+	scoresCollection := database.GocentralDatabase.Collection("scores")
+	usersCollection := database.GocentralDatabase.Collection("users")
+
+	// Create a user with mixed case username
+	testPID := 77777
+	actualUsername := "CaseSensitivePlayer" // The actual username in the database
+
+	_, err := usersCollection.InsertOne(ctx, bson.M{
+		"pid":      testPID,
+		"username": actualUsername,
+	})
+	if err != nil {
+		t.Fatalf("Failed to insert test user: %v", err)
+	}
+	defer usersCollection.DeleteOne(ctx, bson.M{"pid": testPID})
+
+	// Add ban with DIFFERENT case than the actual username
+	bannedUsername := "CASESENSITIVEPLAYER" // All uppercase
+
+	_, err = configCollection.UpdateOne(ctx, bson.M{}, bson.M{
+		"$push": bson.M{"banned_players": models.BannedPlayer{
+			Username:  bannedUsername, // Different case!
+			Reason:    "Test case-insensitive score cleanup",
+			ExpiresAt: time.Time{}, // Permanent
+			CreatedAt: time.Now(),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Failed to add ban: %v", err)
+	}
+	defer configCollection.UpdateOne(ctx, bson.M{}, bson.M{
+		"$pull": bson.M{"banned_players": bson.M{"username": bannedUsername}},
+	})
+
+	// Insert scores for the banned user
+	insertScoreForPID(t, testPID)
+	insertScoreForPID(t, testPID)
+	insertScoreForPID(t, testPID)
+
+	// Verify scores exist before cleanup
+	initialCount, _ := scoresCollection.CountDocuments(ctx, bson.M{"pid": testPID})
+	if initialCount != 3 {
+		t.Fatalf("Expected 3 scores before cleanup, got %d", initialCount)
+	}
+
+	// Invalidate cache to pick up the new ban
+	database.InvalidateConfigCache()
+
+	// Run the cleanup
+	database.CleanupBannedUserScores()
+
+	// Verify scores were deleted even though the case didn't match
+	finalCount, _ := scoresCollection.CountDocuments(ctx, bson.M{"pid": testPID})
+	if finalCount != 0 {
+		t.Errorf("Expected 0 scores after cleanup (case-insensitive match), got %d", finalCount)
+		// Clean up any remaining scores
+		scoresCollection.DeleteMany(ctx, bson.M{"pid": testPID})
+	} else {
+		t.Logf("Successfully deleted scores for user %q when ban list had %q", actualUsername, bannedUsername)
+	}
+}
+
+// Tests various case combinations for banned user score cleanup
+func TestCleanupBannedUserScores_CaseVariations(t *testing.T) {
+	ctx := context.Background()
+	configCollection := database.GocentralDatabase.Collection("config")
+	scoresCollection := database.GocentralDatabase.Collection("scores")
+	usersCollection := database.GocentralDatabase.Collection("users")
+
+	testCases := []struct {
+		name           string
+		actualUsername string
+		bannedUsername string
+		pid            int
+	}{
+		{"lowercase ban, uppercase user", "LOUDUSER", "louduser", 66661},
+		{"uppercase ban, lowercase user", "quietuser", "QUIETUSER", 66662},
+		{"mixed ban, different mixed user", "MiXeDuSeR", "mIxEdUsEr", 66663},
+		{"exact match", "ExactMatch", "ExactMatch", 66664},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create user
+			_, err := usersCollection.InsertOne(ctx, bson.M{
+				"pid":      tc.pid,
+				"username": tc.actualUsername,
+			})
+			if err != nil {
+				t.Fatalf("Failed to insert test user: %v", err)
+			}
+			defer usersCollection.DeleteOne(ctx, bson.M{"pid": tc.pid})
+
+			// Add ban
+			_, err = configCollection.UpdateOne(ctx, bson.M{}, bson.M{
+				"$push": bson.M{"banned_players": models.BannedPlayer{
+					Username:  tc.bannedUsername,
+					Reason:    "Test case variation",
+					ExpiresAt: time.Time{},
+					CreatedAt: time.Now(),
+				}},
+			})
+			if err != nil {
+				t.Fatalf("Failed to add ban: %v", err)
+			}
+			defer configCollection.UpdateOne(ctx, bson.M{}, bson.M{
+				"$pull": bson.M{"banned_players": bson.M{"username": tc.bannedUsername}},
+			})
+
+			// Insert score
+			insertScoreForPID(t, tc.pid)
+
+			// Invalidate cache
+			database.InvalidateConfigCache()
+
+			// Run cleanup
+			database.CleanupBannedUserScores()
+
+			// Check score was deleted
+			count, _ := scoresCollection.CountDocuments(ctx, bson.M{"pid": tc.pid})
+			if count != 0 {
+				t.Errorf("Expected scores to be deleted for user %q (ban: %q), but %d remain",
+					tc.actualUsername, tc.bannedUsername, count)
+				scoresCollection.DeleteMany(ctx, bson.M{"pid": tc.pid})
+			} else {
+				t.Logf("Scores deleted: user=%q, ban=%q", tc.actualUsername, tc.bannedUsername)
+			}
+		})
+	}
+}

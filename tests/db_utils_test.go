@@ -5,9 +5,11 @@ import (
 	"log"
 	"os"
 	"rb3server/database"
+	"strings"
 	"testing"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -334,6 +336,126 @@ func TestGetPIDForUsername_Missing(t *testing.T) {
 		t.Errorf("Expected PID %d for missing username %q, got %d", expectedPID, username, pid)
 	}
 	t.Logf("PID for missing username %q: %d", username, pid)
+}
+
+// Tests that GetPIDForUsername is case-insensitive
+func TestGetPIDForUsername_CaseInsensitive(t *testing.T) {
+	expectedPID := 500
+
+	testCases := []struct {
+		name     string
+		username string
+	}{
+		{"Exact case", "testuser"},
+		{"All uppercase", "TESTUSER"},
+		{"All lowercase", "testuser"},
+		{"Mixed case", "TestUser"},
+		{"Alternating case", "tEsTuSeR"},
+		{"First letter uppercase", "Testuser"},
+		{"Last letter uppercase", "testuseR"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			pid := database.GetPIDForUsername(tc.username)
+			if pid != expectedPID {
+				t.Errorf("Expected PID %d for username %q, got %d", expectedPID, tc.username, pid)
+			} else {
+				t.Logf("Successfully found PID %d for username %q", pid, tc.username)
+			}
+		})
+	}
+}
+
+// Tests that CaseInsensitiveUsername properly escapes regex special characters
+func TestCaseInsensitiveUsername_SpecialCharacters(t *testing.T) {
+	// Insert a user with special regex characters in the username
+	ctx := context.Background()
+	usersCollection := database.GocentralDatabase.Collection("users")
+
+	// Insert user with regex special characters
+	_, err := usersCollection.InsertOne(ctx, map[string]interface{}{
+		"pid":      700,
+		"username": "test.user+name",
+	})
+	if err != nil {
+		t.Fatalf("Failed to insert test user with special chars: %v", err)
+	}
+	defer usersCollection.DeleteOne(ctx, map[string]interface{}{"pid": 700})
+
+	testCases := []struct {
+		name        string
+		username    string
+		expectedPID int
+	}{
+		{"Exact match with special chars", "test.user+name", 700},
+		{"Case insensitive with special chars", "TEST.USER+NAME", 700},
+		{"Mixed case with special chars", "Test.User+Name", 700},
+		// These should NOT match because . and + are escaped
+		{"Dot as wildcard should not match", "testXuser+name", 0},
+		{"Plus as quantifier should not match", "test.userrrname", 0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			pid := database.GetPIDForUsername(tc.username)
+			if pid != tc.expectedPID {
+				t.Errorf("Expected PID %d for username %q, got %d", tc.expectedPID, tc.username, pid)
+			} else {
+				t.Logf("Got expected PID %d for username %q", pid, tc.username)
+			}
+		})
+	}
+}
+
+// Tests that CaseInsensitiveUsername handles various edge cases
+func TestCaseInsensitiveUsername_EdgeCases(t *testing.T) {
+	ctx := context.Background()
+	usersCollection := database.GocentralDatabase.Collection("users")
+
+	// Insert users with edge case usernames
+	edgeCaseUsers := []struct {
+		pid      int
+		username string
+	}{
+		{701, "user(with)parens"},
+		{702, "user[with]brackets"},
+		{703, "user{with}braces"},
+		{704, "user$with^special*chars"},
+		{705, "user\\with\\backslash"},
+	}
+
+	for _, user := range edgeCaseUsers {
+		_, err := usersCollection.InsertOne(ctx, map[string]interface{}{
+			"pid":      user.pid,
+			"username": user.username,
+		})
+		if err != nil {
+			t.Fatalf("Failed to insert edge case user %q: %v", user.username, err)
+		}
+	}
+	defer func() {
+		for _, user := range edgeCaseUsers {
+			usersCollection.DeleteOne(ctx, map[string]interface{}{"pid": user.pid})
+		}
+	}()
+
+	for _, user := range edgeCaseUsers {
+		t.Run(user.username, func(t *testing.T) {
+			// Test exact match
+			pid := database.GetPIDForUsername(user.username)
+			if pid != user.pid {
+				t.Errorf("Exact match: Expected PID %d for username %q, got %d", user.pid, user.username, pid)
+			}
+
+			// Test uppercase version
+			upperUsername := strings.ToUpper(user.username)
+			pid = database.GetPIDForUsername(upperUsername)
+			if pid != user.pid {
+				t.Errorf("Uppercase: Expected PID %d for username %q, got %d", user.pid, upperUsername, pid)
+			}
+		})
+	}
 }
 
 // Gets the console prefixed username for a given PID from the test database
@@ -996,6 +1118,101 @@ func TestGetCoolFact(t *testing.T) {
 	// Should have at least 1 fact (could be same if random keeps returning same number)
 	if len(facts) == 0 {
 		t.Error("Expected at least one fact to be returned")
+	}
+}
+
+// Tests that IsPIDBanned is case-insensitive
+func TestIsPIDBanned_CaseInsensitive(t *testing.T) {
+	ctx := context.Background()
+	configCollection := database.GocentralDatabase.Collection("config")
+	usersCollection := database.GocentralDatabase.Collection("users")
+
+	// Create a test user with mixed case username
+	testPID := 800
+	testUsername := "MixedCaseUser"
+	_, err := usersCollection.InsertOne(ctx, map[string]interface{}{
+		"pid":      testPID,
+		"username": testUsername,
+	})
+	if err != nil {
+		t.Fatalf("Failed to insert test user: %v", err)
+	}
+	defer usersCollection.DeleteOne(ctx, map[string]interface{}{"pid": testPID})
+
+	// Add a ban with DIFFERENT case than the actual username
+	bannedUsername := "MIXEDCASEUSER" // All uppercase, but user is "MixedCaseUser"
+	_, err = configCollection.UpdateOne(ctx, bson.M{}, bson.M{
+		"$push": bson.M{"banned_players": bson.M{
+			"username":   bannedUsername,
+			"reason":     "Test case-insensitive ban",
+			"expires_at": time.Time{}, // Permanent
+			"created_at": time.Now(),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Failed to add ban: %v", err)
+	}
+	defer configCollection.UpdateOne(ctx, bson.M{}, bson.M{
+		"$pull": bson.M{"banned_players": bson.M{"username": bannedUsername}},
+	})
+
+	// Invalidate cache to pick up the new ban
+	database.InvalidateConfigCache()
+
+	// Test that the user is detected as banned even with different case
+	isBanned := database.IsPIDBanned(testPID)
+	if !isBanned {
+		t.Errorf("Expected PID %d (username %q) to be banned when ban list has %q", testPID, testUsername, bannedUsername)
+	} else {
+		t.Logf("Successfully detected PID %d as banned (username %q matched ban %q)", testPID, testUsername, bannedUsername)
+	}
+}
+
+// Tests that IsUsernameBanned is case-insensitive
+func TestIsUsernameBanned_CaseInsensitive(t *testing.T) {
+	ctx := context.Background()
+	configCollection := database.GocentralDatabase.Collection("config")
+
+	// Add a ban with specific casing
+	bannedUsername := "BannedTestPlayer"
+	_, err := configCollection.UpdateOne(ctx, bson.M{}, bson.M{
+		"$push": bson.M{"banned_players": bson.M{
+			"username":   bannedUsername,
+			"reason":     "Test case-insensitive ban check",
+			"expires_at": time.Time{}, // Permanent
+			"created_at": time.Now(),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Failed to add ban: %v", err)
+	}
+	defer configCollection.UpdateOne(ctx, bson.M{}, bson.M{
+		"$pull": bson.M{"banned_players": bson.M{"username": bannedUsername}},
+	})
+
+	// Invalidate cache
+	database.InvalidateConfigCache()
+
+	testCases := []struct {
+		name     string
+		username string
+	}{
+		{"Exact case", "BannedTestPlayer"},
+		{"All lowercase", "bannedtestplayer"},
+		{"All uppercase", "BANNEDTESTPLAYER"},
+		{"Mixed case", "bANNEDtESTpLAYER"},
+		{"Alternating", "BaNnEdTeStPlAyEr"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			isBanned := database.IsUsernameBanned(tc.username)
+			if !isBanned {
+				t.Errorf("Expected username %q to be detected as banned (ban list has %q)", tc.username, bannedUsername)
+			} else {
+				t.Logf("Successfully detected %q as banned", tc.username)
+			}
+		})
 	}
 }
 

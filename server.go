@@ -199,6 +199,7 @@ func main() {
 					database.CleanupInvalidScores()
 					database.DeleteExpiredBattles()
 					database.CleanupBannedUserScores()
+					database.CleanupInvalidUsers()
 				case <-quit:
 					return
 				}

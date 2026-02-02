@@ -7,6 +7,7 @@ import (
 	"rb3server/models"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +15,14 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+// Returns a case-insensitive regex filter for username queries
+func CaseInsensitiveUsername(username string) bson.M {
+	return bson.M{"username": bson.M{
+		"$regex":   "^" + regexp.QuoteMeta(username) + "$",
+		"$options": "i",
+	}}
+}
 
 // config cache
 var (
@@ -178,13 +187,13 @@ func GetUsernamesByPIDs(ctx context.Context, database *mongo.Database, pids []in
 	return usernameMap, cursor.Err()
 }
 
-// returns the pid for a given username
+// returns the pid for a given username (case-insensitive)
 func GetPIDForUsername(username string) int {
 	var user models.User
 
 	usersCollection := GocentralDatabase.Collection("users")
 
-	res := usersCollection.FindOne(nil, bson.M{"username": username})
+	res := usersCollection.FindOne(nil, CaseInsensitiveUsername(username))
 
 	if res.Err() != nil {
 		return 0
@@ -560,7 +569,7 @@ func GetMachineIDFromUsername(username string) int {
 
 }
 
-// checks if a PID is currently banned
+// checks if a PID is currently banned (case-insensitive username comparison)
 func IsPIDBanned(pid int) bool {
 	config, err := GetCachedConfig(context.Background())
 	if err != nil {
@@ -571,7 +580,7 @@ func IsPIDBanned(pid int) bool {
 	username := GetUsernameForPID(pid)
 
 	for _, bannedPlayer := range config.BannedPlayers {
-		if bannedPlayer.Username == username {
+		if strings.EqualFold(bannedPlayer.Username, username) {
 			if bannedPlayer.ExpiresAt.IsZero() || time.Now().Before(bannedPlayer.ExpiresAt) {
 				return true
 			}
@@ -581,7 +590,7 @@ func IsPIDBanned(pid int) bool {
 	return false
 }
 
-// checks if a username is currently banned
+// checks if a username is currently banned (case-insensitive comparison)
 func IsUsernameBanned(username string) bool {
 	config, err := GetCachedConfig(context.Background())
 	if err != nil {
@@ -589,7 +598,7 @@ func IsUsernameBanned(username string) bool {
 		return false
 	}
 	for _, bannedPlayer := range config.BannedPlayers {
-		if bannedPlayer.Username == username {
+		if strings.EqualFold(bannedPlayer.Username, username) {
 			if bannedPlayer.ExpiresAt.IsZero() || time.Now().Before(bannedPlayer.ExpiresAt) {
 				return true
 			}
