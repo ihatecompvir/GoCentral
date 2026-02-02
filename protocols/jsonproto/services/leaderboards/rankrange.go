@@ -65,17 +65,18 @@ func (service RankRangeGetService) Handle(data string, database *mongo.Database,
 		return "", err
 	}
 
-	if req.LBType == 1 {
-		// TODO: add support for friends leaderboard now that friends is implemented on multiple platforms
-		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
-	}
+	// fetch friends list for IsFriend marking and friends leaderboard filtering
+	friendsMap, _ := db.GetFriendsForPID(context.Background(), database, req.PID000)
 
 	scoresCollection := database.Collection("scores")
 
 	startRank := int64(req.StartRank - 1)
 	endRank := int64((req.EndRank - req.StartRank) - 1)
 
-	cursor, err := scoresCollection.Find(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID}, &options.FindOptions{
+	// build the query filter
+	filter := bson.M{"song_id": req.SongID, "role_id": req.RoleID}
+
+	cursor, err := scoresCollection.Find(context.TODO(), filter, &options.FindOptions{
 		Skip:  &startRank,
 		Limit: &endRank,
 		Sort:  bson.M{"score": -1},
@@ -133,6 +134,11 @@ func (service RankRangeGetService) Handle(data string, database *mongo.Database,
 			}
 		}
 
+		isFriend := 0
+		if friendsMap[score.OwnerPID] {
+			isFriend = 1
+		}
+
 		res = append(res, RankRangeGetResponse{
 			PID:          score.OwnerPID,
 			Name:         name,
@@ -142,7 +148,7 @@ func (service RankRangeGetService) Handle(data string, database *mongo.Database,
 			IsPercentile: 0,
 			InstMask:     score.InstrumentMask,
 			NotesPct:     score.NotesPercent,
-			IsFriend:     0,
+			IsFriend:     isFriend,
 			UnnamedBand:  0,
 			PGUID:        "",
 			ORank:        startIdx,

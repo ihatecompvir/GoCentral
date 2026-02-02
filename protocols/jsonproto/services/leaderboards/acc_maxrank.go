@@ -19,6 +19,7 @@ type AccMaxrankGetRequest struct {
 	MachineID   string `json:"machine_id"`
 	SessionGUID string `json:"session_guid"`
 	PID000      int    `json:"pid000"`
+	LBType      int    `json:"lb_type"`
 }
 
 type AccMaxrankGetResponse struct {
@@ -58,9 +59,11 @@ func (service AccMaxrankGetService) Handle(data string, database *mongo.Database
 		}})
 	}
 
+	accSlice := getAccomplishmentField(req.AccID, accomplishments)
+
 	// return the number of scores, aka the "max rank"
 	res := []AccMaxrankGetResponse{{
-		len(getAccomplishmentField(req.AccID, accomplishments)),
+		len(accSlice),
 	}}
 
 	return marshaler.MarshalResponse(service.Path(), res)

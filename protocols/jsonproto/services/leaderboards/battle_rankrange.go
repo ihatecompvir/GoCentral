@@ -63,6 +63,9 @@ func (service BattleRankRangeGetService) Handle(data string, database *mongo.Dat
 		return "", err
 	}
 
+	// fetch friends list for IsFriend marking
+	friendsMap, _ := db.GetFriendsForPID(context.Background(), database, req.PID000)
+
 	scoresCollection := database.Collection("scores")
 
 	startRank := int64(req.StartRank - 1)
@@ -125,6 +128,11 @@ func (service BattleRankRangeGetService) Handle(data string, database *mongo.Dat
 			}
 		}
 
+		isFriend := 0
+		if friendsMap[score.OwnerPID] {
+			isFriend = 1
+		}
+
 		res = append(res, BattleRankRangeGetResponse{
 			PID:          score.OwnerPID,
 			Name:         name,
@@ -134,7 +142,7 @@ func (service BattleRankRangeGetService) Handle(data string, database *mongo.Dat
 			IsPercentile: 0,
 			InstMask:     score.InstrumentMask,
 			NotesPct:     score.NotesPercent,
-			IsFriend:     0,
+			IsFriend:     isFriend,
 			UnnamedBand:  0,
 			PGUID:        "",
 			ORank:        startIdx,

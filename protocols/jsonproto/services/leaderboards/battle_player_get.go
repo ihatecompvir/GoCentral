@@ -63,7 +63,22 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 		return "", err
 	}
 
+	// fetch friends list for IsFriend marking
+	friendsMap, _ := db.GetFriendsForPID(context.Background(), database, req.PID000)
+
 	scoresCollection := database.Collection("scores")
+
+	// build the base query filter
+	baseFilter := bson.M{"battle_id": req.BattleID}
+
+	// for friends leaderboard, filter to only friends' scores
+	if req.LBMode == 1 {
+		friendPIDs := make([]int, 0, len(friendsMap))
+		for pid := range friendsMap {
+			friendPIDs = append(friendPIDs, pid)
+		}
+		baseFilter["pid"] = bson.M{"$in": friendPIDs}
+	}
 
 	var playerScore models.Score
 	err = scoresCollection.FindOne(context.TODO(), bson.M{"battle_id": req.BattleID, "pid": req.PID000}).Decode(&playerScore)
@@ -72,7 +87,7 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 	}
 
 	if err == mongo.ErrNoDocuments {
-		err = scoresCollection.FindOne(context.TODO(), bson.M{"battle_id": req.BattleID}, &options.FindOneOptions{
+		err = scoresCollection.FindOne(context.TODO(), baseFilter, &options.FindOneOptions{
 			Sort: bson.M{"score": -1},
 		}).Decode(&playerScore)
 		if err != nil && err != mongo.ErrNoDocuments {
@@ -80,7 +95,16 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 		}
 	}
 
-	playerScoreIdx, err := scoresCollection.CountDocuments(context.TODO(), bson.M{"battle_id": req.BattleID, "score": bson.M{"$gt": playerScore.Score}})
+	// count scores higher than player's score within the filtered set
+	countFilter := bson.M{"battle_id": req.BattleID, "score": bson.M{"$gt": playerScore.Score}}
+	if req.LBMode == 1 {
+		friendPIDs := make([]int, 0, len(friendsMap))
+		for pid := range friendsMap {
+			friendPIDs = append(friendPIDs, pid)
+		}
+		countFilter["pid"] = bson.M{"$in": friendPIDs}
+	}
+	playerScoreIdx, err := scoresCollection.CountDocuments(context.TODO(), countFilter)
 	if err != nil {
 		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
@@ -88,7 +112,7 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 	startRank := playerScoreIdx - (playerScoreIdx % 19)
 	limit := int64(19) // The limit is always the page size, not the end rank.
 
-	cursor, err := scoresCollection.Find(context.TODO(), bson.M{"battle_id": req.BattleID}, &options.FindOptions{
+	cursor, err := scoresCollection.Find(context.TODO(), baseFilter, &options.FindOptions{
 		Skip:  &startRank,
 		Limit: &limit,
 		Sort:  bson.M{"score": -1},
@@ -145,6 +169,11 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 			}
 		}
 
+		isFriend := 0
+		if friendsMap[score.OwnerPID] {
+			isFriend = 1
+		}
+
 		res = append(res, BattlePlayerGetResponse{
 			PID:          score.OwnerPID,
 			Name:         name,
@@ -154,7 +183,7 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 			IsPercentile: 0,
 			InstMask:     score.InstrumentMask,
 			NotesPct:     score.NotesPercent,
-			IsFriend:     0,
+			IsFriend:     isFriend,
 			UnnamedBand:  0,
 			PGUID:        "",
 			ORank:        int(idx),

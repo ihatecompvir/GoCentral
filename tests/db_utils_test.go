@@ -1263,3 +1263,267 @@ func TestIsPIDAMasterUser_NegativeCases(t *testing.T) {
 		}
 	})
 }
+
+// ============================================
+// GetFriendsForPID Tests
+// ============================================
+
+func TestGetFriendsForPID(t *testing.T) {
+	t.Run("User with friends", func(t *testing.T) {
+		// PID 500 has friends [501, 502]
+		friendsMap, err := database.GetFriendsForPID(context.Background(), database.GocentralDatabase, 500)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		// Should include self
+		if !friendsMap[500] {
+			t.Error("Expected friendsMap to include self (500)")
+		}
+
+		// Should include friends
+		if !friendsMap[501] {
+			t.Error("Expected friendsMap to include friend 501")
+		}
+		if !friendsMap[502] {
+			t.Error("Expected friendsMap to include friend 502")
+		}
+
+		// Should not include non-friends
+		if friendsMap[999] {
+			t.Error("Expected friendsMap to NOT include non-friend 999")
+		}
+
+		t.Logf("Friends map for PID 500: %v", friendsMap)
+	})
+
+	t.Run("User with no friends", func(t *testing.T) {
+		// PID 999 has no friends array
+		friendsMap, err := database.GetFriendsForPID(context.Background(), database.GocentralDatabase, 999)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		// Should include self
+		if !friendsMap[999] {
+			t.Error("Expected friendsMap to include self (999)")
+		}
+
+		// Should only have 1 entry (self)
+		if len(friendsMap) != 1 {
+			t.Errorf("Expected friendsMap to have 1 entry (self), got %d", len(friendsMap))
+		}
+	})
+
+	t.Run("Non-existent PID", func(t *testing.T) {
+		friendsMap, err := database.GetFriendsForPID(context.Background(), database.GocentralDatabase, 99999)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		// Should include self even if user doesn't exist
+		if !friendsMap[99999] {
+			t.Error("Expected friendsMap to include self (99999)")
+		}
+
+		// Should only have 1 entry (self)
+		if len(friendsMap) != 1 {
+			t.Errorf("Expected friendsMap to have 1 entry (self), got %d", len(friendsMap))
+		}
+	})
+
+	t.Run("Mutual friends", func(t *testing.T) {
+		// PID 501 and 502 are mutual friends with 500
+		friendsMap501, _ := database.GetFriendsForPID(context.Background(), database.GocentralDatabase, 501)
+		friendsMap502, _ := database.GetFriendsForPID(context.Background(), database.GocentralDatabase, 502)
+
+		// 501 should have 500 as a friend
+		if !friendsMap501[500] {
+			t.Error("Expected PID 501 to have 500 as a friend")
+		}
+
+		// 502 should have 500 as a friend
+		if !friendsMap502[500] {
+			t.Error("Expected PID 502 to have 500 as a friend")
+		}
+	})
+}
+
+// ============================================
+// Friends Leaderboard Tests
+// ============================================
+
+func TestFriendsLeaderboard_ScoreFiltering(t *testing.T) {
+	ctx := context.Background()
+	scoresCollection := database.GocentralDatabase.Collection("scores")
+
+	// Create test scores for different users
+	testScores := []map[string]interface{}{
+		{"pid": 500, "song_id": 9999, "role_id": 0, "score": 100000, "stars": 5, "diff_id": 3},
+		{"pid": 501, "song_id": 9999, "role_id": 0, "score": 90000, "stars": 4, "diff_id": 3},  // friend of 500
+		{"pid": 502, "song_id": 9999, "role_id": 0, "score": 80000, "stars": 4, "diff_id": 3},  // friend of 500
+		{"pid": 999, "song_id": 9999, "role_id": 0, "score": 95000, "stars": 5, "diff_id": 3},  // not a friend of 500
+	}
+
+	for _, score := range testScores {
+		_, err := scoresCollection.InsertOne(ctx, score)
+		if err != nil {
+			t.Fatalf("Failed to insert test score: %v", err)
+		}
+	}
+	defer func() {
+		scoresCollection.DeleteMany(ctx, bson.M{"song_id": 9999})
+	}()
+
+	// Get friends of PID 500
+	friendsMap, _ := database.GetFriendsForPID(ctx, database.GocentralDatabase, 500)
+
+	// Build filter for friends leaderboard
+	friendPIDs := make([]int, 0, len(friendsMap))
+	for pid := range friendsMap {
+		friendPIDs = append(friendPIDs, pid)
+	}
+	filter := bson.M{"song_id": 9999, "role_id": 0, "pid": bson.M{"$in": friendPIDs}}
+
+	// Count scores in friends leaderboard
+	count, err := scoresCollection.CountDocuments(ctx, filter)
+	if err != nil {
+		t.Fatalf("Failed to count scores: %v", err)
+	}
+
+	// Should only include 500, 501, 502 (not 999)
+	expectedCount := int64(3)
+	if count != expectedCount {
+		t.Errorf("Expected %d scores in friends leaderboard, got %d", expectedCount, count)
+	}
+
+	// Global leaderboard should have all 4 scores
+	globalCount, _ := scoresCollection.CountDocuments(ctx, bson.M{"song_id": 9999, "role_id": 0})
+	if globalCount != 4 {
+		t.Errorf("Expected 4 scores in global leaderboard, got %d", globalCount)
+	}
+
+	t.Logf("Friends leaderboard has %d scores, global has %d scores", count, globalCount)
+}
+
+func TestFriendsLeaderboard_RankCalculation(t *testing.T) {
+	ctx := context.Background()
+	scoresCollection := database.GocentralDatabase.Collection("scores")
+
+	// Create test scores for friends leaderboard ranking test
+	testScores := []map[string]interface{}{
+		{"pid": 500, "song_id": 9998, "role_id": 0, "score": 100000, "stars": 5, "diff_id": 3}, // rank 1 in friends
+		{"pid": 501, "song_id": 9998, "role_id": 0, "score": 90000, "stars": 4, "diff_id": 3},  // rank 2 in friends
+		{"pid": 999, "song_id": 9998, "role_id": 0, "score": 110000, "stars": 5, "diff_id": 3}, // rank 1 global, not a friend
+		{"pid": 502, "song_id": 9998, "role_id": 0, "score": 80000, "stars": 4, "diff_id": 3},  // rank 3 in friends
+	}
+
+	for _, score := range testScores {
+		_, err := scoresCollection.InsertOne(ctx, score)
+		if err != nil {
+			t.Fatalf("Failed to insert test score: %v", err)
+		}
+	}
+	defer func() {
+		scoresCollection.DeleteMany(ctx, bson.M{"song_id": 9998})
+	}()
+
+	// Get friends of PID 500
+	friendsMap, _ := database.GetFriendsForPID(ctx, database.GocentralDatabase, 500)
+
+	friendPIDs := make([]int, 0, len(friendsMap))
+	for pid := range friendsMap {
+		friendPIDs = append(friendPIDs, pid)
+	}
+
+	// Get the player's score
+	var playerScore struct {
+		Score int `bson:"score"`
+	}
+	scoresCollection.FindOne(ctx, bson.M{"song_id": 9998, "pid": 500}).Decode(&playerScore)
+
+	// Count how many friends have higher scores (for rank calculation)
+	friendsHigherFilter := bson.M{
+		"song_id": 9998,
+		"role_id": 0,
+		"pid":     bson.M{"$in": friendPIDs},
+		"score":   bson.M{"$gt": playerScore.Score},
+	}
+	friendsHigherCount, _ := scoresCollection.CountDocuments(ctx, friendsHigherFilter)
+
+	// In friends leaderboard, PID 500 should be rank 1 (no friends have higher score)
+	expectedFriendsRank := int64(0) // 0 friends have higher score
+	if friendsHigherCount != expectedFriendsRank {
+		t.Errorf("Expected %d friends with higher score, got %d", expectedFriendsRank, friendsHigherCount)
+	}
+
+	// In global leaderboard, PID 500 should be rank 2 (999 has higher score)
+	globalHigherFilter := bson.M{
+		"song_id": 9998,
+		"role_id": 0,
+		"score":   bson.M{"$gt": playerScore.Score},
+	}
+	globalHigherCount, _ := scoresCollection.CountDocuments(ctx, globalHigherFilter)
+
+	expectedGlobalHigher := int64(1) // 999 has higher score
+	if globalHigherCount != expectedGlobalHigher {
+		t.Errorf("Expected %d players with higher score globally, got %d", expectedGlobalHigher, globalHigherCount)
+	}
+
+	t.Logf("PID 500: Friends rank = %d, Global rank = %d", friendsHigherCount+1, globalHigherCount+1)
+}
+
+func TestFriendsLeaderboard_IsFriendMarking(t *testing.T) {
+	// Test that the IsFriend field is properly determined
+	friendsMap, _ := database.GetFriendsForPID(context.Background(), database.GocentralDatabase, 500)
+
+	testCases := []struct {
+		pid      int
+		isFriend bool
+	}{
+		{500, true},  // self
+		{501, true},  // friend
+		{502, true},  // friend
+		{999, false}, // not a friend
+		{600, false}, // not a friend
+	}
+
+	for _, tc := range testCases {
+		isFriend := friendsMap[tc.pid]
+		if isFriend != tc.isFriend {
+			t.Errorf("For PID %d, expected IsFriend=%v, got %v", tc.pid, tc.isFriend, isFriend)
+		}
+	}
+}
+
+func TestFriendsLeaderboard_EmptyFriendsList(t *testing.T) {
+	ctx := context.Background()
+	scoresCollection := database.GocentralDatabase.Collection("scores")
+
+	// Create a score for a user with no friends (999)
+	_, err := scoresCollection.InsertOne(ctx, map[string]interface{}{
+		"pid": 999, "song_id": 9997, "role_id": 0, "score": 100000, "stars": 5, "diff_id": 3,
+	})
+	if err != nil {
+		t.Fatalf("Failed to insert test score: %v", err)
+	}
+	defer scoresCollection.DeleteMany(ctx, bson.M{"song_id": 9997})
+
+	// Get friends for PID 999 (who has no friends)
+	friendsMap, _ := database.GetFriendsForPID(ctx, database.GocentralDatabase, 999)
+
+	friendPIDs := make([]int, 0, len(friendsMap))
+	for pid := range friendsMap {
+		friendPIDs = append(friendPIDs, pid)
+	}
+
+	// Friends leaderboard should only show self
+	filter := bson.M{"song_id": 9997, "role_id": 0, "pid": bson.M{"$in": friendPIDs}}
+	count, _ := scoresCollection.CountDocuments(ctx, filter)
+
+	if count != 1 {
+		t.Errorf("Expected 1 score in friends leaderboard (self only), got %d", count)
+	}
+
+	t.Logf("User with no friends has %d entries in friends leaderboard", count)
+}

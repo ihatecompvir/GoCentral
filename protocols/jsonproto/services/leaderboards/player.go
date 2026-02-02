@@ -64,16 +64,32 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 		return "", err
 	}
 
+	// fetch friends list for IsFriend marking and friends leaderboard filtering
+	friendsMap, _ := db.GetFriendsForPID(context.Background(), database, req.PID000)
+
 	scoresCollection := database.Collection("scores")
 
+	// build the base query filter
+	baseFilter := bson.M{"song_id": req.SongID, "role_id": req.RoleID}
+
+	// for friends leaderboard, filter to only friends' scores
+	if req.LBMode == 1 {
+		friendPIDs := make([]int, 0, len(friendsMap))
+		for pid := range friendsMap {
+			friendPIDs = append(friendPIDs, pid)
+		}
+		baseFilter["pid"] = bson.M{"$in": friendPIDs}
+	}
+
 	var playerScore models.Score
-	err = scoresCollection.FindOne(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID, "pid": req.PID000}).Decode(&playerScore)
+	playerFilter := bson.M{"song_id": req.SongID, "role_id": req.RoleID, "pid": req.PID000}
+	err = scoresCollection.FindOne(context.TODO(), playerFilter).Decode(&playerScore)
 	if err != nil && err != mongo.ErrNoDocuments {
 		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
 	if err == mongo.ErrNoDocuments {
-		err = scoresCollection.FindOne(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID}, &options.FindOneOptions{
+		err = scoresCollection.FindOne(context.TODO(), baseFilter, &options.FindOneOptions{
 			Sort: bson.M{"score": -1},
 		}).Decode(&playerScore)
 		if err != nil && err != mongo.ErrNoDocuments {
@@ -81,7 +97,16 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 		}
 	}
 
-	playerScoreIdx, err := scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID, "score": bson.M{"$gt": playerScore.Score}})
+	// count scores higher than player's score within the filtered set
+	countFilter := bson.M{"song_id": req.SongID, "role_id": req.RoleID, "score": bson.M{"$gt": playerScore.Score}}
+	if req.LBMode == 1 {
+		friendPIDs := make([]int, 0, len(friendsMap))
+		for pid := range friendsMap {
+			friendPIDs = append(friendPIDs, pid)
+		}
+		countFilter["pid"] = bson.M{"$in": friendPIDs}
+	}
+	playerScoreIdx, err := scoresCollection.CountDocuments(context.TODO(), countFilter)
 	if err != nil {
 		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
@@ -89,7 +114,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 	startRank := playerScoreIdx - (playerScoreIdx % 19)
 	limit := int64(19) // The limit is always the page size, not the end rank.
 
-	cursor, err := scoresCollection.Find(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID}, &options.FindOptions{
+	cursor, err := scoresCollection.Find(context.TODO(), baseFilter, &options.FindOptions{
 		Skip:  &startRank,
 		Limit: &limit,
 		Sort:  bson.M{"score": -1},
@@ -147,6 +172,11 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 			}
 		}
 
+		isFriend := 0
+		if friendsMap[score.OwnerPID] {
+			isFriend = 1
+		}
+
 		res = append(res, PlayerGetResponse{
 			PID:          score.OwnerPID,
 			Name:         name,
@@ -156,7 +186,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 			IsPercentile: 0,
 			InstMask:     score.InstrumentMask,
 			NotesPct:     score.NotesPercent,
-			IsFriend:     0,
+			IsFriend:     isFriend,
 			UnnamedBand:  0,
 			PGUID:        "",
 			ORank:        int(idx),

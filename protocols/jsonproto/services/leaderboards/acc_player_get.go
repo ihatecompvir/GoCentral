@@ -131,6 +131,9 @@ func (service AccPlayerGetService) Handle(data string, database *mongo.Database,
 		return "", err
 	}
 
+	// fetch friends list for IsFriend marking
+	friendsMap, _ := db.GetFriendsForPID(context.Background(), database, req.PID000)
+
 	accomplishmentsCollection := database.Collection("accomplishments")
 
 	// FindOne the accomplishment scores
@@ -166,13 +169,17 @@ func (service AccPlayerGetService) Handle(data string, database *mongo.Database,
 
 	for i := startIdx; i < endIdx; i++ {
 		score := accSlice[i]
+		isFriend := 0
+		if friendsMap[score.PID] {
+			isFriend = 1
+		}
 		res = append(res, AccPlayerGetResponse{
 			PID:          score.PID,
 			Score:        score.Score,
 			DiffID:       0,
 			Name:         db.GetConsolePrefixedUsernameForPID(score.PID),
 			IsPercentile: 0,
-			IsFriend:     0,
+			IsFriend:     isFriend,
 			InstMask:     0,
 			NotesPct:     0,
 			UnnamedBand:  0,

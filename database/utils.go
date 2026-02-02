@@ -461,6 +461,35 @@ func IsPIDAFriendOfPID(pid int, friendPID int) (bool, error) {
 	return count > 0, nil
 }
 
+// returns a map of friend PIDs for a given PID, including the PID itself
+// this is useful for batch friend lookups in leaderboards
+func GetFriendsForPID(ctx context.Context, database *mongo.Database, pid int) (map[int]bool, error) {
+	usersCollection := database.Collection("users")
+
+	var user struct {
+		Friends []int `bson:"friends"`
+	}
+
+	opts := options.FindOne().SetProjection(bson.M{"friends": 1})
+	err := usersCollection.FindOne(ctx, bson.M{"pid": pid}, opts).Decode(&user)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			// user not found, return empty map with just self
+			friendsMap := make(map[int]bool, 1)
+			friendsMap[pid] = true
+			return friendsMap, nil
+		}
+		return nil, err
+	}
+
+	friendsMap := make(map[int]bool, len(user.Friends)+1)
+	friendsMap[pid] = true // include self so player appears in their own friends leaderboard
+	for _, friendPID := range user.Friends {
+		friendsMap[friendPID] = true
+	}
+	return friendsMap, nil
+}
+
 // gets the expiry info about a battle, namely whether it is currently expired and when it will/did expire
 // does NOT include the grace period time that the housekeeping task uses
 func GetBattleExpiryInfo(battleID int) (bool, time.Time) {

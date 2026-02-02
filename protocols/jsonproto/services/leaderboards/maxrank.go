@@ -49,7 +49,10 @@ func (service MaxrankGetService) Handle(data string, database *mongo.Database, c
 
 	scoresCollection := database.Collection("scores")
 
-	numScores, err := scoresCollection.CountDocuments(context.TODO(), bson.M{"song_id": req.SongID, "role_id": req.RoleID})
+	// build the query filter
+	filter := bson.M{"song_id": req.SongID, "role_id": req.RoleID}
+
+	numScores, err := scoresCollection.CountDocuments(context.TODO(), filter)
 	if err != nil {
 		return marshaler.MarshalResponse(service.Path(), []MaxrankGetResponse{{
 			0,

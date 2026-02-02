@@ -23,6 +23,7 @@ type AccRankRangeGetRequest struct {
 	PID000      int    `json:"pid000"`
 	StartRank   int    `json:"start_rank"`
 	EndRank     int    `json:"end_rank"`
+	LBType      int    `json:"lb_type"`
 }
 
 type AccRankRangeGetResponse struct {
@@ -62,6 +63,9 @@ func (service AccRankRangeGetService) Handle(data string, database *mongo.Databa
 		return "", err
 	}
 
+	// fetch friends list for IsFriend marking
+	friendsMap, _ := db.GetFriendsForPID(context.Background(), database, req.PID000)
+
 	accomplishmentsCollection := database.Collection("accomplishments")
 
 	var accomplishments models.Accomplishments
@@ -72,6 +76,17 @@ func (service AccRankRangeGetService) Handle(data string, database *mongo.Databa
 	}
 
 	accSlice := getAccomplishmentField(req.AccID, accomplishments)
+
+	// filter to only friends' scores if requested
+	if req.LBType == 1 {
+		filteredSlice := make([]models.AccomplishmentScoreEntry, 0)
+		for _, score := range accSlice {
+			if friendsMap[score.PID] {
+				filteredSlice = append(filteredSlice, score)
+			}
+		}
+		accSlice = filteredSlice
+	}
 
 	// sort acc scores by score
 	sort.Slice(accSlice, func(i, j int) bool {
@@ -112,6 +127,11 @@ func (service AccRankRangeGetService) Handle(data string, database *mongo.Databa
 
 		rank := start + i + 1
 
+		isFriend := 0
+		if friendsMap[score.PID] {
+			isFriend = 1
+		}
+
 		res = append(res, AccRankRangeGetResponse{
 			PID:          score.PID,
 			Name:         name,
@@ -121,7 +141,7 @@ func (service AccRankRangeGetService) Handle(data string, database *mongo.Databa
 			IsPercentile: 0,
 			InstMask:     0,
 			NotesPct:     0,
-			IsFriend:     0,
+			IsFriend:     isFriend,
 			UnnamedBand:  0,
 			PGUID:        "",
 			ORank:        rank,
