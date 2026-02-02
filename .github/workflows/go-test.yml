@@ -10,6 +10,17 @@ jobs:
   test:
     name: Run GoCentral tests
     runs-on: ubuntu-latest
+    
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd="mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     steps:
       - name: Checkout repo
