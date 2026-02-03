@@ -27,8 +27,8 @@ func DeliverMessage(err error, client *nex.Client, callID uint32, data []byte) {
 			// Assign a unique incrementing message ID
 			msg.ID = GlobalMessageStore.NextMessageID()
 
-			// Set the sender's PID
-			msg.SenderPID = client.PlayerID()
+			// Set the sender PID to machine PID
+			msg.SenderPID = uint32(client.MachineID())
 
 			// Set reception time to now
 			msg.ReceptionTime = message.DateTimeNow()
