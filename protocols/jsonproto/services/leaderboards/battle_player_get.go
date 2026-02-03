@@ -80,6 +80,18 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 		baseFilter["pid"] = bson.M{"$in": friendPIDs}
 	}
 
+	// for console-specific leaderboards, filter to only scores from users with that console type
+	// mode 2 = PS3 (console_type 1), mode 3 = RPCS3 (console_type 3), mode 4 = Wii (console_type 2), mode 5 = Xbox (console_type 0)
+	if req.LBMode >= 2 && req.LBMode <= 5 {
+		consoleTypeMap := map[int]int{2: 1, 3: 3, 4: 2, 5: 0}
+		consolePIDs, _ := db.GetPIDsByConsoleType(context.Background(), database, consoleTypeMap[req.LBMode])
+		pidList := make([]int, 0, len(consolePIDs))
+		for pid := range consolePIDs {
+			pidList = append(pidList, pid)
+		}
+		baseFilter["pid"] = bson.M{"$in": pidList}
+	}
+
 	var playerScore models.Score
 	err = scoresCollection.FindOne(context.TODO(), bson.M{"battle_id": req.BattleID, "pid": req.PID000}).Decode(&playerScore)
 	if err != nil && err != mongo.ErrNoDocuments {
@@ -103,6 +115,16 @@ func (service BattlePlayerGetService) Handle(data string, database *mongo.Databa
 			friendPIDs = append(friendPIDs, pid)
 		}
 		countFilter["pid"] = bson.M{"$in": friendPIDs}
+	}
+	// apply the same console type filter to count query
+	if req.LBMode >= 2 && req.LBMode <= 5 {
+		consoleTypeMap := map[int]int{2: 1, 3: 3, 4: 2, 5: 0}
+		consolePIDs, _ := db.GetPIDsByConsoleType(context.Background(), database, consoleTypeMap[req.LBMode])
+		pidList := make([]int, 0, len(consolePIDs))
+		for pid := range consolePIDs {
+			pidList = append(pidList, pid)
+		}
+		countFilter["pid"] = bson.M{"$in": pidList}
 	}
 	playerScoreIdx, err := scoresCollection.CountDocuments(context.TODO(), countFilter)
 	if err != nil {

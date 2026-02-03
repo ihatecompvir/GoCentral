@@ -1,38 +1,39 @@
 package servers
 
 import (
+	"context"
+	"log"
+	"rb3server/database"
+	"rb3server/models"
+
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 func GetStatus(err error, client *nex.Client, callID uint32, pid uint32) {
-	/*
-		res, _ := ValidateClientPID(SecureServer, client, callID, nexproto.AccountManagementProtocolID)
 
-		if !res {
-			return
-		}
+	res, _ := ValidateClientPID(SecureServer, client, callID, nexproto.AccountManagementProtocolID)
 
-		var status string
+	if !res {
+		return
+	}
 
-		log.Printf("Getting status for PID %d\n", pid)
+	var status string
 
-		machines := database.GocentralDatabase.Collection("machines")
-		var machine models.Machine
+	log.Printf("Getting status for PID %d\n", pid)
 
-		if err = machines.FindOne(context.TODO(), bson.M{"machine_id": pid}).Decode(&machine); err != nil {
-			log.Printf("Could not find machine with PID %d in database\n", pid)
-			status = "Offline"
-		} else {
-			status = machine.Status
-		}
+	machines := database.GocentralDatabase.Collection("machines")
+	var machine models.Machine
 
-		log.Printf("Responding %s\n", status)
-	*/
+	if err = machines.FindOne(context.TODO(), bson.M{"machine_id": pid}).Decode(&machine); err != nil {
+		log.Printf("Could not find machine with PID %d in database\n", pid)
+		status = "Offline"
+	} else {
+		status = machine.Status
+	}
 
-	// stubbed GetStatus for now until friends can properly work
-
-	var status = "Offline"
+	log.Printf("Responding %s\n", status)
 
 	rmcResponseStream := nex.NewStream()
 

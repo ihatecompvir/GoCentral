@@ -61,6 +61,9 @@ func LookupOrCreateAccount(err error, client *nex.Client, callID uint32, usernam
 			})
 		}
 
+		// invalidate console type cache since a new user was created
+		database.InvalidateConsoleTypePIDsCache(client.Platform())
+
 		if err != nil {
 			log.Printf("Could not create user %s: %s\n", username, err)
 			SendErrorCode(SecureServer, client, nexproto.AccountManagementProtocolID, callID, quazal.OperationError)
@@ -108,6 +111,37 @@ func LookupOrCreateAccount(err error, client *nex.Client, callID uint32, usernam
 		}
 
 		log.Printf("Updated %v station URL for machine ID %v \n", result.ModifiedCount, client.MachineID())
+
+		// Transfer any gatherings created by this machine's Master User to the logged-in account
+		gatheringsCollection := database.GocentralDatabase.Collection("gatherings")
+
+		// First, clear any existing gatherings by this user to avoid duplicates
+		deleteResult, err := gatheringsCollection.DeleteMany(
+			context.TODO(),
+			bson.M{"creator": username},
+		)
+		if err != nil {
+			log.Printf("Could not clear existing gatherings for %s: %s\n", username, err)
+		} else if deleteResult.DeletedCount > 0 {
+			log.Printf("Cleared %v existing gathering(s) for %s before transfer\n", deleteResult.DeletedCount, username)
+		}
+
+		// Now transfer the Master User's gatherings to this user
+		transferResult, err := gatheringsCollection.UpdateMany(
+			context.TODO(),
+			bson.M{"created_by_machine_id": client.MachineID()},
+			bson.D{
+				{"$set", bson.D{{"creator", username}}},
+				{"$unset", bson.D{{"created_by_machine_id", ""}}},
+			},
+		)
+
+		if err != nil {
+			log.Printf("Could not transfer gatherings for machine ID %v: %s\n", client.MachineID(), err)
+			// Non-fatal, continue with the response
+		} else if transferResult.ModifiedCount > 0 {
+			log.Printf("Transferred %v gathering(s) from Master User to %s\n", transferResult.ModifiedCount, username)
+		}
 	}
 
 	rmcResponseStream.WriteUInt32LE(user.PID)

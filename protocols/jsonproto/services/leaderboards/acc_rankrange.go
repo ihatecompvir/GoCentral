@@ -77,17 +77,6 @@ func (service AccRankRangeGetService) Handle(data string, database *mongo.Databa
 
 	accSlice := getAccomplishmentField(req.AccID, accomplishments)
 
-	// filter to only friends' scores if requested
-	if req.LBType == 1 {
-		filteredSlice := make([]models.AccomplishmentScoreEntry, 0)
-		for _, score := range accSlice {
-			if friendsMap[score.PID] {
-				filteredSlice = append(filteredSlice, score)
-			}
-		}
-		accSlice = filteredSlice
-	}
-
 	// sort acc scores by score
 	sort.Slice(accSlice, func(i, j int) bool {
 		return accSlice[i].Score > accSlice[j].Score

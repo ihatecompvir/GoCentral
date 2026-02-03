@@ -7,7 +7,12 @@ import (
 
 func CancelParticipation(err error, client *nex.Client, callID uint32, gatheringID uint32) {
 
-	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+	var res bool
+	if client.Platform() == 2 {
+		res, _ = ValidateClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+	} else {
+		res, _ = ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+	}
 
 	if !res {
 		return

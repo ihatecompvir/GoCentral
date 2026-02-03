@@ -16,7 +16,13 @@ import (
 
 func SetState(err error, client *nex.Client, callID uint32, gatheringID uint32, state uint32) {
 
-	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+	// On Wii, Master Users can set state on gatherings they created.
+	var res bool
+	if client.Platform() == 2 {
+		res, _ = ValidateClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+	} else {
+		res, _ = ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+	}
 
 	if !res {
 		return
@@ -34,7 +40,22 @@ func SetState(err error, client *nex.Client, callID uint32, gatheringID uint32, 
 		log.Printf("Could not find gathering %v to set the state on: %v\n", gatheringID, err)
 		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.OperationError)
 		return
-	} else {
+	}
+
+	// Check ownership: either creator matches, or machine owns it
+	if gathering.Creator != database.GetUsernameForPID(int(client.PlayerID())) {
+		machineID := database.GetMachineIDFromUsername(gathering.Creator)
+		machineOwned := (gathering.CreatedByMachineID != 0 && gathering.CreatedByMachineID == client.MachineID()) ||
+			(machineID != 0 && machineID == client.MachineID())
+
+		if !machineOwned {
+			log.Printf("Client %s is not the creator of gathering %v\n", client.Username, gatheringID)
+			SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
+			return
+		}
+	}
+
+	{
 		// Update the gathering.Contents, State, and LastUpdated fields
 		gathering.Contents[0x1C] = (byte)(state>>(8*0)) & 0xff
 		gathering.Contents[0x1D] = (byte)(state>>(8*1)) & 0xff

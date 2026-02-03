@@ -199,6 +199,9 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 				{Key: "link_code", Value: database.GenerateLinkCode(10)},
 			})
 
+			// invalidate console type cache since a new user was created
+			database.InvalidateConsoleTypePIDsCache(machineType)
+
 			if err = users.FindOne(nil, database.CaseInsensitiveUsername(username)).Decode(&user); err != nil {
 				log.Printf("Could not find newly-created user %s: %s\n", username, err)
 				SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.OperationError)
@@ -213,6 +216,9 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 			if user.ConsoleType != machineType {
 				log.Printf("Updating console type for %s from %d to %d\n", username, user.ConsoleType, machineType)
 				updateFields = append(updateFields, bson.E{Key: "console_type", Value: machineType})
+				// invalidate both old and new console type caches
+				database.InvalidateConsoleTypePIDsCache(user.ConsoleType)
+				database.InvalidateConsoleTypePIDsCache(machineType)
 			}
 
 			// generate link code if missing (which will be true for legacy accounts created before i made this system)

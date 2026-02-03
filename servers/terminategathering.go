@@ -1,8 +1,10 @@
 package servers
 
 import (
+	"context"
 	"log"
 	"rb3server/database"
+	"rb3server/models"
 	"rb3server/quazal"
 
 	"github.com/ihatecompvir/nex-go"
@@ -12,7 +14,12 @@ import (
 
 func TerminateGathering(err error, client *nex.Client, callID uint32, gatheringID uint32) {
 
-	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+	var res bool
+	if client.Platform() == 2 {
+		res, _ = ValidateClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+	} else {
+		res, _ = ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+	}
 
 	if !res {
 		return
@@ -22,9 +29,31 @@ func TerminateGathering(err error, client *nex.Client, callID uint32, gatheringI
 
 	gatherings := database.GocentralDatabase.Collection("gatherings")
 
+	// Verify ownership before deleting
+	var dbGathering models.Gathering
+	err = gatherings.FindOne(context.TODO(), bson.M{"gathering_id": gatheringID}).Decode(&dbGathering)
+	if err != nil {
+		log.Printf("Could not find gathering %v to terminate: %s\n", gatheringID, err)
+		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.OperationError)
+		return
+	}
+
+	// Check ownership: either creator matches, or machine owns it
+	if dbGathering.Creator != database.GetUsernameForPID(int(client.PlayerID())) {
+		machineID := database.GetMachineIDFromUsername(dbGathering.Creator)
+		machineOwned := (dbGathering.CreatedByMachineID != 0 && dbGathering.CreatedByMachineID == client.MachineID()) ||
+			(machineID != 0 && machineID == client.MachineID())
+
+		if !machineOwned {
+			log.Printf("Client %s is not the creator of gathering %v\n", client.Username, gatheringID)
+			SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
+			return
+		}
+	}
+
 	// remove the gathering from the DB so other players won't attempt to connect to it later
 	result, err := gatherings.DeleteOne(
-		nil,
+		context.TODO(),
 		bson.M{"gathering_id": gatheringID},
 	)
 

@@ -158,6 +158,8 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 					{"$set", bson.D{{"console_type", consoleType}}},
 				},
 			)
+			// invalidate console type cache since user's console type may have changed
+			database.InvalidateConsoleTypePIDsCache(-1)
 		} else {
 			result, _ = machines.UpdateOne(
 				nil,

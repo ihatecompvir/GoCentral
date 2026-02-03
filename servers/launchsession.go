@@ -9,7 +9,7 @@ import (
 
 func LaunchSession(err error, client *nex.Client, callID uint32, gatheringID uint32) {
 
-	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+	res, _ := ValidateClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
 
 	if !res {
 		return

@@ -18,7 +18,7 @@ func FindByNameLike(err error, client *nex.Client, callID uint32, uiGroups uint3
 	users := database.GocentralDatabase.Collection("users")
 	var user models.User
 
-	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.AccountManagementProtocolID)
+	res, _ := ValidateClientPID(SecureServer, client, callID, nexproto.AccountManagementProtocolID)
 
 	if !res {
 		return

@@ -21,7 +21,7 @@ func UpdateGathering(err error, client *nex.Client, callID uint32, gathering []b
 
 	var deserializer serialization.GatheringDeserializer
 
-	res, _ := ValidateNonMasterClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
+	res, _ := ValidateClientPID(SecureServer, client, callID, nexproto.MatchmakingProtocolID)
 
 	if !res {
 		return
@@ -51,10 +51,13 @@ func UpdateGathering(err error, client *nex.Client, callID uint32, gathering []b
 
 	// make sure the client's PID matches the creator of the gathering
 	if dbGathering.Creator != db.GetUsernameForPID(int(client.PlayerID())) {
-		// check if the creator of the gathering was created by the machine's master user
+		// check if the gathering was created by this machine (via created_by_machine_id field)
+		// or if the creator username is a Master User from this machine
 		machineID := db.GetMachineIDFromUsername(dbGathering.Creator)
+		machineOwned := (dbGathering.CreatedByMachineID != 0 && dbGathering.CreatedByMachineID == client.MachineID()) ||
+			(machineID != 0 && machineID == client.MachineID())
 
-		if machineID != client.MachineID() || machineID == 0 {
+		if !machineOwned {
 			log.Printf("Client %s is not the creator of gathering %v\n", client.Username, gatheringID)
 			SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
 			return
@@ -62,16 +65,27 @@ func UpdateGathering(err error, client *nex.Client, callID uint32, gathering []b
 	}
 
 	// the client sends the entire gathering again, so update it in the DB
+	// Only clear created_by_machine_id if the client is NOT a Master User
+	// (i.e., they're logged into a real account and now own the gathering)
+
+	updateDoc := bson.D{
+		{"$set", bson.D{
+			{"contents", gathering},
+			{"public", g.HarmonixGathering.Public},
+			{"last_updated", time.Now().Unix()},
+			{"creator", client.Username},
+		}},
+	}
+
+	// Only unset created_by_machine_id if the client is a regular user, not a Master User
+	if !db.IsPIDAMasterUser(int(client.PlayerID())) {
+		updateDoc = append(updateDoc, bson.E{"$unset", bson.D{{"created_by_machine_id", ""}}})
+	}
 
 	result, err := gatherings.UpdateOne(
 		context.TODO(),
 		bson.M{"gathering_id": gatheringID},
-		bson.D{
-			{"$set", bson.D{{"contents", gathering}}},
-			{"$set", bson.D{{"public", g.HarmonixGathering.Public}}},
-			{"$set", bson.D{{"last_updated", time.Now().Unix()}}},
-			{"$set", bson.D{{"creator", client.Username}}},
-		},
+		updateDoc,
 	)
 
 	if err != nil {

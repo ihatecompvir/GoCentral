@@ -32,6 +32,30 @@ var (
 	configCacheTTL    = 30 * time.Second
 )
 
+// console type PIDs cache - caches PIDs by console type to avoid repeated DB queries for leaderboards
+var (
+	consoleTypePIDsCache       = make(map[int]map[int]bool) // consoleType -> map of PIDs
+	consoleTypePIDsCacheMu     sync.RWMutex
+	consoleTypePIDsCacheExpiry = make(map[int]time.Time) // consoleType -> expiry time
+	consoleTypePIDsCacheTTL    = 5 * time.Minute         // 5 minute TTL since console types rarely change
+)
+
+// invalidates the console type PIDs cache for a specific console type, or all if -1 is passed
+// call this when a user is created or their console type changes
+func InvalidateConsoleTypePIDsCache(consoleType int) {
+	consoleTypePIDsCacheMu.Lock()
+	defer consoleTypePIDsCacheMu.Unlock()
+
+	if consoleType == -1 {
+		// invalidate all
+		consoleTypePIDsCache = make(map[int]map[int]bool)
+		consoleTypePIDsCacheExpiry = make(map[int]time.Time)
+	} else {
+		delete(consoleTypePIDsCache, consoleType)
+		delete(consoleTypePIDsCacheExpiry, consoleType)
+	}
+}
+
 // returns the cached config, or fetches it from the live DB if needed
 func GetCachedConfig(ctx context.Context) (*models.Config, error) {
 	configCacheMu.RLock()
@@ -540,24 +564,16 @@ func IsPIDInGroup(pid int, groupID string) bool {
 }
 
 // checks if a PID is a master user
+// Master User PIDs are MachineIDs stored in the machines collection, not the users collection
 func IsPIDAMasterUser(pid int) bool {
-	usersCollection := GocentralDatabase.Collection("users")
+	// Check if this PID exists as a machine_id in the machines collection
+	machinesCollection := GocentralDatabase.Collection("machines")
 
-	var user models.User
-	err := usersCollection.FindOne(context.TODO(), bson.M{"pid": pid}).Decode(&user)
+	var machine models.Machine
+	err := machinesCollection.FindOne(context.TODO(), bson.M{"machine_id": pid}).Decode(&machine)
 
-	if err != nil || user.Username == "" {
-		return false
-	}
-
-	masterUserPattern := `^Master User \(\d+\)$`
-	matched, err := regexp.MatchString(masterUserPattern, user.Username)
-
-	if err != nil || !matched {
-		return false
-	}
-
-	return true
+	// If we found a machine with this ID, it's a Master User
+	return err == nil && machine.MachineID != 0
 }
 
 // checks if a username is a master user
@@ -634,4 +650,64 @@ func IsUsernameBanned(username string) bool {
 		}
 	}
 	return false
+}
+
+// returns a map of PIDs for users with a specific console type
+// uses a TTL cache to avoid repeated DB queries
+func GetPIDsByConsoleType(ctx context.Context, database *mongo.Database, consoleType int) (map[int]bool, error) {
+	// check cache first
+	consoleTypePIDsCacheMu.RLock()
+	if cached, ok := consoleTypePIDsCache[consoleType]; ok {
+		if time.Now().Before(consoleTypePIDsCacheExpiry[consoleType]) {
+			// return a copy to avoid concurrent map access issues
+			result := make(map[int]bool, len(cached))
+			for k, v := range cached {
+				result[k] = v
+			}
+			consoleTypePIDsCacheMu.RUnlock()
+			return result, nil
+		}
+	}
+	consoleTypePIDsCacheMu.RUnlock()
+
+	// cache miss or expired, fetch from DB
+	usersCollection := database.Collection("users")
+
+	filter := bson.M{"console_type": consoleType}
+	opts := options.Find().SetProjection(bson.M{"pid": 1})
+
+	cursor, err := usersCollection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	pidsMap := make(map[int]bool)
+	for cursor.Next(ctx) {
+		var user struct {
+			PID int `bson:"pid"`
+		}
+		if err := cursor.Decode(&user); err != nil {
+			log.Printf("Failed to decode user for console type PID map: %v", err)
+			continue
+		}
+		pidsMap[user.PID] = true
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+
+	// update cache
+	consoleTypePIDsCacheMu.Lock()
+	consoleTypePIDsCache[consoleType] = pidsMap
+	consoleTypePIDsCacheExpiry[consoleType] = time.Now().Add(consoleTypePIDsCacheTTL)
+	consoleTypePIDsCacheMu.Unlock()
+
+	// return a copy
+	result := make(map[int]bool, len(pidsMap))
+	for k, v := range pidsMap {
+		result[k] = v
+	}
+	return result, nil
 }

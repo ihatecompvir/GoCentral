@@ -6,7 +6,7 @@ toolchain go1.22.3
 
 require (
 	github.com/ihatecompvir/nex-go v0.0.0-20250131035452-0e0eff533457
-	github.com/ihatecompvir/nex-protocols-go v0.0.0-20250512202801-4e47526c2ea3
+	github.com/ihatecompvir/nex-protocols-go v0.0.0-20260203022916-a029c7861de3
 	github.com/jinzhu/copier v0.4.0
 	go.mongodb.org/mongo-driver v1.16.0
 )

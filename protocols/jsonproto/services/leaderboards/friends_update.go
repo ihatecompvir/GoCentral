@@ -58,6 +58,12 @@ func (service FriendsUpdateService) Handle(data string, database *mongo.Database
 		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
 
+	// Check if there are any names to look up
+	if len(req.Names) == 0 {
+		res := []FriendsUpdateResponse{{0}}
+		return marshaler.MarshalResponse(service.Path(), res)
+	}
+
 	// lookup all usernames in a single shot
 	usersCollection := database.Collection("users")
 

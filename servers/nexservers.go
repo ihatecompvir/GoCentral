@@ -167,6 +167,7 @@ func StartSecureServer() {
 	natTraversalProtocol := nexproto.NewNATTraversalProtocol(SecureServer)
 	accountManagementProtocol := nexproto.NewAccountManagementProtocol(SecureServer)
 	messagingProtocolProtocol := nexproto.NewMessagingProtocol(SecureServer)
+	messageDeliveryProtocol := nexproto.NewMessageDeliveryProtocol(SecureServer)
 	rbBinaryDataProtocol := nexproto.NewRBBinaryDataProtocol(SecureServer)
 	nintendoManagementProtocol := nexproto.NewNintendoManagementProtocol(SecureServer)
 
@@ -203,6 +204,10 @@ func StartSecureServer() {
 	rbBinaryDataProtocol.SaveBinaryData(SaveBinaryData)
 
 	messagingProtocolProtocol.GetMessageHeaders(GetMessageHeaders)
+	messagingProtocolProtocol.RetrieveMessages(RetrieveMessages)
+	messagingProtocolProtocol.DeleteMessages(DeleteMessages)
+
+	messageDeliveryProtocol.DeliverMessage(DeliverMessage)
 
 	ip := os.Getenv("LISTENINGIP")
 	securePort := os.Getenv("SECUREPORT")

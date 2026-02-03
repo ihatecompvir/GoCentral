@@ -114,6 +114,9 @@ func main() {
 	// seed randomness with current time
 	rand.Seed(time.Now().UnixNano())
 
+	// Initialize the in-memory message store
+	servers.InitMessageStore()
+
 	go servers.StartAuthServer()
 	go servers.StartSecureServer()
 
@@ -211,6 +214,9 @@ func main() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	s := <-sig
 	log.Printf("Signal (%s) received, stopping\n", s)
+
+	// Stop the message store purge loop
+	servers.StopMessageStore()
 
 	if enableRESTAPI == "true" {
 		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
