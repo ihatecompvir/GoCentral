@@ -89,7 +89,7 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 		// convert float64 to int64
 		revision := int64(revisionFloat)
 
-		filePath = filepath.Join(basePath, "setlist_art", setlistGUID, fmt.Sprintf("%d.%s", revision, platformExtension))
+		filePath = filepath.Join(basePath, "setlist_art", SanitizePath(setlistGUID), fmt.Sprintf("%d.%s", revision, platformExtension))
 
 	case "battle_art":
 		// get the revision
@@ -143,7 +143,6 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 	}
 
 	// Sanitize and validate the path
-	filePath = SanitizePath(filePath)
 
 	// Check if the path is still valid and under basePath
 	cleanBasePath := filepath.Clean(basePath)

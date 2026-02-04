@@ -22,7 +22,7 @@ import (
 
 func SanitizePath(path string) string {
 	// List of invalid characters except the path separators and drive letter colon
-	invalidChars := []string{"*", "?", "\"", "<", ">", "|", "\r", "\n", "\x0a", "\x0d", "\x00"}
+	invalidChars := []string{"*", "?", "\"", "<", ">", "|", "\r", "\n", "\x0a", "\x0d", "\x00", "."}
 
 	for _, char := range invalidChars {
 		path = strings.ReplaceAll(path, char, "_")
@@ -125,8 +125,7 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 		revision := int64(revisionFloat)
 
-		filePath = filepath.Join(basePath, "setlist_art", setlistGUID, fmt.Sprintf("%d.%s", revision, platformExtension))
-		filePath = SanitizePath(filePath)
+		filePath = filepath.Join(basePath, "setlist_art", SanitizePath(setlistGUID), fmt.Sprintf("%d.%s", revision, platformExtension))
 
 		log.Printf("Serving setlist art at path %v", filePath)
 
@@ -164,7 +163,6 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 		}
 
 		filePath = filepath.Join(basePath, "battle_art", fmt.Sprintf("%d", int64(battleID)), fmt.Sprintf("%d.%s", revision, platformExtension))
-		filePath = SanitizePath(filePath)
 
 		log.Printf("Serving battle art at path %v", filePath)
 
@@ -190,7 +188,6 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 		revision := int64(revisionFloat)
 
 		filePath = filepath.Join(basePath, "band_logo", fmt.Sprintf("%d", bandID), fmt.Sprintf("%d.%s", revision, platformExtension))
-		filePath = SanitizePath(filePath)
 
 		log.Printf("Serving band logo at path %v", filePath)
 
