@@ -73,8 +73,8 @@ func (service MaxrankGetService) Handle(data string, database *mongo.Database, c
 		matchStage := bson.D{}
 
 		// Exclude battle and setlist scores from total score calculations
-		matchStage = append(matchStage, bson.E{Key: "battle_id", Value: 0})
-		matchStage = append(matchStage, bson.E{Key: "setlist_id", Value: 0})
+		matchStage = append(matchStage, bson.E{Key: "battle_id", Value: bson.D{{Key: "$not", Value: bson.D{{Key: "$gt", Value: 0}}}}})
+		matchStage = append(matchStage, bson.E{Key: "setlist_id", Value: bson.D{{Key: "$not", Value: bson.D{{Key: "$gt", Value: 0}}}}})
 
 		// For RB3 Only, filter to song_id 1001-1106 (I think this is the full range)
 		if req.LBType == LBTypeRB3Only {
