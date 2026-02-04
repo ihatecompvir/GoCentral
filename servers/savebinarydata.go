@@ -49,6 +49,22 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 
 	var filePath string
 
+	var platformExtension string
+
+	// set platform-specific extension so files are saved correctly per platform
+	switch client.Platform() {
+	case 0:
+		platformExtension = "png_xbox"
+	case 1, 3:
+		platformExtension = "png_ps3"
+	case 2:
+		platformExtension = "png_wii"
+	default:
+		log.Printf("Unsupported platform %d in requested metadata", client.Platform())
+		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.OperationError)
+		return
+	}
+
 	// switch on the type
 	switch dataType {
 	case "setlist_art":
@@ -73,7 +89,7 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 		// convert float64 to int64
 		revision := int64(revisionFloat)
 
-		filePath = filepath.Join(basePath, "setlist_art", setlistGUID, fmt.Sprintf("%d.dxt", revision))
+		filePath = filepath.Join(basePath, "setlist_art", setlistGUID, fmt.Sprintf("%d.%s", revision, platformExtension))
 
 	case "battle_art":
 		// get the revision
@@ -91,7 +107,7 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 		// battle_art can optionally have battle_id; try to get it, but dont fail if it cant be found
 		battleID, _ := metadataMap["battle_id"].(float64)
 
-		filePath = filepath.Join(basePath, "battle_art", fmt.Sprintf("%d", int64(battleID)), fmt.Sprintf("%d.dxt", revision))
+		filePath = filepath.Join(basePath, "battle_art", fmt.Sprintf("%d", int64(battleID)), fmt.Sprintf("%d.%s", revision, platformExtension))
 
 	case "band_logo":
 		// get the band id
@@ -118,7 +134,7 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 		// convert float64 to int64
 		revision := int64(revisionFloat)
 
-		filePath = filepath.Join(basePath, "band_logo", fmt.Sprintf("%d", bandID), fmt.Sprintf("%d.dxt", revision))
+		filePath = filepath.Join(basePath, "band_logo", fmt.Sprintf("%d", bandID), fmt.Sprintf("%d.%s", revision, platformExtension))
 
 	default:
 		log.Printf("Unsupported type %s in requested metadata", dataType)
