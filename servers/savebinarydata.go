@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"rb3server/quazal"
+	"strings"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -24,6 +26,7 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 
 	if err != nil {
 		log.Println("Error parsing metadata: ", err)
+		// print metadata
 		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.OperationError)
 		return
 	}
@@ -36,6 +39,15 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.OperationError)
 		return
 	}
+
+	// try to get base path from environment variables
+	basePath := os.Getenv("BASEBINARYDATAPATH")
+
+	if basePath == "" {
+		basePath = "binary_data"
+	}
+
+	var filePath string
 
 	// switch on the type
 	switch dataType {
@@ -61,7 +73,7 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 		// convert float64 to int64
 		revision := int64(revisionFloat)
 
-		os.WriteFile(fmt.Sprintf("./binary_data/setlist_art/%s/%d.dxt", setlistGUID, revision), data, 0644)
+		filePath = filepath.Join(basePath, "setlist_art", setlistGUID, fmt.Sprintf("%d.dxt", revision))
 
 	case "battle_art":
 		// get the revision
@@ -79,7 +91,7 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 		// battle_art can optionally have battle_id; try to get it, but dont fail if it cant be found
 		battleID, _ := metadataMap["battle_id"].(float64)
 
-		os.WriteFile(fmt.Sprintf("./binary_data/battle_art/%d/%d.dxt", int64(battleID), revision), data, 0644)
+		filePath = filepath.Join(basePath, "battle_art", fmt.Sprintf("%d", int64(battleID)), fmt.Sprintf("%d.dxt", revision))
 
 	case "band_logo":
 		// get the band id
@@ -106,7 +118,7 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 		// convert float64 to int64
 		revision := int64(revisionFloat)
 
-		os.WriteFile(fmt.Sprintf("./binary_data/band_logo/%d/%d.dxt", bandID, revision), data, 0644)
+		filePath = filepath.Join(basePath, "band_logo", fmt.Sprintf("%d", bandID), fmt.Sprintf("%d.dxt", revision))
 
 	default:
 		log.Printf("Unsupported type %s in requested metadata", dataType)
@@ -114,9 +126,38 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 		return
 	}
 
+	// Sanitize and validate the path
+	filePath = SanitizePath(filePath)
+
+	// Check if the path is still valid and under basePath
+	cleanBasePath := filepath.Clean(basePath)
+	cleanFilePath := filepath.Clean(filePath)
+
+	if !strings.HasPrefix(cleanFilePath, cleanBasePath) {
+		log.Println("Invalid path: ", cleanFilePath)
+		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.OperationError)
+		return
+	}
+
+	// Create the directory if it doesn't exist
+	dir := filepath.Dir(cleanFilePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Println("Error creating directory: ", err)
+		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.OperationError)
+		return
+	}
+
+	if err := os.WriteFile(cleanFilePath, data, 0644); err != nil {
+		log.Println("Error writing file: ", err)
+		SendErrorCode(SecureServer, client, nexproto.RBBinaryDataProtocolID, callID, quazal.OperationError)
+		return
+	}
+
+	log.Printf("Successfully saved binary data to %s", cleanFilePath)
+
 	rmcResponseStream := nex.NewStream()
 
-	rmcResponseStream.WriteBufferString("{}") // the game doesn't really care what we send here so just send empty json
+	rmcResponseStream.WriteBufferString("(test 0)")
 	rmcResponseStream.WriteUInt8(0)
 
 	rmcResponseBody := rmcResponseStream.Bytes()
@@ -124,12 +165,16 @@ func SaveBinaryData(err error, client *nex.Client, callID uint32, metadata strin
 	rmcResponse := nex.NewRMCResponse(nexproto.RBBinaryDataProtocolID, callID)
 	rmcResponse.SetSuccess(nexproto.SaveBinaryData, rmcResponseBody)
 
+	rmcResponseBytes := rmcResponse.Bytes()
+
 	responsePacket, _ := nex.NewPacketV0(client, nil)
 
 	responsePacket.SetVersion(0)
 	responsePacket.SetSource(0x31)
 	responsePacket.SetDestination(0x3F)
 	responsePacket.SetType(nex.DataPacket)
+
+	responsePacket.SetPayload(rmcResponseBytes)
 
 	responsePacket.AddFlag(nex.FlagNeedsAck)
 	responsePacket.AddFlag(nex.FlagReliable)

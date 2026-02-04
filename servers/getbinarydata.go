@@ -22,11 +22,14 @@ import (
 
 func SanitizePath(path string) string {
 	// List of invalid characters except the path separators and drive letter colon
-	invalidChars := []string{"*", "?", "\"", "<", ">", "|", "\r", "\n", "\x0a", "\x0d", "\x00", "."}
+	invalidChars := []string{"*", "?", "\"", "<", ">", "|", "\r", "\n", "\x0a", "\x0d", "\x00"}
 
 	for _, char := range invalidChars {
 		path = strings.ReplaceAll(path, char, "_")
 	}
+
+	// Block path traversal sequences
+	path = strings.ReplaceAll(path, "..", "__")
 
 	return path
 }
@@ -125,6 +128,8 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 		filePath = filepath.Join(basePath, "setlist_art", setlistGUID, fmt.Sprintf("%d.%s", revision, platformExtension))
 		filePath = SanitizePath(filePath)
 
+		log.Printf("Serving setlist art at path %v", filePath)
+
 	case "battle_art":
 		revisionFloat, ok := metadataMap["revision"].(float64)
 
@@ -161,6 +166,8 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 		filePath = filepath.Join(basePath, "battle_art", fmt.Sprintf("%d", int64(battleID)), fmt.Sprintf("%d.%s", revision, platformExtension))
 		filePath = SanitizePath(filePath)
 
+		log.Printf("Serving battle art at path %v", filePath)
+
 	case "band_logo":
 		bandIDFloat, ok := metadataMap["band_id"].(float64)
 
@@ -184,6 +191,8 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 
 		filePath = filepath.Join(basePath, "band_logo", fmt.Sprintf("%d", bandID), fmt.Sprintf("%d.%s", revision, platformExtension))
 		filePath = SanitizePath(filePath)
+
+		log.Printf("Serving band logo at path %v", filePath)
 
 	default:
 		log.Println("Unsupported type ", dataType, " in requested metadata")
@@ -210,6 +219,7 @@ func GetBinaryData(err error, client *nex.Client, callID uint32, metadata string
 	}
 
 	rmcResponseStream := nex.NewStream()
+
 	rmcResponseStream.WriteBuffer(data)
 	rmcResponseStream.WriteBufferString("{}")
 

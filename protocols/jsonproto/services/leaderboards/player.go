@@ -69,8 +69,158 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 
 	scoresCollection := database.Collection("scores")
 
-	// print lb mode
-	log.Printf("Leaderboards Player Get called with LBMode: %d", req.LBMode)
+	isAggregated := req.LBType == LBTypeTotalScore || req.LBType == LBTypeRB3Only
+
+	if isAggregated {
+
+		var pidFilter []int
+
+		if req.LBMode == 1 {
+			for pid := range friendsMap {
+				pidFilter = append(pidFilter, pid)
+			}
+		} else if req.LBMode >= 2 && req.LBMode <= 5 {
+			consoleTypeMap := map[int]int{2: 1, 3: 3, 4: 2, 5: 0}
+			consolePIDs, _ := db.GetPIDsByConsoleType(context.Background(), database, consoleTypeMap[req.LBMode])
+			for pid := range consolePIDs {
+				pidFilter = append(pidFilter, pid)
+			}
+		}
+
+		matchStage := bson.D{}
+
+		// For RB3 Only, filter to song_id 1001-1106 (I think this is the full range)
+		if req.LBType == LBTypeRB3Only {
+			matchStage = append(matchStage, bson.E{Key: "song_id", Value: bson.D{{Key: "$gte", Value: 1001}, {Key: "$lte", Value: 1106}}})
+		}
+
+		if req.RoleID > 0 {
+			matchStage = append(matchStage, bson.E{Key: "role_id", Value: req.RoleID})
+		}
+
+		if len(pidFilter) > 0 {
+			matchStage = append(matchStage, bson.E{Key: "pid", Value: bson.D{{Key: "$in", Value: pidFilter}}})
+		}
+
+		pipeline := mongo.Pipeline{}
+		if len(matchStage) > 0 {
+			pipeline = append(pipeline, bson.D{{Key: "$match", Value: matchStage}})
+		}
+		pipeline = append(pipeline,
+			bson.D{{Key: "$group", Value: bson.D{
+				{Key: "_id", Value: "$pid"},
+				{Key: "totalScore", Value: bson.D{{Key: "$sum", Value: "$score"}}},
+			}}},
+			bson.D{{Key: "$sort", Value: bson.D{{Key: "totalScore", Value: -1}}}},
+		)
+
+		cursor, err := scoresCollection.Aggregate(context.TODO(), pipeline)
+		if err != nil {
+			return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+		}
+
+		var allAggregatedScores []struct {
+			PID        int `bson:"_id"`
+			TotalScore int `bson:"totalScore"`
+		}
+		if err = cursor.All(context.TODO(), &allAggregatedScores); err != nil {
+			cursor.Close(context.TODO())
+			return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+		}
+		cursor.Close(context.TODO())
+
+		playerRank := -1
+		for i, score := range allAggregatedScores {
+			if score.PID == req.PID000 {
+				playerRank = i
+				break
+			}
+		}
+
+		if playerRank == -1 {
+			playerRank = 0
+		}
+
+		// calc page start
+		startRank := int64(playerRank - (playerRank % 19))
+		limit := int64(19)
+
+		// Extract the page of results
+		endIdx := int(startRank + limit)
+		if endIdx > len(allAggregatedScores) {
+			endIdx = len(allAggregatedScores)
+		}
+		startIdx := int(startRank)
+		if startIdx > len(allAggregatedScores) {
+			startIdx = len(allAggregatedScores)
+		}
+		pageScores := allAggregatedScores[startIdx:endIdx]
+
+		// Collect PIDs for name lookup
+		playerPIDs := make([]int, 0)
+		for _, score := range pageScores {
+			playerPIDs = append(playerPIDs, score.PID)
+		}
+
+		// Fetch names
+		playerNames, _ := db.GetConsolePrefixedUsernamesByPIDs(context.Background(), database, playerPIDs)
+		nonPrefixedPlayerNames, _ := db.GetUsernamesByPIDs(context.Background(), database, playerPIDs)
+		bandNames, _ := db.GetBandNamesByOwnerPIDs(context.Background(), database, playerPIDs)
+
+		// Build response
+		var res []PlayerGetResponse
+		idx := int(startRank) + 1
+		isBandScore := req.RoleID == 10
+
+		for _, score := range pageScores {
+			var name string
+
+			if isBandScore {
+				name = bandNames[score.PID]
+			} else {
+				name = playerNames[score.PID]
+			}
+
+			if name == "" {
+				if isBandScore {
+					playerName := nonPrefixedPlayerNames[score.PID]
+					if playerName != "" {
+						name = playerName + "'s Band"
+					} else {
+						name = "Unnamed Band"
+					}
+				} else {
+					name = "Unnamed Player"
+				}
+			}
+
+			isFriend := 0
+			if friendsMap[score.PID] {
+				isFriend = 1
+			}
+
+			res = append(res, PlayerGetResponse{
+				PID:          score.PID,
+				Name:         name,
+				DiffID:       0,
+				Rank:         idx,
+				Score:        score.TotalScore,
+				IsPercentile: 0,
+				InstMask:     0,
+				NotesPct:     0,
+				IsFriend:     isFriend,
+				UnnamedBand:  0,
+				PGUID:        "",
+				ORank:        idx,
+			})
+			idx++
+		}
+
+		if len(res) == 0 {
+			return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+		}
+		return marshaler.MarshalResponse(service.Path(), res)
+	}
 
 	// build the base query filter
 	baseFilter := bson.M{"song_id": req.SongID, "role_id": req.RoleID}

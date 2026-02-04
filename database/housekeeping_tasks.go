@@ -211,6 +211,141 @@ func CleanupBannedUserScores() {
 	}
 }
 
+func CleanupBannedUserAccomplishments() {
+	config, err := GetCachedConfig(context.Background())
+	if err != nil {
+		log.Println("Could not get config for banned user accomplishment cleanup:", err)
+		return
+	}
+
+	accomplishmentsCollection := GocentralDatabase.Collection("accomplishments")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	// Collect PIDs of permanently banned users
+	var bannedPIDs []int
+	for _, bannedPlayer := range config.BannedPlayers {
+		if bannedPlayer.ExpiresAt.IsZero() {
+			pid := GetPIDForUsername(bannedPlayer.Username)
+			if pid != 0 {
+				bannedPIDs = append(bannedPIDs, pid)
+			}
+		}
+	}
+
+	if len(bannedPIDs) == 0 {
+		return
+	}
+
+	// Get the accomplishments document
+	var accomplishments models.Accomplishments
+	err = accomplishmentsCollection.FindOne(ctx, bson.M{}).Decode(&accomplishments)
+	if err != nil {
+		if err != mongo.ErrNoDocuments {
+			log.Println("Could not get accomplishments for banned user cleanup:", err)
+		}
+		return
+	}
+
+	// Helper to check if a PID is banned
+	isBanned := func(pid int) bool {
+		for _, bannedPID := range bannedPIDs {
+			if pid == bannedPID {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Helper to filter out banned PIDs from a slice
+	filterEntries := func(entries []models.AccomplishmentScoreEntry) []models.AccomplishmentScoreEntry {
+		filtered := make([]models.AccomplishmentScoreEntry, 0, len(entries))
+		for _, entry := range entries {
+			if !isBanned(entry.PID) {
+				filtered = append(filtered, entry)
+			}
+		}
+		return filtered
+	}
+
+	// Filter all accomplishment leaderboards
+	accomplishments.LBGoalValueCampaignMetascore = filterEntries(accomplishments.LBGoalValueCampaignMetascore)
+	accomplishments.LBGoalValueAccTourgoldlocal1 = filterEntries(accomplishments.LBGoalValueAccTourgoldlocal1)
+	accomplishments.LBGoalValueAccTourgoldlocal2 = filterEntries(accomplishments.LBGoalValueAccTourgoldlocal2)
+	accomplishments.LBGoalValueAccTourgoldregional1 = filterEntries(accomplishments.LBGoalValueAccTourgoldregional1)
+	accomplishments.LBGoalValueAccTourgoldregional2 = filterEntries(accomplishments.LBGoalValueAccTourgoldregional2)
+	accomplishments.LBGoalValueAccTourgoldcontinental1 = filterEntries(accomplishments.LBGoalValueAccTourgoldcontinental1)
+	accomplishments.LBGoalValueAccTourgoldcontinental2 = filterEntries(accomplishments.LBGoalValueAccTourgoldcontinental2)
+	accomplishments.LBGoalValueAccTourgoldcontinental3 = filterEntries(accomplishments.LBGoalValueAccTourgoldcontinental3)
+	accomplishments.LBGoalValueAccTourgoldglobal1 = filterEntries(accomplishments.LBGoalValueAccTourgoldglobal1)
+	accomplishments.LBGoalValueAccTourgoldglobal2 = filterEntries(accomplishments.LBGoalValueAccTourgoldglobal2)
+	accomplishments.LBGoalValueAccTourgoldglobal3 = filterEntries(accomplishments.LBGoalValueAccTourgoldglobal3)
+	accomplishments.LBGoalValueAccOverdrivemaintain3 = filterEntries(accomplishments.LBGoalValueAccOverdrivemaintain3)
+	accomplishments.LBGoalValueAccOverdrivecareer = filterEntries(accomplishments.LBGoalValueAccOverdrivecareer)
+	accomplishments.LBGoalValueAccCareersaves = filterEntries(accomplishments.LBGoalValueAccCareersaves)
+	accomplishments.LBGoalValueAccMillionpoints = filterEntries(accomplishments.LBGoalValueAccMillionpoints)
+	accomplishments.LBGoalValueAccBassstreaklarge = filterEntries(accomplishments.LBGoalValueAccBassstreaklarge)
+	accomplishments.LBGoalValueAccHopothreehundredbass = filterEntries(accomplishments.LBGoalValueAccHopothreehundredbass)
+	accomplishments.LBGoalValueAccDrumfill170 = filterEntries(accomplishments.LBGoalValueAccDrumfill170)
+	accomplishments.LBGoalValueAccDrumstreaklong = filterEntries(accomplishments.LBGoalValueAccDrumstreaklong)
+	accomplishments.LBGoalValueAccDeployguitarfour = filterEntries(accomplishments.LBGoalValueAccDeployguitarfour)
+	accomplishments.LBGoalValueAccGuitarstreaklarge = filterEntries(accomplishments.LBGoalValueAccGuitarstreaklarge)
+	accomplishments.LBGoalValueAccHopoonethousand = filterEntries(accomplishments.LBGoalValueAccHopoonethousand)
+	accomplishments.LBGoalValueAccDoubleawesomealot = filterEntries(accomplishments.LBGoalValueAccDoubleawesomealot)
+	accomplishments.LBGoalValueAccTripleawesomealot = filterEntries(accomplishments.LBGoalValueAccTripleawesomealot)
+	accomplishments.LBGoalValueAccKeystreaklong = filterEntries(accomplishments.LBGoalValueAccKeystreaklong)
+	accomplishments.LBGoalValueAccProbassstreakepic = filterEntries(accomplishments.LBGoalValueAccProbassstreakepic)
+	accomplishments.LBGoalValueAccProdrumroll3 = filterEntries(accomplishments.LBGoalValueAccProdrumroll3)
+	accomplishments.LBGoalValueAccProdrumstreaklong = filterEntries(accomplishments.LBGoalValueAccProdrumstreaklong)
+	accomplishments.LBGoalValueAccProguitarstreakepic = filterEntries(accomplishments.LBGoalValueAccProguitarstreakepic)
+	accomplishments.LBGoalValueAccProkeystreaklong = filterEntries(accomplishments.LBGoalValueAccProkeystreaklong)
+	accomplishments.LBGoalValueAccDeployvocals = filterEntries(accomplishments.LBGoalValueAccDeployvocals)
+	accomplishments.LBGoalValueAccDeployvocalsonehundred = filterEntries(accomplishments.LBGoalValueAccDeployvocalsonehundred)
+
+	// Update the document
+	update := bson.M{
+		"$set": bson.M{
+			"lb_goal_value_campaign_metascore":         accomplishments.LBGoalValueCampaignMetascore,
+			"lb_goal_value_acc_tourgoldlocal1":         accomplishments.LBGoalValueAccTourgoldlocal1,
+			"lb_goal_value_acc_tourgoldlocal2":         accomplishments.LBGoalValueAccTourgoldlocal2,
+			"lb_goal_value_acc_tourgoldregional1":      accomplishments.LBGoalValueAccTourgoldregional1,
+			"lb_goal_value_acc_tourgoldregional2":      accomplishments.LBGoalValueAccTourgoldregional2,
+			"lb_goal_value_acc_tourgoldcontinental1":   accomplishments.LBGoalValueAccTourgoldcontinental1,
+			"lb_goal_value_acc_tourgoldcontinental2":   accomplishments.LBGoalValueAccTourgoldcontinental2,
+			"lb_goal_value_acc_tourgoldcontinental3":   accomplishments.LBGoalValueAccTourgoldcontinental3,
+			"lb_goal_value_acc_tourgoldglobal1":        accomplishments.LBGoalValueAccTourgoldglobal1,
+			"lb_goal_value_acc_tourgoldglobal2":        accomplishments.LBGoalValueAccTourgoldglobal2,
+			"lb_goal_value_acc_tourgoldglobal3":        accomplishments.LBGoalValueAccTourgoldglobal3,
+			"lb_goal_value_acc_overdrivemaintain3":     accomplishments.LBGoalValueAccOverdrivemaintain3,
+			"lb_goal_value_acc_overdrivecareer":        accomplishments.LBGoalValueAccOverdrivecareer,
+			"lb_goal_value_acc_careersaves":            accomplishments.LBGoalValueAccCareersaves,
+			"lb_goal_value_acc_millionpoints":          accomplishments.LBGoalValueAccMillionpoints,
+			"lb_goal_value_acc_bassstreaklarge":        accomplishments.LBGoalValueAccBassstreaklarge,
+			"lb_goal_value_acc_hopothreehundredbass":   accomplishments.LBGoalValueAccHopothreehundredbass,
+			"lb_goal_value_acc_drumfill170":            accomplishments.LBGoalValueAccDrumfill170,
+			"lb_goal_value_acc_drumstreaklong":         accomplishments.LBGoalValueAccDrumstreaklong,
+			"lb_goal_value_acc_deployguitarfour":       accomplishments.LBGoalValueAccDeployguitarfour,
+			"lb_goal_value_acc_guitarstreaklarge":      accomplishments.LBGoalValueAccGuitarstreaklarge,
+			"lb_goal_value_acc_hopoonethousand":        accomplishments.LBGoalValueAccHopoonethousand,
+			"lb_goal_value_acc_doubleawesomealot":      accomplishments.LBGoalValueAccDoubleawesomealot,
+			"lb_goal_value_acc_tripleawesomealot":      accomplishments.LBGoalValueAccTripleawesomealot,
+			"lb_goal_value_acc_keystreaklong":          accomplishments.LBGoalValueAccKeystreaklong,
+			"lb_goal_value_acc_probassstreakepic":      accomplishments.LBGoalValueAccProbassstreakepic,
+			"lb_goal_value_acc_prodrumroll3":           accomplishments.LBGoalValueAccProdrumroll3,
+			"lb_goal_value_acc_prodrumstreaklong":      accomplishments.LBGoalValueAccProdrumstreaklong,
+			"lb_goal_value_acc_proguitarstreakepic":    accomplishments.LBGoalValueAccProguitarstreakepic,
+			"lb_goal_value_acc_prokeystreaklong":       accomplishments.LBGoalValueAccProkeystreaklong,
+			"lb_goal_value_acc_deployvocals":           accomplishments.LBGoalValueAccDeployvocals,
+			"lb_goal_value_acc_deployvocalsonehundred": accomplishments.LBGoalValueAccDeployvocalsonehundred,
+		},
+	}
+
+	_, err = accomplishmentsCollection.UpdateOne(ctx, bson.M{}, update)
+	if err != nil {
+		log.Println("Could not update accomplishments after banned user cleanup:", err)
+	}
+}
+
 func CleanupInvalidUsers() {
 	usersCollection := GocentralDatabase.Collection("users")
 	scoresCollection := GocentralDatabase.Collection("scores")

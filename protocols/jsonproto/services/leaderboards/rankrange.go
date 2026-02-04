@@ -71,33 +71,82 @@ func (service RankRangeGetService) Handle(data string, database *mongo.Database,
 	scoresCollection := database.Collection("scores")
 
 	startRank := int64(req.StartRank - 1)
-	endRank := int64((req.EndRank - req.StartRank) - 1)
+	numRows := int64(req.EndRank - req.StartRank + 1)
 
-	// build the query filter
-	filter := bson.M{"song_id": req.SongID, "role_id": req.RoleID}
-
-	cursor, err := scoresCollection.Find(context.TODO(), filter, &options.FindOptions{
-		Skip:  &startRank,
-		Limit: &endRank,
-		Sort:  bson.M{"score": -1},
-	})
-
-	if err != nil {
-		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
-	}
-
-	// just grab all the relevant scores into a single slice
-	// this is a bit different than the original approach which was using a curosr but there aren't even many scores fetched at once so this seems cleaner
 	var scores []models.Score
-	if err = cursor.All(context.Background(), &scores); err != nil {
-		log.Println("Failed to decode all scores:", err)
-		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+	var aggregatedScores []struct {
+		PID        int `bson:"_id"`
+		TotalScore int `bson:"totalScore"`
+	}
+	isAggregated := req.LBType == LBTypeTotalScore || req.LBType == LBTypeRB3Only
+
+	if isAggregated {
+		matchStage := bson.D{}
+
+		// For RB3 Only, filter to song_id 1001-1106 (I think this is the full range)
+		if req.LBType == LBTypeRB3Only {
+			matchStage = append(matchStage, bson.E{Key: "song_id", Value: bson.D{{Key: "$gte", Value: 1001}, {Key: "$lte", Value: 1106}}})
+		}
+
+		if req.RoleID > 0 {
+			matchStage = append(matchStage, bson.E{Key: "role_id", Value: req.RoleID})
+		}
+
+		// Build aggregation pipeline
+		// i genuinely hate mongo syntax
+		pipeline := mongo.Pipeline{}
+		if len(matchStage) > 0 {
+			pipeline = append(pipeline, bson.D{{Key: "$match", Value: matchStage}})
+		}
+		pipeline = append(pipeline,
+			bson.D{{Key: "$group", Value: bson.D{
+				{Key: "_id", Value: "$pid"},
+				{Key: "totalScore", Value: bson.D{{Key: "$sum", Value: "$score"}}},
+			}}},
+			bson.D{{Key: "$sort", Value: bson.D{{Key: "totalScore", Value: -1}}}},
+			bson.D{{Key: "$skip", Value: startRank}},
+			bson.D{{Key: "$limit", Value: numRows}},
+		)
+
+		cursor, err := scoresCollection.Aggregate(context.TODO(), pipeline)
+		if err != nil {
+			return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+		}
+		defer cursor.Close(context.TODO())
+
+		if err = cursor.All(context.Background(), &aggregatedScores); err != nil {
+			log.Println("Failed to decode aggregated scores:", err)
+			return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+		}
+	} else {
+		filter := bson.M{"song_id": req.SongID, "role_id": req.RoleID}
+
+		cursor, err := scoresCollection.Find(context.TODO(), filter, &options.FindOptions{
+			Skip:  &startRank,
+			Limit: &numRows,
+			Sort:  bson.M{"score": -1},
+		})
+
+		if err != nil {
+			return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+		}
+
+		if err = cursor.All(context.Background(), &scores); err != nil {
+			log.Println("Failed to decode all scores:", err)
+			return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+		}
 	}
 
 	// collect all the player and band PIDs we need to fetch
 	playerPIDs := make([]int, 0)
-	for _, score := range scores {
-		playerPIDs = append(playerPIDs, score.OwnerPID)
+	if isAggregated {
+		for _, score := range aggregatedScores {
+			playerPIDs = append(playerPIDs, score.PID)
+		}
+	} else {
+		for _, score := range scores {
+			playerPIDs = append(playerPIDs, score.OwnerPID)
+		}
 	}
 
 	// grab console-prefixed usernames for players and band names for the bands
@@ -108,53 +157,103 @@ func (service RankRangeGetService) Handle(data string, database *mongo.Database,
 	var res []RankRangeGetResponse
 	var startIdx int = req.StartRank
 
-	for _, score := range scores {
-		var name string
-		isBandScore := score.RoleID == 10
+	if isAggregated {
+		// Build response for aggregated leaderboards
+		isBandScore := req.RoleID == 10
 
-		// get the band or player name
-		// since we prefetched the names this is a quick map lookup
-		if isBandScore {
-			name = bandNames[score.OwnerPID]
-		} else {
-			name = playerNames[score.OwnerPID]
-		}
+		for _, score := range aggregatedScores {
+			var name string
 
-		// use fallback names if something could not be fetched or wasn't in the db
-		if name == "" {
 			if isBandScore {
-				playerName := nonPrefixedPlayerNames[score.OwnerPID]
-				if playerName != "" {
-					name = playerName + "'s Band" // "Player's Band" if the band name is not set but the player is known
-				} else {
-					name = "Unnamed Band"
-				}
+				name = bandNames[score.PID]
 			} else {
-				name = "Unnamed Player"
+				name = playerNames[score.PID]
 			}
+
+			if name == "" {
+				if isBandScore {
+					playerName := nonPrefixedPlayerNames[score.PID]
+					if playerName != "" {
+						name = playerName + "'s Band"
+					} else {
+						name = "Unnamed Band"
+					}
+				} else {
+					name = "Unnamed Player"
+				}
+			}
+
+			isFriend := 0
+			if friendsMap[score.PID] {
+				isFriend = 1
+			}
+
+			res = append(res, RankRangeGetResponse{
+				PID:          score.PID,
+				Name:         name,
+				DiffID:       0, // Aggregated - no specific difficulty
+				Rank:         startIdx,
+				Score:        score.TotalScore,
+				IsPercentile: 0,
+				InstMask:     0, // Aggregated - no specific instrument
+				NotesPct:     0, // Aggregated - no specific notes percent
+				IsFriend:     isFriend,
+				UnnamedBand:  0,
+				PGUID:        "",
+				ORank:        startIdx,
+			})
+
+			startIdx++
 		}
+	} else {
+		for _, score := range scores {
+			var name string
+			isBandScore := score.RoleID == 10
 
-		isFriend := 0
-		if friendsMap[score.OwnerPID] {
-			isFriend = 1
+			// get the band or player name
+			// since we prefetched the names this is a quick map lookup
+			if isBandScore {
+				name = bandNames[score.OwnerPID]
+			} else {
+				name = playerNames[score.OwnerPID]
+			}
+
+			// use fallback names if something could not be fetched or wasn't in the db
+			if name == "" {
+				if isBandScore {
+					playerName := nonPrefixedPlayerNames[score.OwnerPID]
+					if playerName != "" {
+						name = playerName + "'s Band" // "Player's Band" if the band name is not set but the player is known
+					} else {
+						name = "Unnamed Band"
+					}
+				} else {
+					name = "Unnamed Player"
+				}
+			}
+
+			isFriend := 0
+			if friendsMap[score.OwnerPID] {
+				isFriend = 1
+			}
+
+			res = append(res, RankRangeGetResponse{
+				PID:          score.OwnerPID,
+				Name:         name,
+				DiffID:       score.DiffID,
+				Rank:         startIdx,
+				Score:        score.Score,
+				IsPercentile: 0,
+				InstMask:     score.InstrumentMask,
+				NotesPct:     score.NotesPercent,
+				IsFriend:     isFriend,
+				UnnamedBand:  0,
+				PGUID:        "",
+				ORank:        startIdx,
+			})
+
+			startIdx++
 		}
-
-		res = append(res, RankRangeGetResponse{
-			PID:          score.OwnerPID,
-			Name:         name,
-			DiffID:       score.DiffID,
-			Rank:         startIdx,
-			Score:        score.Score,
-			IsPercentile: 0,
-			InstMask:     score.InstrumentMask,
-			NotesPct:     score.NotesPercent,
-			IsFriend:     isFriend,
-			UnnamedBand:  0,
-			PGUID:        "",
-			ORank:        startIdx,
-		})
-
-		startIdx++
 	}
 
 	if len(res) == 0 {
