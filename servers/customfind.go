@@ -6,6 +6,8 @@ import (
 	"rb3server/database"
 	"rb3server/models"
 	"rb3server/quazal"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/ihatecompvir/nex-go"
@@ -25,6 +27,15 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 
 	gatheringCollection := database.GocentralDatabase.Collection("gatherings")
 	usersCollection := database.GocentralDatabase.Collection("users")
+
+	// Fetch the searching user to get their USIDs
+	var searchingUser models.User
+	err = usersCollection.FindOne(context.TODO(), bson.M{"pid": client.PlayerID()}).Decode(&searchingUser)
+	if err != nil {
+		log.Printf("Could not find searching user %s: %v\n", client.Username, err)
+		SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, quazal.OperationError)
+		return
+	}
 
 	// attempt to get a random gathering and deserialize it
 	// any gatherings that havent been updated in 5 minutes are ignored
@@ -82,6 +93,7 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 		return
 	}
 	var gatherings = make([]models.Gathering, 0)
+	var creatorNames []string
 	for cur.Next(nil) {
 		var g models.Gathering
 		err = cur.Decode(&g)
@@ -91,26 +103,92 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 			return
 		}
 		gatherings = append(gatherings, g)
+		creatorNames = append(creatorNames, g.Creator)
+	}
+
+	// Fetch all creators in one go
+	var creators []models.User
+	creatorCursor, err := usersCollection.Find(context.TODO(), bson.M{"username": bson.M{"$in": creatorNames}})
+	if err != nil {
+		log.Printf("Could not fetch gathering creators: %v\n", err)
+		SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, quazal.OperationError)
+		return
+	}
+	if err = creatorCursor.All(context.TODO(), &creators); err != nil {
+		log.Printf("Could not decode gathering creators: %v\n", err)
+		SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, quazal.OperationError)
+		return
+	}
+
+	creatorsMap := make(map[string]models.User)
+	for _, creator := range creators {
+		creatorsMap[creator.Username] = creator
+	}
+
+	// parse searching user's songs
+	searcherSongs := make(map[string]bool)
+	for _, songID := range strings.Split(searchingUser.USIDs, ",") {
+		if songID != "" {
+			searcherSongs[strings.TrimSpace(songID)] = true
+		}
+	}
+
+	// calculate a similarity score for each gathering
+	type ScoredGathering struct {
+		Gathering models.Gathering
+		Score     int
+	}
+	var scoredGatherings []ScoredGathering
+
+	for _, g := range gatherings {
+		score := 0
+		if creator, exists := creatorsMap[g.Creator]; exists {
+			creatorSongs := strings.Split(creator.USIDs, ",")
+			for _, songID := range creatorSongs {
+				if searcherSongs[strings.TrimSpace(songID)] {
+					score++
+				}
+			}
+		}
+		scoredGatherings = append(scoredGatherings, ScoredGathering{Gathering: g, Score: score})
+	}
+
+	// sort by score descending
+	sort.Slice(scoredGatherings, func(i, j int) bool {
+		return scoredGatherings[i].Score > scoredGatherings[j].Score
+	})
+
+	// take top 10
+	var topGatherings []models.Gathering
+	limit := 10
+	if len(scoredGatherings) < limit {
+		limit = len(scoredGatherings)
+	}
+	for i := 0; i < limit; i++ {
+		topGatherings = append(topGatherings, scoredGatherings[i].Gathering)
 	}
 
 	rmcResponseStream := nex.NewStream()
 
 	// if there are no availble gatherings, tell the client to check again.
 	// otherwise, pass the available gathering to the client
-	if len(gatherings) == 0 {
+	if len(topGatherings) == 0 {
 		log.Println("There are no active gatherings. Tell client to keep checking")
 		rmcResponseStream.WriteUInt32LE(0)
 	} else {
-		log.Printf("Found %d gatherings - telling client to attempt joining", len(gatherings))
-		rmcResponseStream.WriteUInt32LE(uint32(len(gatherings)))
-		for _, gathering := range gatherings {
-			var user models.User
-
-			if err = usersCollection.FindOne(nil, bson.M{"username": gathering.Creator}).Decode(&user); err != nil {
-				log.Printf("Could not find creator %s of gathering: %+v\n", gathering.Creator, err)
-				SendErrorCode(SecureServer, client, nexproto.CustomMatchmakingProtocolID, callID, quazal.OperationError)
-				return
+		log.Printf("Found %d gatherings - telling client to attempt joining", len(topGatherings))
+		rmcResponseStream.WriteUInt32LE(uint32(len(topGatherings)))
+		for _, gathering := range topGatherings {
+			// We already have the creator in our map, no need to query again
+			user, exists := creatorsMap[gathering.Creator]
+			if !exists {
+				// Fallback just in case, though shouldn't happen given previous query
+				if err = usersCollection.FindOne(nil, bson.M{"username": gathering.Creator}).Decode(&user); err != nil {
+					log.Printf("Could not find creator %s of gathering: %+v\n", gathering.Creator, err)
+					continue
+				}
 			}
+
 			rmcResponseStream.WriteBufferString("HarmonixGathering")
 			rmcResponseStream.WriteUInt32LE(uint32(len(gathering.Contents) + 4))
 			rmcResponseStream.WriteUInt32LE(uint32(len(gathering.Contents)))
