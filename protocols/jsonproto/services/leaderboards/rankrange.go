@@ -92,9 +92,7 @@ func (service RankRangeGetService) Handle(data string, database *mongo.Database,
 			matchStage = append(matchStage, bson.E{Key: "song_id", Value: bson.D{{Key: "$gte", Value: 1001}, {Key: "$lte", Value: 1106}}})
 		}
 
-		if req.RoleID > 0 {
-			matchStage = append(matchStage, bson.E{Key: "role_id", Value: req.RoleID})
-		}
+		matchStage = append(matchStage, bson.E{Key: "role_id", Value: req.RoleID})
 
 		// Build aggregation pipeline
 		// i genuinely hate mongo syntax

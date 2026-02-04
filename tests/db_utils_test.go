@@ -99,6 +99,13 @@ func TestMain(m *testing.M) {
 		"station_url":     "prudp:/address=192.168.1.69;port=9103;PID=501;sid=15;type=3;RVCID=45",
 	})
 
+	// insert a machine with machine_id 999 for TestIsPIDAMasterUser
+	_, err = machinesCollection.InsertOne(ctx, map[string]interface{}{
+		"wii_friend_code": "9999999999999999",
+		"console_type":    2,
+		"machine_id":      999,
+	})
+
 	// insert a MOTD
 	motdCollection := database.GocentralDatabase.Collection("motd")
 	_, err = motdCollection.InsertOne(ctx, map[string]interface{}{

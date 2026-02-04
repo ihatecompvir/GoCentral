@@ -81,10 +81,7 @@ func (service MaxrankGetService) Handle(data string, database *mongo.Database, c
 			matchStage = append(matchStage, bson.E{Key: "song_id", Value: bson.D{{Key: "$gte", Value: 1001}, {Key: "$lte", Value: 1106}}})
 		}
 
-		// Filter by role_id if specified
-		if req.RoleID > 0 {
-			matchStage = append(matchStage, bson.E{Key: "role_id", Value: req.RoleID})
-		}
+		matchStage = append(matchStage, bson.E{Key: "role_id", Value: req.RoleID})
 
 		// Build pipeline
 		pipeline := mongo.Pipeline{}

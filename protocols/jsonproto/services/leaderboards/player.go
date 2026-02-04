@@ -98,9 +98,7 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 			matchStage = append(matchStage, bson.E{Key: "song_id", Value: bson.D{{Key: "$gte", Value: 1001}, {Key: "$lte", Value: 1106}}})
 		}
 
-		if req.RoleID > 0 {
-			matchStage = append(matchStage, bson.E{Key: "role_id", Value: req.RoleID})
-		}
+		matchStage = append(matchStage, bson.E{Key: "role_id", Value: req.RoleID})
 
 		if len(pidFilter) > 0 {
 			matchStage = append(matchStage, bson.E{Key: "pid", Value: bson.D{{Key: "$in", Value: pidFilter}}})
