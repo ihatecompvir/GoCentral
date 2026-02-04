@@ -89,6 +89,10 @@ func (service PlayerGetService) Handle(data string, database *mongo.Database, cl
 
 		matchStage := bson.D{}
 
+		// Exclude battle and setlist scores from total score calculations
+		matchStage = append(matchStage, bson.E{Key: "battle_id", Value: 0})
+		matchStage = append(matchStage, bson.E{Key: "setlist_id", Value: 0})
+
 		// For RB3 Only, filter to song_id 1001-1106 (I think this is the full range)
 		if req.LBType == LBTypeRB3Only {
 			matchStage = append(matchStage, bson.E{Key: "song_id", Value: bson.D{{Key: "$gte", Value: 1001}, {Key: "$lte", Value: 1106}}})
