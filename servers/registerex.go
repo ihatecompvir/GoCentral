@@ -42,6 +42,8 @@ func shouldVerifyTicket(consoleType int) bool {
 	return value == "1" || value == "true"
 }
 
+var ipRegex = regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}`)
+
 func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []string, className string, ticketData []byte) {
 	users := database.GocentralDatabase.Collection("users")
 	machines := database.GocentralDatabase.Collection("machines")
@@ -84,9 +86,7 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 		var stationURL string = "prudp:/address=" + client.Address().IP.String() + ";port=" + fmt.Sprint(client.Address().Port) + ";PID=" + fmt.Sprint(user.PID) + ";sid=15;type=3;RVCID=" + fmt.Sprint(newRVCID)
 
 		// run a RegEx to extract the IP address from the station URL
-		re := regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}`)
-
-		ipRegexResults := re.FindAllString(stationUrls[0], -1)
+		ipRegexResults := ipRegex.FindAllString(stationUrls[0], -1)
 		var internalStationURL string
 
 		// if there aren't any results, use a blank internal IP URL

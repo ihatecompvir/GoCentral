@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -129,7 +130,7 @@ func AdminTokenAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		if config.AdminAPIToken == "" || token != config.AdminAPIToken {
+		if config.AdminAPIToken == "" || subtle.ConstantTimeCompare([]byte(token), []byte(config.AdminAPIToken)) != 1 {
 			sendError(w, http.StatusInternalServerError, "Could not verify authorization")
 			return
 		}

@@ -34,10 +34,11 @@ func GetRequestName(data string) (string, error) {
 	return name, nil
 }
 
+var indexRegex = regexp.MustCompile(`\d+$`)
+
 // extracts the index from dynamic fields (pid000, pid001, etc.)
 func extractIndex(key, prefix string) (int, error) {
-	re := regexp.MustCompile(`\d+$`)
-	indexStr := re.FindString(key[len(prefix):])
+	indexStr := indexRegex.FindString(key[len(prefix):])
 	var index int
 	_, err := fmt.Sscanf(indexStr, "%d", &index)
 	return index, err
@@ -51,22 +52,16 @@ func UnmarshalRequest(data string, out interface{}) error {
 	}
 
 	outValue := reflect.ValueOf(out).Elem()
-	outType := outValue.Type()
+	info := getUnmarshalTypeInfo(outValue.Type())
 
 	dynamicFields := make(map[string]map[int]interface{})
 
-	for i := 0; i < outType.NumField(); i++ {
-		field := outType.Field(i)
-		jsonTag := field.Tag.Get("json")
-		if jsonTag == "" || jsonTag == "-" {
-			continue
-		}
-
+	for _, fi := range info.fields {
 		// Handle static fields
-		if value, ok := normalized[jsonTag]; ok {
-			fieldValue := outValue.Field(i)
+		if value, ok := normalized[fi.jsonTag]; ok {
+			fieldValue := outValue.Field(fi.index)
 			if fieldValue.CanSet() {
-				switch fieldValue.Kind() {
+				switch fi.kind {
 				case reflect.Int:
 					if v, ok := value.(float64); ok {
 						fieldValue.SetInt(int64(v))
@@ -79,33 +74,30 @@ func UnmarshalRequest(data string, out interface{}) error {
 					fieldValue.Set(reflect.ValueOf(value))
 				}
 			}
-			delete(normalized, jsonTag)
+			delete(normalized, fi.jsonTag)
 		}
 
 		// Handle dynamic fields (pidXXX, role_idXXX, etc.)
-		if strings.Contains(jsonTag, "XXX") {
-			fieldNamePrefix := strings.TrimSuffix(jsonTag, "XXX")
+		if fi.isDynamic {
 			for key, value := range normalized {
-				if strings.HasPrefix(key, fieldNamePrefix) {
-					index, err := extractIndex(key, fieldNamePrefix)
+				if strings.HasPrefix(key, fi.fieldPrefix) {
+					index, err := extractIndex(key, fi.fieldPrefix)
 					if err != nil {
 						continue
 					}
-					if _, ok := dynamicFields[jsonTag]; !ok {
-						dynamicFields[jsonTag] = make(map[int]interface{})
+					if _, ok := dynamicFields[fi.jsonTag]; !ok {
+						dynamicFields[fi.jsonTag] = make(map[int]interface{})
 					}
-					dynamicFields[jsonTag][index] = value
+					dynamicFields[fi.jsonTag][index] = value
 					delete(normalized, key)
 				}
 			}
 		}
 	}
 
-	for i := 0; i < outType.NumField(); i++ {
-		field := outType.Field(i)
-		jsonTag := field.Tag.Get("json")
-		if values, ok := dynamicFields[jsonTag]; ok {
-			fieldValue := outValue.Field(i)
+	for _, fi := range info.fields {
+		if values, ok := dynamicFields[fi.jsonTag]; ok {
+			fieldValue := outValue.Field(fi.index)
 			if fieldValue.Kind() == reflect.Slice {
 				keys := make([]int, 0, len(values))
 				for k := range values {
@@ -114,7 +106,7 @@ func UnmarshalRequest(data string, out interface{}) error {
 				sort.Ints(keys)
 				for _, k := range keys {
 					value := values[k]
-					switch fieldValue.Type().Elem().Kind() {
+					switch fi.elemKind {
 					case reflect.Int:
 						if v, ok := value.(float64); ok {
 							fieldValue.Set(reflect.Append(fieldValue, reflect.ValueOf(int(v))))
