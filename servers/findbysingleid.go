@@ -5,6 +5,7 @@ import (
 	"log"
 	"rb3server/database"
 	"rb3server/models"
+	"rb3server/quazal"
 
 	"github.com/ihatecompvir/nex-go"
 	nexproto "github.com/ihatecompvir/nex-protocols-go"
@@ -26,14 +27,14 @@ func FindBySingleID(err error, client *nex.Client, callID uint32, gatheringID ui
 	rmcResponseStream := nex.NewStream()
 
 	if err = gatheringCollection.FindOne(nil, bson.M{"gathering_id": gatheringID}).Decode(&gathering); err != nil {
-		log.Printf("Could not find gatheringID %s of gathering: %+v\n", gatheringID, err)
-		rmcResponseStream.WriteUInt8(0)
+		log.Printf("Could not find gatheringID %v of gathering: %+v\n", gatheringID, err)
+		SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.OperationError)
 		return
 	} else {
 
 		if err = users.FindOne(nil, bson.M{"username": gathering.Creator}).Decode(&user); err != nil {
 			log.Println("Could not find user with username " + fmt.Sprint(gathering.Creator) + " in database")
-			rmcResponseStream.WriteUInt8(0)
+			SendErrorCode(SecureServer, client, nexproto.MatchmakingProtocolID, callID, quazal.OperationError)
 			return
 		} else {
 			rmcResponseStream.WriteUInt8(1)

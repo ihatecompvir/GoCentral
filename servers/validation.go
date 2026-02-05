@@ -7,7 +7,6 @@ import (
 	"rb3server/utils"
 
 	"github.com/ihatecompvir/nex-go"
-	nexproto "github.com/ihatecompvir/nex-protocols-go"
 )
 
 // ValidateClientPID checks if the client has a valid, unbanned non-Master PID
@@ -16,13 +15,13 @@ func ValidateNonMasterClientPID(server *nex.Server, client *nex.Client, callID u
 	hasLoggedIn, err := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), client.PlayerID())
 	if err != nil {
 		log.Println("Error checking PID validity: ", err)
-		SendErrorCode(server, client, nexproto.MatchmakingProtocolID, callID, quazal.OperationError)
+		SendErrorCode(server, client, uint8(protocolId), callID, quazal.OperationError)
 		return false, err
 	}
 
 	if !hasLoggedIn || client.PlayerID() == 0 || database.IsPIDAMasterUser(int(client.PlayerID())) || database.IsPIDBanned(int(client.PlayerID())) {
 		log.Println("Client is attempting to perform a privileged action without a valid server-assigned PID, rejecting call")
-		SendErrorCode(server, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
+		SendErrorCode(server, client, uint8(protocolId), callID, quazal.NotAuthenticated)
 		return false, nil
 	}
 
@@ -35,13 +34,13 @@ func ValidateClientPID(server *nex.Server, client *nex.Client, callID uint32, pr
 	hasLoggedIn, err := utils.GetClientStoreSingleton().IsValidPID(client.Address().String(), client.PlayerID())
 	if err != nil {
 		log.Println("Error checking PID validity: ", err)
-		SendErrorCode(server, client, nexproto.MatchmakingProtocolID, callID, quazal.OperationError)
+		SendErrorCode(server, client, uint8(protocolId), callID, quazal.OperationError)
 		return false, err
 	}
 
 	if !hasLoggedIn || client.PlayerID() == 0 {
 		log.Println("Client is attempting to perform a privileged action without a valid server-assigned PID, rejecting call")
-		SendErrorCode(server, client, nexproto.MatchmakingProtocolID, callID, quazal.NotAuthenticated)
+		SendErrorCode(server, client, uint8(protocolId), callID, quazal.NotAuthenticated)
 		return false, nil
 	}
 

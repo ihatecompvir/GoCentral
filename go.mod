@@ -6,7 +6,7 @@ toolchain go1.22.3
 
 require (
 	github.com/go-chi/chi/v5 v5.1.0
-	github.com/ihatecompvir/nex-go v0.0.0-20260204014815-ca4abe5d490b
+	github.com/ihatecompvir/nex-go v0.0.0-20260205042503-abb963488ccd
 	github.com/ihatecompvir/nex-protocols-go v0.0.0-20260203031258-2221c341c0a9
 	github.com/joho/godotenv v1.5.1
 	github.com/natefinch/lumberjack v2.0.0+incompatible
