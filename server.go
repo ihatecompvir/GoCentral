@@ -120,6 +120,14 @@ func main() {
 	go servers.StartAuthServer()
 	go servers.StartSecureServer()
 
+	debugNetwork := os.Getenv("DEBUGNETWORK")
+
+	if debugNetwork == "1" {
+		// only enable for secure server now since that's the one that has the most complex network interactions, and the auth server is pretty straightforward
+		// TODO: have a way to enable debug network for the auth server as well, cba right now
+		servers.SecureServer.SetDebugNetwork(true)
+	}
+
 	// Start HTTP server using Chi
 	enableRESTAPI := os.Getenv("ENABLERESTAPI")
 
