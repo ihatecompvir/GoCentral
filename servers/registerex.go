@@ -178,7 +178,7 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 		client.SetConnectionID(newRVCID)
 
 		if err != nil {
-			log.Printf("Could not update station URLs for %s\n", result.ModifiedCount, client.Username)
+			log.Printf("Could not update station URLs for %s: %d\n", client.Username, result.ModifiedCount)
 			SendErrorCode(SecureServer, client, nexproto.SecureProtocolID, callID, quazal.OperationError)
 			return
 		}
