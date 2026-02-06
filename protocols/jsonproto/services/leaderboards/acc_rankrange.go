@@ -87,9 +87,12 @@ func (service AccRankRangeGetService) Handle(data string, database *mongo.Databa
 	if start < 0 {
 		start = 0
 	}
-	end := req.EndRank - 1
+	end := req.EndRank
 	if end > len(accSlice) {
 		end = len(accSlice)
+	}
+	if start > end {
+		start = end
 	}
 	visibleScores := accSlice[start:end]
 

@@ -82,7 +82,9 @@ func (service GetSonglistsService) Handle(data string, database *mongo.Database,
 
 	if err != nil {
 		log.Printf("Error getting songlists: %s", err)
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
+	defer setlistCursor.Close(context.TODO())
 
 	jsonStrings := []string{}
 

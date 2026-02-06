@@ -421,6 +421,7 @@ func LeaderboardHandler(w http.ResponseWriter, r *http.Request) {
 	songID, err := strconv.Atoi(songIDStr)
 	if err != nil {
 		sendError(w, http.StatusBadRequest, "Invalid song_id")
+		return
 	}
 
 	roleID, err := strconv.Atoi(roleIDStr)

@@ -153,9 +153,11 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 				nil,
 				bson.M{"username": client.Username},
 				bson.D{
-					{"$set", bson.D{{"station_url", stationURL}}},
-					{"$set", bson.D{{"int_station_url", internalStationURL}}},
-					{"$set", bson.D{{"console_type", consoleType}}},
+					{"$set", bson.D{
+						{"station_url", stationURL},
+						{"int_station_url", internalStationURL},
+						{"console_type", consoleType},
+					}},
 				},
 			)
 			// invalidate console type cache since user's console type may have changed
@@ -173,7 +175,7 @@ func RegisterEx(err error, client *nex.Client, callID uint32, stationUrls []stri
 
 		client.SetPlatform(consoleType)
 		client.SetExternalStationURL(stationURL)
-		client.SetConnectionID(uint32(newRVCID))
+		client.SetConnectionID(newRVCID)
 
 		if err != nil {
 			log.Printf("Could not update station URLs for %s\n", result.ModifiedCount, client.Username)

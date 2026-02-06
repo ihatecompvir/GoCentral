@@ -108,6 +108,28 @@ func CustomFind(err error, client *nex.Client, callID uint32, data []byte) {
 
 	// Fetch all creators in one go
 	var creators []models.User
+	if len(creatorNames) == 0 {
+		// No gatherings found, skip straight to reporting no results
+		rmcResponseStream := nex.NewStream()
+		log.Println("There are no active gatherings. Tell client to keep checking")
+		rmcResponseStream.WriteUInt32LE(0)
+
+		rmcResponseBody := rmcResponseStream.Bytes()
+		rmcResponse := nex.NewRMCResponse(nexproto.CustomMatchmakingProtocolID, callID)
+		rmcResponse.SetSuccess(nexproto.RegisterGathering, rmcResponseBody)
+		rmcResponseBytes := rmcResponse.Bytes()
+
+		responsePacket, _ := nex.NewPacketV0(client, nil)
+		responsePacket.SetVersion(0)
+		responsePacket.SetSource(0x31)
+		responsePacket.SetDestination(0x3F)
+		responsePacket.SetType(nex.DataPacket)
+		responsePacket.SetPayload(rmcResponseBytes)
+		responsePacket.AddFlag(nex.FlagNeedsAck)
+		responsePacket.AddFlag(nex.FlagReliable)
+		SecureServer.Send(responsePacket)
+		return
+	}
 	creatorCursor, err := usersCollection.Find(context.TODO(), bson.M{"username": bson.M{"$in": creatorNames}})
 	if err != nil {
 		log.Printf("Could not fetch gathering creators: %v\n", err)

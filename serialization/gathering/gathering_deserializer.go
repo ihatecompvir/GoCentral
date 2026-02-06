@@ -9,8 +9,8 @@ type GatheringDeserializer struct{}
 
 // TODO: Redo this to use Go's marshaling because that would probably be better
 func (d *GatheringDeserializer) Deserialize(data []byte) (RVGathering, error) {
-	if len(data) < 54 {
-		return RVGathering{}, fmt.Errorf("insufficient data to deserialize Gathering, expected at least 54 bytes but got %d", len(data))
+	if len(data) < 86 {
+		return RVGathering{}, fmt.Errorf("insufficient data to deserialize Gathering, expected at least 86 bytes but got %d", len(data))
 	}
 
 	var g RVGathering

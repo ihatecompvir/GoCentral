@@ -52,6 +52,7 @@ func GetConsoleUsernames(err error, client *nex.Client, callID uint32, friendCod
 			SendErrorCode(SecureServer, client, nexproto.NintendoManagementProtocolID, callID, quazal.UnknownError)
 			return
 		}
+		defer cur.Close(context.TODO())
 
 		// iterate through the users and add them to the list
 		for cur.Next(context.Background()) {

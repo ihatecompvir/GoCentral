@@ -245,6 +245,12 @@ func Login(err error, client *nex.Client, callID uint32, username string) {
 
 		var machine models.Machine
 
+		if len(res) < 2 {
+			log.Printf("Wii client %s has malformed username (no friend code found)\n", username)
+			SendErrorCode(AuthServer, client, nexproto.AuthenticationProtocolID, callID, quazal.InvalidArgument)
+			return
+		}
+
 		// try to find the machine via the Wii friend code (res[1])
 		_ = machinesCollection.FindOne(context.TODO(), bson.M{"wii_friend_code": res[1]}).Decode(&machine)
 

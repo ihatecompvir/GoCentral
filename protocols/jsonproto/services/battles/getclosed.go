@@ -65,7 +65,9 @@ func (service GetBattlesClosedService) Handle(data string, database *mongo.Datab
 
 	if err != nil {
 		log.Printf("Error getting closed battles: %s", err)
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
+	defer setlistCursor.Close(context.TODO())
 
 	jsonStrings := []string{}
 

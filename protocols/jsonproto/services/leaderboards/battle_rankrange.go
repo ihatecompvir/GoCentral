@@ -69,7 +69,7 @@ func (service BattleRankRangeGetService) Handle(data string, database *mongo.Dat
 	scoresCollection := database.Collection("scores")
 
 	startRank := int64(req.StartRank - 1)
-	endRank := int64((req.EndRank - req.StartRank) - 1)
+	endRank := int64(req.EndRank - req.StartRank + 1)
 
 	cursor, err := scoresCollection.Find(context.TODO(), bson.M{"battle_id": req.BattleID}, &options.FindOptions{
 		Skip:  &startRank,

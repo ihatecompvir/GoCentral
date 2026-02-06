@@ -423,8 +423,17 @@ func GetCoolFact() string {
 			return "Players on this server have no stars because nobody's set a score!"
 		}
 
-		stars := result[0]["total"].(int32)
-		return "Players on this server have earned a cumulative " + strconv.Itoa(int(stars)) + " " + pluralize(int64(stars), "star", "stars") + "!"
+		// handle stars above int32 max just in case, since we don't want to return a negative number of stars
+		var stars int64
+		switch v := result[0]["total"].(type) {
+		case int32:
+			stars = int64(v)
+		case int64:
+			stars = v
+		default:
+			return "Players on this server have earned an unknown number of stars because the result type was unexpected! Ping @ihatecompvir!"
+		}
+		return "Players on this server have earned a cumulative " + strconv.FormatInt(stars, 10) + " " + pluralize(stars, "star", "stars") + "!"
 	case 1:
 		scoresCollection := GocentralDatabase.Collection("scores")
 

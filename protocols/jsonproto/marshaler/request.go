@@ -28,7 +28,7 @@ func GetRequestName(data string) (string, error) {
 
 	name, ok := first[0].(string)
 	if !ok {
-		panic("bad name")
+		return "", fmt.Errorf("expected string for request name, got %T", first[0])
 	}
 
 	return name, nil

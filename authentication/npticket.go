@@ -3,6 +3,7 @@ package authentication
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 )
 
 type NPTicket struct {
@@ -96,6 +97,11 @@ func (f *NPTicketFooter) Bytes() []byte {
 type NPTicketDeserializer struct{}
 
 func (d *NPTicketDeserializer) Deserialize(data []byte) (NPTicket, error) {
+	// Need at least 20 bytes for the fixed header fields
+	if len(data) < 20 {
+		return NPTicket{}, fmt.Errorf("NPTicket data too short: need at least 20 bytes, got %d", len(data))
+	}
+
 	ticket := &NPTicket{}
 	ticket.Size1 = binary.LittleEndian.Uint32(data[:4])
 	ticket.Size2 = binary.LittleEndian.Uint32(data[4:8])
@@ -106,18 +112,44 @@ func (d *NPTicketDeserializer) Deserialize(data []byte) (NPTicket, error) {
 	ticket.TicketSize = binary.BigEndian.Uint32(data[12:16])
 	ticket.BodyType = binary.BigEndian.Uint16(data[16:18])
 	ticket.BodySize = binary.BigEndian.Uint16(data[18:20])
-	ticket.Body = data[20 : 20+ticket.BodySize]
-	footerStart := 20 + ticket.BodySize
+
+	bodyEnd := 20 + int(ticket.BodySize)
+	if bodyEnd > len(data) {
+		return NPTicket{}, fmt.Errorf("NPTicket body extends past data: body needs %d bytes at offset 20, but data is only %d bytes", ticket.BodySize, len(data))
+	}
+	ticket.Body = data[20:bodyEnd]
+
+	footerStart := bodyEnd
+	// Need at least 4 bytes for footer type and size
+	if footerStart+4 > len(data) {
+		return NPTicket{}, fmt.Errorf("NPTicket footer header extends past data: need %d bytes, got %d", footerStart+4, len(data))
+	}
 	ticket.FooterType = binary.BigEndian.Uint16(data[footerStart : footerStart+2])
 	ticket.FooterSize = binary.BigEndian.Uint16(data[footerStart+2 : footerStart+4])
-	footerData := data[footerStart+4 : footerStart+4+ticket.FooterSize]
+
+	footerDataStart := footerStart + 4
+	footerDataEnd := footerDataStart + int(ticket.FooterSize)
+	if footerDataEnd > len(data) {
+		return NPTicket{}, fmt.Errorf("NPTicket footer data extends past data: need %d bytes, got %d", footerDataEnd, len(data))
+	}
+	footerData := data[footerDataStart:footerDataEnd]
+
+	// Need at least 12 bytes in footer for the fixed fields before signature
+	if len(footerData) < 12 {
+		return NPTicket{}, fmt.Errorf("NPTicket footer too short: need at least 12 bytes, got %d", len(footerData))
+	}
 	footer := &NPTicketFooter{}
 	footer.CipherIDType = binary.BigEndian.Uint16(footerData[:2])
 	footer.CipherIDSize = binary.BigEndian.Uint16(footerData[2:4])
 	footer.CipherID = binary.BigEndian.Uint32(footerData[4:8])
 	footer.SignatureType = binary.BigEndian.Uint16(footerData[8:10])
 	footer.SignatureSize = binary.BigEndian.Uint16(footerData[10:12])
-	footer.Signature = footerData[12 : 12+footer.SignatureSize]
+
+	sigEnd := 12 + int(footer.SignatureSize)
+	if sigEnd > len(footerData) {
+		return NPTicket{}, fmt.Errorf("NPTicket signature extends past footer: need %d bytes, got %d", sigEnd, len(footerData))
+	}
+	footer.Signature = footerData[12:sigEnd]
 	ticket.Footer = *footer
 	return *ticket, nil
 }

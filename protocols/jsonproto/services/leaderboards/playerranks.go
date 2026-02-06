@@ -54,6 +54,11 @@ func (service PlayerranksGetService) Handle(data string, database *mongo.Databas
 
 	res := []PlayerranksGetResponse{}
 
+	if len(req.SongIDs) == 0 {
+		log.Println("No song IDs provided for playerranks get request")
+		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
+	}
+
 	playerScoresFilter := bson.M{
 		"pid":     req.PID,
 		"role_id": req.RoleID,
@@ -64,6 +69,7 @@ func (service PlayerranksGetService) Handle(data string, database *mongo.Databas
 		log.Println(err)
 		return marshaler.GenerateEmptyJSONResponse(service.Path()), nil
 	}
+	defer cursor.Close(context.TODO())
 
 	playerScoresMap := make(map[int]int)
 	for cursor.Next(context.Background()) {
